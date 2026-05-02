@@ -7255,19 +7255,19 @@ function renderFundamentals() {
 
   html += `<div class="panel-section">
     <div class="panel-title">VALUATION — ${sym}</div>
-    <div class="fund-row"><span class="fk">Market Cap</span><span class="fv">${f$(mcap)}</span></div>
-    <div class="fund-row"><span class="fk">P/E (TTM)</span><span class="fv">${fmtNum(pe)}</span></div>
-    <div class="fund-row"><span class="fk">Forward P/E</span><span class="fv">${fmtNum(fwdPe)}</span></div>
-    ${peg != null ? `<div class="fund-row" title="PEG Ratio = P/E ÷ Earnings Growth Rate. &lt;1 = undervalued, 1–2 = fair, &gt;2 = expensive relative to growth."><span class="fk">PEG Ratio</span><span class="fv ${peg < 1 ? 'pos' : peg < 2 ? '' : 'neg'}">${fmtNum(peg)} ${peg < 1 ? '✦ cheap' : peg < 2 ? '' : '● pricey'}</span></div>` : ''}
-    <div class="fund-row"><span class="fk">P/B</span><span class="fv">${fmtNum(pb)}</span></div>
-    <div class="fund-row"><span class="fk">EPS (TTM)</span><span class="fv">${eps == null ? '—' : '$' + fmtNum(eps)}</span></div>
-    <div class="fund-row"><span class="fk">Forward EPS</span><span class="fv">${fwdEps == null ? '—' : '$' + fmtNum(fwdEps)}</span></div>
-    <div class="fund-row"><span class="fk">Beta</span><span class="fv">${fmtNum(beta)}</span></div>
-    ${high52w != null ? `<div class="fund-row"><span class="fk">52W High</span><span class="fv">$${fmtNum(high52w)}</span></div>` : ''}
-    ${low52w  != null ? `<div class="fund-row"><span class="fk">52W Low</span><span class="fv">$${fmtNum(low52w)}</span></div>` : ''}
-    ${divYld  != null ? `<div class="fund-row"><span class="fk">Dividend Yield</span><span class="fv">${fmtPct(divYld)}</span></div>` : ''}
-    ${sector   ? `<div class="fund-row"><span class="fk">Sector</span><span class="fv">${sector}</span></div>` : ''}
-    ${industry ? `<div class="fund-row"><span class="fk">Industry</span><span class="fv">${industry}</span></div>` : ''}
+    <div class="fund-row"><span class="fk" data-tip="Market Capitalisation|Total market value of all shares outstanding (Price × Shares). Determines the company's size tier: mega (>$200B), large ($10B+), mid, or small.|Larger caps = more stable, more institutional coverage. Smaller caps = more volatility but potentially bigger moves.">Market Cap</span><span class="fv">${f$(mcap)}</span></div>
+    <div class="fund-row"><span class="fk" data-tip="Price-to-Earnings (Trailing 12 Months)|Current share price divided by earnings per share over the last 12 months.|The most-watched valuation metric. &lt;15 = cheap, 15–25 = fair, &gt;30 = priced for growth. Always compare to the sector average.">P/E (TTM)</span><span class="fv">${fmtNum(pe)}</span></div>
+    <div class="fund-row"><span class="fk" data-tip="Forward P/E|Current price divided by analyst consensus earnings estimate for the next 12 months.|More forward-looking than trailing P/E. If Forward P/E &lt; Trailing P/E, earnings are expected to grow — bullish signal.">Forward P/E</span><span class="fv">${fmtNum(fwdPe)}</span></div>
+    ${peg != null ? `<div class="fund-row"><span class="fk" data-tip="PEG Ratio|P/E divided by the annual earnings growth rate. Adjusts valuation for the company's growth speed.|&lt;1 = possibly undervalued relative to growth. 1 = fairly priced. &gt;2 = paying a premium. Better than raw P/E for comparing high-growth stocks.">PEG Ratio</span><span class="fv ${peg < 1 ? 'pos' : peg < 2 ? '' : 'neg'}">${fmtNum(peg)} ${peg < 1 ? '✦ cheap' : peg < 2 ? '' : '● pricey'}</span></div>` : ''}
+    <div class="fund-row"><span class="fk" data-tip="Price-to-Book|Share price divided by book value per share (assets minus liabilities).|&lt;1 = buying assets below accounting value — common in banks and deep value. High P/B means the market pays for intangibles like brand, IP, or recurring revenue.">P/B</span><span class="fv">${fmtNum(pb)}</span></div>
+    <div class="fund-row"><span class="fk" data-tip="Earnings Per Share (Trailing 12 Months)|Net profit divided by total shares outstanding — how much the company earned per share.|The foundation of all valuation ratios. A rising EPS trend over multiple years is the hallmark of a strong compounder.">EPS (TTM)</span><span class="fv">${eps == null ? '—' : '$' + fmtNum(eps)}</span></div>
+    <div class="fund-row"><span class="fk" data-tip="Forward EPS|Analyst consensus estimate for earnings per share in the next 12 months.|Compare to trailing EPS to gauge growth expectations. Upward revisions are bullish; downward revisions are early warning signals.">Forward EPS</span><span class="fv">${fwdEps == null ? '—' : '$' + fmtNum(fwdEps)}</span></div>
+    <div class="fund-row"><span class="fk" data-tip="Beta|Measures how much the stock moves relative to the broader market (S&P 500 = 1.0).|Beta &gt;1 = amplified moves (more risk &amp; reward). Beta &lt;1 = more stable. High-beta stocks need smaller position sizes to keep risk constant.">Beta</span><span class="fv">${fmtNum(beta)}</span></div>
+    ${high52w != null ? `<div class="fund-row"><span class="fk" data-tip="52-Week High|The highest price the stock has traded in the last 52 weeks.|Stocks near their 52W high often show relative strength. A clean break above is a momentum breakout signal. Old highs become new support.">52W High</span><span class="fv">$${fmtNum(high52w)}</span></div>` : ''}
+    ${low52w  != null ? `<div class="fund-row"><span class="fk" data-tip="52-Week Low|The lowest price traded in the last 52 weeks.|Near the 52W low can signal deep value or a falling knife. Verify the business fundamentals — is it cheap or broken?">52W Low</span><span class="fv">$${fmtNum(low52w)}</span></div>` : ''}
+    ${divYld  != null ? `<div class="fund-row"><span class="fk" data-tip="Dividend Yield|Annual dividend payment as a percentage of the current share price.|Higher yield = more income. But yields above 6% can signal dividend risk. As the price falls, yield rises — check the payout ratio before buying for yield.">Dividend Yield</span><span class="fv">${fmtPct(divYld)}</span></div>` : ''}
+    ${sector   ? `<div class="fund-row"><span class="fk" data-tip="Sector|The broad economic sector this company belongs to (e.g. Technology, Health Care, Energy).|Use for sector rotation — different sectors lead in different phases of the economic cycle. Check the HEAT tab for current sector momentum.">Sector</span><span class="fv">${sector}</span></div>` : ''}
+    ${industry ? `<div class="fund-row"><span class="fk" data-tip="Industry|The specific industry within the sector (e.g. Semiconductors, Biotechnology, Oil & Gas E&P).|Useful for benchmarking valuations against direct peers — a P/E of 30 may be cheap in software but expensive in retail.">Industry</span><span class="fv">${industry}</span></div>` : ''}
   </div>`;
 
   // ── PROFITABILITY / FINANCIALS ────────────────────────────────────────────
@@ -7285,15 +7285,15 @@ function renderFundamentals() {
 
   html += `<div class="panel-section">
     <div class="panel-title">PROFITABILITY (TTM)</div>
-    <div class="fund-row"><span class="fk">Revenue</span><span class="fv">${f$(rev)}</span></div>
-    <div class="fund-row"><span class="fk">Revenue Growth</span><span class="fv ${grCls(revGr)}">${fmtPct(revGr)}</span></div>
-    <div class="fund-row"><span class="fk">Earnings Growth</span><span class="fv ${grCls(earnGr)}">${fmtPct(earnGr)}</span></div>
-    <div class="fund-row"><span class="fk">Gross Margin</span><span class="fv">${fmtPct(grossM)}</span></div>
-    <div class="fund-row"><span class="fk">Operating Margin</span><span class="fv">${fmtPct(opM)}</span></div>
-    <div class="fund-row"><span class="fk">Profit Margin</span><span class="fv">${fmtPct(profM)}</span></div>
-    <div class="fund-row"><span class="fk">ROA</span><span class="fv">${fmtPct(roa)}</span></div>
-    <div class="fund-row"><span class="fk">ROE</span><span class="fv">${fmtPct(roe)}</span></div>
-    <div class="fund-row"><span class="fk">Debt / Equity</span><span class="fv">${fmtNum(debtEq)}</span></div>
+    <div class="fund-row"><span class="fk" data-tip="Revenue (Trailing 12 Months)|Total sales the company generated over the last year.|Top-line growth shows demand for the product or service. Compare year-over-year — consistent growth matters more than one strong quarter.">Revenue</span><span class="fv">${f$(rev)}</span></div>
+    <div class="fund-row"><span class="fk" data-tip="Revenue Growth (Year-over-Year)|Percentage increase in total revenue compared to the same period last year.|&gt;20% = high growth. &gt;10% = solid. Negative = shrinking business. Pair with margin trend — growing revenue with shrinking margins is a warning sign.">Revenue Growth</span><span class="fv ${grCls(revGr)}">${fmtPct(revGr)}</span></div>
+    <div class="fund-row"><span class="fk" data-tip="Earnings Growth (Year-over-Year)|Year-over-year growth in net income (bottom-line profit).|Shows if profits are scaling with revenue. High revenue growth + low earnings growth = margin compression. Strong compounders grow both.">Earnings Growth</span><span class="fv ${grCls(earnGr)}">${fmtPct(earnGr)}</span></div>
+    <div class="fund-row"><span class="fk" data-tip="Gross Margin|Revenue minus cost of goods sold, as a percentage of revenue.|Shows production efficiency. Software: 60–80%+. Manufacturing: 20–40%. Expanding gross margins over time signal pricing power or economies of scale.">Gross Margin</span><span class="fv">${fmtPct(grossM)}</span></div>
+    <div class="fund-row"><span class="fk" data-tip="Operating Margin|Operating income as a % of revenue — after operating costs, before interest &amp; taxes.|Key efficiency metric. &gt;20% is excellent for most industries. Compressing margins = rising costs or pricing pressure. Compare to 3-year average.">Operating Margin</span><span class="fv">${fmtPct(opM)}</span></div>
+    <div class="fund-row"><span class="fk" data-tip="Net Profit Margin|Bottom-line profit as a % of revenue after all expenses, interest, and taxes.|The final test of profitability. High and stable net margins over years indicate a durable competitive advantage — the hallmark of a great business.">Profit Margin</span><span class="fv">${fmtPct(profM)}</span></div>
+    <div class="fund-row"><span class="fk" data-tip="Return on Assets|Net income divided by total assets — how efficiently the company uses all its resources.|&gt;10% is strong. Compare to industry peers. Asset-heavy industries (airlines, utilities) have low ROA by nature; software and services should be much higher.">ROA</span><span class="fv">${fmtPct(roa)}</span></div>
+    <div class="fund-row"><span class="fk" data-tip="Return on Equity|Net income divided by shareholders' equity — profit generated for every dollar of owner capital.|&gt;15% is generally strong. Buffett's key metric — he targets companies with consistently high ROE (&gt;15%) without excessive debt.">ROE</span><span class="fv">${fmtPct(roe)}</span></div>
+    <div class="fund-row"><span class="fk" data-tip="Debt-to-Equity Ratio|Total debt divided by shareholders' equity.|&lt;1 = conservative balance sheet. &gt;2 = highly leveraged. High debt + rising interest rates = danger. Check if free cash flow comfortably covers debt repayment.">Debt / Equity</span><span class="fv">${fmtNum(debtEq)}</span></div>
   </div>`;
 
   // ── EARNINGS HISTORY (actual vs estimate vs surprise) ─────────────────────
@@ -7375,11 +7375,11 @@ function renderFundamentals() {
     const upside = (tgtMean != null && price != null) ? ((tgtMean - price) / price) : null;
     html += `<div class="panel-section">
       <div class="panel-title">ANALYST TARGETS</div>
-      <div class="fund-row"><span class="fk">Recommendation</span><span class="fv">${(recKey||'—').toUpperCase()}</span></div>
-      <div class="fund-row"><span class="fk">Mean Target</span><span class="fv">${tgtMean == null ? '—' : '$' + fmtNum(tgtMean)}</span></div>
-      <div class="fund-row"><span class="fk">High / Low</span><span class="fv">${tgtHigh == null ? '—' : '$' + fmtNum(tgtHigh)} / ${tgtLow == null ? '—' : '$' + fmtNum(tgtLow)}</span></div>
-      <div class="fund-row"><span class="fk">Implied Upside</span><span class="fv ${grCls(upside)}">${fmtPct(upside)}</span></div>
-      <div class="fund-row"><span class="fk">Analysts</span><span class="fv">${numAn == null ? '—' : numAn}</span></div>
+      <div class="fund-row"><span class="fk" data-tip="Analyst Recommendation|Consensus view from Wall Street analysts: Strong Buy, Buy, Hold, Underperform, or Sell.|Treat as one signal among many — analysts are often late to revise. Watch for upgrades/downgrades as potential catalysts.">Recommendation</span><span class="fv">${(recKey||'—').toUpperCase()}</span></div>
+      <div class="fund-row"><span class="fk" data-tip="Mean Price Target|The average 12-month price target from all covering analysts.|Use with the implied upside — a high target with low analyst count is less reliable. Compare to current price and wave targets.">Mean Target</span><span class="fv">${tgtMean == null ? '—' : '$' + fmtNum(tgtMean)}</span></div>
+      <div class="fund-row"><span class="fk" data-tip="High &amp; Low Price Target|The most bullish and most bearish 12-month targets among covering analysts.|The spread tells you analyst disagreement. Wide range = high uncertainty. A low target below current price is a red flag.">High / Low</span><span class="fv">${tgtHigh == null ? '—' : '$' + fmtNum(tgtHigh)} / ${tgtLow == null ? '—' : '$' + fmtNum(tgtLow)}</span></div>
+      <div class="fund-row"><span class="fk" data-tip="Implied Upside|How much the stock could gain to reach the analyst mean target, based on today's price.|&gt;20% upside + Buy rating = analysts see meaningful value. Negative = analysts think the stock is overvalued at current price.">Implied Upside</span><span class="fv ${grCls(upside)}">${fmtPct(upside)}</span></div>
+      <div class="fund-row"><span class="fk" data-tip="Number of Analysts|How many analysts have published a price target and/or rating for this stock.|More analysts = more widely followed, generally more reliable consensus. &lt;3 analysts = thin coverage, treat targets with caution.">Analysts</span><span class="fv">${numAn == null ? '—' : numAn}</span></div>
     </div>`;
   }
 
