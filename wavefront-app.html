@@ -7171,15 +7171,40 @@ function setCachedFund(sym, data) {
   try { localStorage.setItem('wf_fund_' + sym, JSON.stringify({ t: Date.now(), data })); } catch(e) {}
 }
 
+// Returns true when cached fundamentals data is too sparse to be useful
+// (e.g. came from old NASDAQ fallback before Finnhub was added)
+function isSparseCache(data) {
+  if (!data) return true;
+  const ks = data.defaultKeyStatistics || {};
+  const fd = data.financialData        || {};
+  const src = data._source;
+  // NASDAQ source always sparse; or missing both P/E and margin = sparse
+  if (src === 'nasdaq') return true;
+  const hasPE     = ks.trailingPE?.raw != null;
+  const hasMargin = fd.profitMargins?.raw != null || ks.profitMargins?.raw != null;
+  return !hasPE && !hasMargin;
+}
+
 async function fetchFundamentals(sym, force = false) {
   // memory cache (skip if force)
-  if (!force && state.fundamentals[sym] && !state.fundamentals[sym].error) return state.fundamentals[sym].data;
+  if (!force && state.fundamentals[sym] && !state.fundamentals[sym].error) {
+    // Kick off background refresh if cached data is sparse
+    if (isSparseCache(state.fundamentals[sym].data) && !state.fundLoading[sym]) {
+      fetchFundamentals(sym, true).catch(() => {});
+    }
+    return state.fundamentals[sym].data;
+  }
   // localStorage cache (skip if force)
   if (!force) {
     const cached = getCachedFund(sym);
     if (cached) {
-      state.fundamentals[sym] = { data: cached, fetchedAt: Date.now() };
-      return cached;
+      // If data is sparse (old NASDAQ cache), ignore it and fetch fresh
+      if (isSparseCache(cached)) {
+        try { localStorage.removeItem('wf_fund_' + sym); } catch(e) {}
+      } else {
+        state.fundamentals[sym] = { data: cached, fetchedAt: Date.now() };
+        return cached;
+      }
     }
   }
   // dedupe in-flight
