@@ -2325,6 +2325,17 @@ function saveState() {
 }
 function loadState() {
   try {
+    // One-time migration: clear all fundamentals cache so stale pre-Finnhub data
+    // (from Yahoo/NASDAQ sources) is evicted and fresh Finnhub data is fetched.
+    if (!localStorage.getItem('wf_fund_migrated_v3')) {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('wf_fund_')) keysToRemove.push(k);
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+      localStorage.setItem('wf_fund_migrated_v3', '1');
+    }
     const t = localStorage.getItem('wf_tickers');
     if (t) state.tickers = JSON.parse(t);
     const a = localStorage.getItem('wf_alerts');
@@ -9432,11 +9443,16 @@ function _cmpGetFundRow(sym) {
 function renderCompare() {
   const panel = document.getElementById('compare-panel');
 
-  // Kick off missing fetches
-  const missing = state.tickers.filter(s => !state.fundamentals[s]);
-  missing.forEach(s => fetchFundamentals(s).then(() => {
-    if (state.rightTab === 'compare') renderCompare();
-  }).catch(() => {}));
+  // Kick off missing or sparse fetches
+  const missing = state.tickers.filter(s =>
+    !state.fundamentals[s] || isSparseCache(state.fundamentals[s]?.data)
+  );
+  missing.forEach(s => {
+    if (state.fundLoading[s]) return; // already in-flight
+    fetchFundamentals(s, !!state.fundamentals[s]).then(() => {
+      if (state.rightTab === 'compare') renderCompare();
+    }).catch(() => {});
+  });
 
   const rows = state.tickers.map(s => _cmpGetFundRow(s)).filter(Boolean);
   const loading = state.tickers.filter(s => state.fundamentals[s]?.loading);
