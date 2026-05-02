@@ -5856,7 +5856,7 @@ function clearCompare() {
 
 // ─── WATCHLIST RENDER ────────────────────────────────────────────────────────
 function setWatchlistSort(key) {
-  const s = state.watchlistSort;
+  const s = state.tickersSort;
   if (s.key === key && key !== 'default') {
     s.dir = s.dir === 'desc' ? 'asc' : 'desc';
   } else {
@@ -6002,7 +6002,7 @@ function renderWatchlist() {
     : state.tickers;
 
   // Update sort button active state on re-render
-  const s = state.watchlistSort;
+  const s = state.tickersSort;
   document.querySelectorAll('.sort-btn').forEach(b => {
     const active = b.dataset.sort === s.key;
     b.classList.toggle('active', active);
@@ -9269,7 +9269,7 @@ function renderScreener() {
   const panel = document.getElementById('screener-panel');
   const TF = '3M';
   const results = [];
-  for (const sym of state.watchlist) {
+  for (const sym of state.tickers) {
     const d = state.data[sym];
     if (!d || !d.bars || d.bars.length < 10) continue;
     const bars = filterBars(d.bars, TF);
@@ -9384,13 +9384,13 @@ function renderCompare() {
   const panel = document.getElementById('compare-panel');
 
   // Kick off missing fetches
-  const missing = state.watchlist.filter(s => !state.fundamentals[s]);
+  const missing = state.tickers.filter(s => !state.fundamentals[s]);
   missing.forEach(s => fetchFundamentals(s).then(() => {
     if (state.rightTab === 'compare') renderCompare();
   }).catch(() => {}));
 
-  const rows = state.watchlist.map(s => _cmpGetFundRow(s)).filter(Boolean);
-  const loading = state.watchlist.filter(s => state.fundamentals[s]?.loading);
+  const rows = state.tickers.map(s => _cmpGetFundRow(s)).filter(Boolean);
+  const loading = state.tickers.filter(s => state.fundamentals[s]?.loading);
 
   const activeMeta = CMP_METRICS.find(m => m.key === _cmpMetric) || CMP_METRICS[0];
 
@@ -9519,7 +9519,7 @@ function calcReturn(bars, lookbackBars) {
 
 function renderRS() {
   const panel = document.getElementById('rs-panel');
-  const syms = [...state.watchlist];
+  const syms = [...state.tickers];
   // Ensure SPY is computed for baseline
   const allSyms = syms.includes('SPY') ? syms : ['SPY', ...syms];
 
@@ -9802,7 +9802,7 @@ function openScreenerOverlay() {
   // Build results (same logic as renderScreener)
   const TF = '3M';
   const results = [];
-  for (const sym of state.watchlist) {
+  for (const sym of state.tickers) {
     const d = state.data[sym];
     if (!d || !d.bars || d.bars.length < 10) continue;
     const bars = filterBars(d.bars, TF);
