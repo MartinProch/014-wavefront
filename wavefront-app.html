@@ -7171,20 +7171,23 @@ function setCachedFund(sym, data) {
   try { localStorage.setItem('wf_fund_' + sym, JSON.stringify({ t: Date.now(), data })); } catch(e) {}
 }
 
-async function fetchFundamentals(sym) {
-  // memory cache
-  if (state.fundamentals[sym] && !state.fundamentals[sym].error) return state.fundamentals[sym].data;
-  // localStorage cache
-  const cached = getCachedFund(sym);
-  if (cached) {
-    state.fundamentals[sym] = { data: cached, fetchedAt: Date.now() };
-    return cached;
+async function fetchFundamentals(sym, force = false) {
+  // memory cache (skip if force)
+  if (!force && state.fundamentals[sym] && !state.fundamentals[sym].error) return state.fundamentals[sym].data;
+  // localStorage cache (skip if force)
+  if (!force) {
+    const cached = getCachedFund(sym);
+    if (cached) {
+      state.fundamentals[sym] = { data: cached, fetchedAt: Date.now() };
+      return cached;
+    }
   }
   // dedupe in-flight
   if (state.fundLoading[sym]) return state.fundLoading[sym];
 
   const p = (async () => {
-    const r = await fetch(`${API_BASE}/api/fundamentals/${sym}`);
+    const url = `${API_BASE}/api/fundamentals/${sym}${force ? '?force=1' : ''}`;
+    const r = await fetch(url);
     const j = await r.json();
     if (!r.ok || j.error) throw new Error(j.error || `HTTP ${r.status}`);
     const result = j?.quoteSummary?.result?.[0];
@@ -9533,10 +9536,16 @@ function setCmpMetric(key) {
 }
 
 function refreshCompare() {
-  // Clear fundamentals cache for all tickers and re-fetch
+  // Clear client-side caches and force re-fetch (bypasses server cache too)
   state.tickers.forEach(sym => {
     try { localStorage.removeItem('wf_fund_' + sym); } catch(e) {}
     delete state.fundamentals[sym];
+  });
+  // Re-fetch with force=1 so server also busts its cache
+  state.tickers.forEach(sym => {
+    fetchFundamentals(sym, true)
+      .then(() => { if (state.rightTab === 'compare') renderCompare(); })
+      .catch(() => {});
   });
   renderCompare();
 }

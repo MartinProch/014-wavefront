@@ -12,8 +12,16 @@ const url   = require('url');
 const PORT = process.env.PORT || 3456;
 const DIR  = __dirname;
 
-const FMP_KEY  = 'Rfmle5Bf82SFSfcjnaMGciY7NXIfKWak';
-const FMP_BASE = 'https://financialmodelingprep.com/stable';
+const FMP_KEY      = 'Rfmle5Bf82SFSfcjnaMGciY7NXIfKWak';
+const FMP_BASE     = 'https://financialmodelingprep.com/stable';
+const FINNHUB_KEY  = process.env.FINNHUB_KEY || '';   // set in Railway env vars
+
+// ── Server-side fundamentals cache (survives multiple client refreshes) ──────
+// Avoids burning FMP quota on every page load. TTL = 24 hours.
+const FUND_CACHE_TTL = 24 * 60 * 60 * 1000;
+const _fundCache = {};   // symbol → { body: string, ts: number }
+function getFundCache(sym)      { const e = _fundCache[sym]; return (e && Date.now() - e.ts < FUND_CACHE_TTL) ? e.body : null; }
+function setFundCache(sym, body){ _fundCache[sym] = { body, ts: Date.now() }; }
 
 // ── Yahoo Finance crumb session ────────────────────────────────────────────
 const UAs = [
@@ -449,6 +457,105 @@ async function fetchFmpFundamentals(symbol) {
   });
 }
 
+// ── Finnhub fundamentals ──────────────────────────────────────────────────
+// Free tier: 60 calls/min, no daily cap. Single call per ticker.
+async function fetchFinnhubFundamentals(symbol) {
+  if (!FINNHUB_KEY) throw new Error('Finnhub key not configured');
+  const base = 'https://finnhub.io/api/v1';
+  const hdr  = { 'X-Finnhub-Token': FINNHUB_KEY, 'Accept': 'application/json' };
+
+  const [profile, metrics, recs, targets] = await Promise.all([
+    httpsGet(`${base}/stock/profile2?symbol=${symbol}`,         hdr, []).catch(() => ({ body: '{}' })),
+    httpsGet(`${base}/stock/metric?symbol=${symbol}&metric=all`,hdr, []).catch(() => ({ body: '{}' })),
+    httpsGet(`${base}/stock/recommendation?symbol=${symbol}`,   hdr, []).catch(() => ({ body: '[]' })),
+    httpsGet(`${base}/stock/price-target?symbol=${symbol}`,     hdr, []).catch(() => ({ body: '{}' })),
+  ]);
+
+  const p  = JSON.parse(profile.body);
+  const m  = JSON.parse(metrics.body)?.metric || {};
+  const rc = JSON.parse(recs.body);
+  const t  = JSON.parse(targets.body);
+
+  if (!p?.ticker) throw new Error(`Finnhub: no profile for ${symbol}`);
+
+  const wrap = v => (v == null || (typeof v === 'number' && isNaN(v)) ? undefined : { raw: v });
+
+  // latest analyst rec
+  const latestRec = Array.isArray(rc) && rc.length ? rc[0] : null;
+  const recKey = latestRec
+    ? (latestRec.strongBuy > latestRec.buy && latestRec.strongBuy > latestRec.hold ? 'strongBuy'
+      : latestRec.buy > latestRec.hold ? 'buy'
+      : latestRec.sell > latestRec.hold ? 'sell' : 'hold')
+    : null;
+  const numAnalysts = latestRec
+    ? (latestRec.strongBuy + latestRec.buy + latestRec.hold + latestRec.sell + latestRec.strongSell)
+    : null;
+
+  // dividend yield: Finnhub gives it as % already (e.g. 2.5 means 2.5%)
+  // convert to decimal to match Yahoo format
+  const divYieldRaw = m.dividendYieldIndicatedAnnual != null ? m.dividendYieldIndicatedAnnual / 100 : null;
+
+  // 52-week range
+  const high52 = m['52WeekHigh'] ?? m.weekHigh52;
+  const low52  = m['52WeekLow']  ?? m.weekLow52;
+
+  return JSON.stringify({
+    quoteSummary: {
+      result: [{
+        _source: 'finnhub',
+        financialData: {
+          currentPrice:             wrap(p.marketCapitalization ? null : null) || wrap(m.currentPrice ?? null),
+          targetMeanPrice:          wrap(t.targetMean ?? null),
+          targetHighPrice:          wrap(t.targetHigh ?? null),
+          targetLowPrice:           wrap(t.targetLow  ?? null),
+          recommendationKey:        recKey,
+          numberOfAnalystOpinions:  wrap(numAnalysts),
+          totalRevenue:             wrap(m.revenuePerShareTTM && p.shareOutstanding ? m.revenuePerShareTTM * p.shareOutstanding * 1e6 : null),
+          revenueGrowth:            wrap(m.revenueGrowthTTMYoy != null ? m.revenueGrowthTTMYoy / 100 : null),
+          earningsGrowth:           wrap(m.epsGrowthTTMYoy     != null ? m.epsGrowthTTMYoy     / 100 : null),
+          grossMargins:             wrap(m.grossMarginTTM      != null ? m.grossMarginTTM      / 100 : null),
+          operatingMargins:         wrap(m.operatingMarginTTM  != null ? m.operatingMarginTTM  / 100 : null),
+          profitMargins:            wrap(m.netMarginTTM        != null ? m.netMarginTTM        / 100 : null),
+          returnOnAssets:           wrap(m.roaTTM              != null ? m.roaTTM              / 100 : null),
+          returnOnEquity:           wrap(m.roeTTM              != null ? m.roeTTM              / 100 : null),
+          debtToEquity:             wrap(m.totalDebt_totalEquityQuarterly ?? m.longTermDebt_equityQuarterly ?? null),
+        },
+        defaultKeyStatistics: {
+          marketCap:       wrap(p.marketCapitalization ? p.marketCapitalization * 1e6 : null),
+          trailingPE:      wrap(m.peBasicExclExtraTTM   ?? m.peTTM ?? null),
+          forwardPE:       wrap(m.peForward ?? null),
+          priceToBook:     wrap(m.pbQuarterly           ?? m.priceToBookQuarterly ?? null),
+          trailingEps:     wrap(m.epsBasicExclExtraItemsTTM ?? m.epsTTM ?? null),
+          forwardEps:      wrap(m.epsForward ?? null),
+          pegRatio:        wrap(m.pegRatio ?? null),
+          beta:            wrap(p.beta ?? m.beta ?? null),
+          dividendYield:   wrap(divYieldRaw),
+          profitMargins:   wrap(m.netMarginTTM != null ? m.netMarginTTM / 100 : null),
+          returnOnEquity:  wrap(m.roeTTM       != null ? m.roeTTM       / 100 : null),
+        },
+        summaryDetail: {
+          previousClose:    wrap(null),
+          averageVolume:    wrap(m.averageVolume ?? null),
+          fiftyTwoWeekHigh: wrap(high52 ?? null),
+          fiftyTwoWeekLow:  wrap(low52  ?? null),
+          dividendYield:    wrap(divYieldRaw),
+          beta:             wrap(p.beta ?? null),
+          currency:         p.currency || 'USD',
+        },
+        assetProfile: {
+          sector:              p.finnhubIndustry || undefined,
+          industry:            p.finnhubIndustry || undefined,
+          website:             p.weburl          || undefined,
+          longBusinessSummary: p.description     || undefined,
+          country:             p.country         || undefined,
+        },
+        incomeStatementHistory: { incomeStatementHistory: [] },
+      }],
+      error: null,
+    },
+  });
+}
+
 // Returns { news: [...] } JSON string
 async function fetchFmpNews(symbol) {
   const data = await fmpGet('news/stock', { symbols: symbol, limit: 20 });
@@ -582,27 +689,52 @@ const server = http.createServer(async (req, res) => {
     try {
       let finalBody = null;
 
-      // 1. FMP (primary)
-      try {
-        finalBody = await fetchFmpFundamentals(symbol);
-        console.log(`  [fundamentals] FMP OK for ${symbol}`);
-      } catch(e) {
-        console.log(`  [fundamentals] FMP failed: ${e.message}`);
+      // 0. Server-side memory cache (survives multiple client refreshes, saves API quota)
+      const forceRefresh = parsed.searchParams.get('force') === '1';
+      if (forceRefresh) delete _fundCache[symbol];
+      const cached = getFundCache(symbol);
+      if (cached) {
+        console.log(`  [fundamentals] server-cache hit for ${symbol}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(cached);
+        return;
       }
 
-      // 2. Try Yahoo v10 with crumb
-      try {
-        const r = await tryYahooFundamentals();
-        const j = JSON.parse(r.body);
-        if (r.status === 200 && j?.quoteSummary?.result?.[0]) {
-          console.log(`  [fundamentals] Yahoo v10 OK for ${symbol}`);
-          finalBody = r.body;
+      // 1. Finnhub (primary — 60 req/min free, no daily cap)
+      if (FINNHUB_KEY) {
+        try {
+          finalBody = await fetchFinnhubFundamentals(symbol);
+          console.log(`  [fundamentals] Finnhub OK for ${symbol}`);
+        } catch(e) {
+          console.log(`  [fundamentals] Finnhub failed: ${e.message}`);
         }
-      } catch(e) {
-        console.log(`  [fundamentals] Yahoo v10 failed: ${e.message}`);
       }
 
-      // 2. Try Yahoo v11 (crumb-free variant)
+      // 2. FMP (fallback)
+      if (!finalBody) {
+        try {
+          finalBody = await fetchFmpFundamentals(symbol);
+          console.log(`  [fundamentals] FMP OK for ${symbol}`);
+        } catch(e) {
+          console.log(`  [fundamentals] FMP failed: ${e.message}`);
+        }
+      }
+
+      // 3. Try Yahoo v10 with crumb
+      if (!finalBody) {
+        try {
+          const r = await tryYahooFundamentals();
+          const j = JSON.parse(r.body);
+          if (r.status === 200 && j?.quoteSummary?.result?.[0]) {
+            console.log(`  [fundamentals] Yahoo v10 OK for ${symbol}`);
+            finalBody = r.body;
+          }
+        } catch(e) {
+          console.log(`  [fundamentals] Yahoo v10 failed: ${e.message}`);
+        }
+      }
+
+      // 4. Try Yahoo v11 (crumb-free variant)
       if (!finalBody) {
         try {
           const r = await tryYahooV11();
@@ -624,6 +756,13 @@ const server = http.createServer(async (req, res) => {
           throw new Error(`All sources failed for ${symbol} fundamentals`);
         }
       }
+
+      // Only cache rich responses (not NASDAQ fallback which is sparse)
+      try {
+        const j = JSON.parse(finalBody);
+        const src = j?.quoteSummary?.result?.[0]?._source;
+        if (src !== 'nasdaq') setFundCache(symbol, finalBody);
+      } catch(e) {}
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(finalBody);
