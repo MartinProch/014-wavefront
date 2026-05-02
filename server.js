@@ -1,7 +1,7 @@
 // WAVEFRONT — local proxy server
 // Fetches Yahoo Finance data server-side (bypasses browser CORS)
 // Maintains a persistent crumb session for quoteSummary (fundamentals)
-// No npm install needed — uses only built-in Node modules
+require('dotenv').config();
 
 const http  = require('http');
 const https = require('https');
