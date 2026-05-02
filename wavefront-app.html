@@ -26,6 +26,25 @@
     --purple: #b39ddb;
   }
 
+  /* ── LIGHT THEME ─────────────────────────────────────────────────────── */
+  body.light {
+    --bg: #f0f4f8;
+    --bg2: #e4eaf2;
+    --bg3: #d8e1ed;
+    --border: #bfcce0;
+    --text: #1a2535;
+    --muted: #6b82a0;
+    --blue: #1a6aff;
+    --green: #00a550;
+    --red: #d91f3a;
+    --gold: #c8900a;
+    --cyan: #007bb0;
+    --orange: #e05020;
+    --purple: #7c5abf;
+  }
+  body.light::before { opacity: 0.08; }
+  body.light canvas { filter: none; }
+
   html, body {
     height: 100%;
     height: 100dvh;
@@ -2035,6 +2054,7 @@
     <div class="header-sep"></div>
     <div id="sentiment-gauge" style="display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;white-space:nowrap"></div>
     <button id="tutorial-btn" onclick="startTutorial()" title="Interactive tutorial" style="background:rgba(68,138,255,0.12);border:1px solid var(--blue);color:var(--blue);font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;padding:5px 11px;cursor:pointer;letter-spacing:1px;border-radius:3px;white-space:nowrap;margin-left:auto;">📖 HELP</button>
+    <button id="theme-toggle" onclick="toggleTheme()" title="Toggle dark / light theme" style="background:var(--bg3);border:1px solid var(--border);color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;padding:5px 11px;cursor:pointer;letter-spacing:1px;border-radius:3px;white-space:nowrap;margin-left:6px;">☀ LIGHT</button>
     <button id="mode-toggle" onclick="toggleMobileMode()" style="background:var(--bg3);border:1px solid var(--border);color:var(--muted);font-family:inherit;font-size:11px;font-weight:700;padding:6px 12px;cursor:pointer;letter-spacing:1px;border-radius:3px;white-space:nowrap;margin-left:6px;">🖥 DESKTOP</button>
   </header>
 
@@ -2269,6 +2289,17 @@ function loadState() {
         if (btn) btn.classList.add('featured');
       });
     }, 0);
+    // Restore theme
+    if (localStorage.getItem('wf_theme') === 'light') {
+      document.body.classList.add('light');
+      const btn = document.getElementById('theme-toggle');
+      if (btn) {
+        btn.textContent = '🌙 DARK';
+        btn.style.background = 'rgba(26,106,255,0.1)';
+        btn.style.borderColor = 'var(--blue)';
+        btn.style.color = 'var(--blue)';
+      }
+    }
   } catch(e) {}
 }
 
@@ -3365,9 +3396,18 @@ function detectSupportResistance(bars, maxLevels = 6) {
     .sort((a, b) => b.price - a.price); // display top-to-bottom
 }
 
+// ─── THEME COLOR HELPER ──────────────────────────────────────────────────────
+function cssVar(name) {
+  return getComputedStyle(document.body).getPropertyValue(name).trim();
+}
+function isLightTheme() { return document.body.classList.contains('light'); }
+
 function redrawChart() {
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
+  // Fill chart background with theme color
+  ctx.fillStyle = cssVar('--bg');
+  ctx.fillRect(0, 0, w, h);
   ctx.clearRect(0, 0, w, h);
 
   const bars = getDisplayBars();
@@ -3416,9 +3456,14 @@ function redrawChart() {
 
   const px = i => idxToX(i, bars.length, chartLeft, barsW);
   const py = p => priceToY(p, minP, maxP, chartTop, chartH);
+  const BG = cssVar('--bg');       // theme-aware background for label badges
+  const BG2 = cssVar('--bg2');
+  const BORDER_COL = cssVar('--border');
+  const TEXT_COL = cssVar('--text');
+  const MUTED_COL = cssVar('--muted');
 
   // 1. Grid
-  ctx.strokeStyle = 'rgba(30,42,58,0.8)';
+  ctx.strokeStyle = isLightTheme() ? 'rgba(180,200,220,0.7)' : 'rgba(30,42,58,0.8)';
   ctx.lineWidth = 1;
   const gridLines = 6;
   for (let g = 0; g <= gridLines; g++) {
@@ -3430,7 +3475,7 @@ function redrawChart() {
     ctx.lineTo(chartRight, y);
     ctx.stroke();
     // price label
-    ctx.fillStyle = '#4a5e80';
+    ctx.fillStyle = MUTED_COL;
     ctx.font = '10px JetBrains Mono, monospace';
     ctx.textAlign = 'left';
     ctx.fillText(fmtPrice(price), chartRight + 6, y + 3);
@@ -3438,7 +3483,7 @@ function redrawChart() {
   // Date labels at bottom
   const dateLabelCount = Math.min(6, bars.length);
   const step = Math.floor(bars.length / dateLabelCount);
-  ctx.fillStyle = '#4a5e80';
+  ctx.fillStyle = MUTED_COL;
   ctx.font = '10px JetBrains Mono, monospace';
   ctx.textAlign = 'center';
   for (let di = 0; di < bars.length; di += step) {
@@ -3536,7 +3581,7 @@ function redrawChart() {
         else ctx.rect(tagX, tagY, tagW, tagH);
         ctx.stroke();
       }
-      ctx.fillStyle = isKey ? '#0a0e17' : color;
+      ctx.fillStyle = isKey ? BG : color;
       ctx.textAlign = 'center';
       ctx.fillText(priceStr, tagX + tagW / 2, y + 3.5);
     });
@@ -3849,7 +3894,7 @@ function redrawChart() {
         ctx.arc(x, y, (isLast ? 6 : 5) * Math.min(_prom, 1.5), 0, Math.PI * 2);
         ctx.fillStyle = col;
         ctx.fill();
-        ctx.strokeStyle = '#0a0e17';
+        ctx.strokeStyle = BG;
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
@@ -3906,7 +3951,7 @@ function redrawChart() {
             ctx.arc(x, y, 3, 0, Math.PI * 2);
             ctx.fillStyle = col + 'cc';
             ctx.fill();
-            ctx.strokeStyle = '#0a0e17';
+            ctx.strokeStyle = BG;
             ctx.lineWidth = 1;
             ctx.stroke();
 
@@ -4231,7 +4276,7 @@ function redrawChart() {
         ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
         ctx.fillStyle = isKey ? projColor : projColor + 'cc';
         ctx.fill();
-        ctx.strokeStyle = '#0a0e17';
+        ctx.strokeStyle = BG;
         ctx.lineWidth = 1.2;
         ctx.stroke();
 
@@ -4252,7 +4297,7 @@ function redrawChart() {
           if (tagX + tw > chartRight - 2) tagX = chartRight - 2 - tw;
           ctx.fillStyle = projColor;
           ctx.fillRect(tagX, tagY, tw, 13);
-          ctx.fillStyle = '#0a0e17';
+          ctx.fillStyle = BG;
           ctx.textAlign = 'center';
           ctx.fillText(tagText, tagX + tw / 2, tagY + 9);
         } else {
@@ -4305,7 +4350,7 @@ function redrawChart() {
       ctx.arc(endX, endY, 4, 0, Math.PI * 2);
       ctx.fillStyle = projColor;
       ctx.fill();
-      ctx.strokeStyle = '#0a0e17';
+      ctx.strokeStyle = BG;
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
@@ -4316,7 +4361,7 @@ function redrawChart() {
       const tagY = endY < chartTop + 20 ? endY + 8 : endY - 18;
       ctx.fillStyle = projColor;
       ctx.fillRect(tagX, tagY, tagW, 14);
-      ctx.fillStyle = '#0a0e17';
+      ctx.fillStyle = BG;
       ctx.textAlign = 'center';
       ctx.fillText(tagText, tagX + tagW / 2, tagY + 10);
     }
@@ -4464,7 +4509,7 @@ function redrawChart() {
   // Bright price box
   ctx.fillStyle = curCol;
   ctx.fillRect(chartRight + 2, curY - 9, PAD_RIGHT - 4, 18);
-  ctx.fillStyle = '#0a0e17';
+  ctx.fillStyle = BG;
   ctx.font = 'bold 10px JetBrains Mono, monospace';
   ctx.textAlign = 'center';
   ctx.fillText(fmtPrice(curPrice), chartRight + 2 + (PAD_RIGHT - 4) / 2, curY + 3.5);
@@ -4570,7 +4615,7 @@ function redrawChart() {
         ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
         ctx.fillStyle = col;
         ctx.fill();
-        ctx.strokeStyle = '#0a0e17';
+        ctx.strokeStyle = BG;
         ctx.lineWidth = 1.5;
         ctx.stroke();
       });
@@ -4609,7 +4654,7 @@ function redrawChart() {
         ? (state._drawStart ? 'Click second point  ·  Esc to cancel' : 'Click first point on chart')
         : 'Click chart to set price alert  ·  Esc to cancel';
       ctx.fillRect(chartLeft + chartW / 2 - 160, chartTop + 6, 320, 20);
-      ctx.fillStyle = '#0a0e17';
+      ctx.fillStyle = BG;
       ctx.fillText(hint, chartLeft + chartW / 2, chartTop + 19);
     }
     ctx.restore();
@@ -4654,7 +4699,7 @@ function redrawChart() {
       const pw = ctx.measureText(priceStr).width + 10;
       ctx.fillStyle = near ? col : col + 'aa';
       ctx.fillRect(chartRight + 2, y - 7, pw, 14);
-      ctx.fillStyle = '#0a0e17';
+      ctx.fillStyle = BG;
       ctx.textAlign = 'center';
       ctx.fillText(priceStr, chartRight + 2 + pw / 2, y + 3.5);
     });
@@ -4691,7 +4736,7 @@ function redrawChart() {
         ctx.fillStyle = 'rgba(15,20,32,0.9)';
         const tw = ctx.measureText(dateStr).width + 12;
         ctx.fillRect(x - tw / 2, chartBottom + 4, tw, 16);
-        ctx.fillStyle = '#e2e8f0';
+        ctx.fillStyle = TEXT_COL;
         ctx.font = '10px JetBrains Mono, monospace';
         ctx.textAlign = 'center';
         ctx.fillText(dateStr, x, chartBottom + 15);
@@ -7195,6 +7240,7 @@ function renderFundamentals() {
   const pe     = rawOf(ks.trailingPE) ?? rawOf(d.summaryDetail?.trailingPE);
   const fwdPe  = rawOf(ks.forwardPE);
   const pb     = rawOf(ks.priceToBook);
+  const peg    = rawOf(ks.pegRatio) ?? rawOf(ks.trailingPegRatio);
   const eps    = rawOf(ks.trailingEps);
   const fwdEps = rawOf(ks.forwardEps);
 
@@ -7212,6 +7258,7 @@ function renderFundamentals() {
     <div class="fund-row"><span class="fk">Market Cap</span><span class="fv">${f$(mcap)}</span></div>
     <div class="fund-row"><span class="fk">P/E (TTM)</span><span class="fv">${fmtNum(pe)}</span></div>
     <div class="fund-row"><span class="fk">Forward P/E</span><span class="fv">${fmtNum(fwdPe)}</span></div>
+    ${peg != null ? `<div class="fund-row" title="PEG Ratio = P/E ÷ Earnings Growth Rate. &lt;1 = undervalued, 1–2 = fair, &gt;2 = expensive relative to growth."><span class="fk">PEG Ratio</span><span class="fv ${peg < 1 ? 'pos' : peg < 2 ? '' : 'neg'}">${fmtNum(peg)} ${peg < 1 ? '✦ cheap' : peg < 2 ? '' : '● pricey'}</span></div>` : ''}
     <div class="fund-row"><span class="fk">P/B</span><span class="fv">${fmtNum(pb)}</span></div>
     <div class="fund-row"><span class="fk">EPS (TTM)</span><span class="fv">${eps == null ? '—' : '$' + fmtNum(eps)}</span></div>
     <div class="fund-row"><span class="fk">Forward EPS</span><span class="fv">${fwdEps == null ? '—' : '$' + fmtNum(fwdEps)}</span></div>
@@ -9055,6 +9102,25 @@ function exportChart() {
     // Flash button feedback
     if (btn) { btn.textContent = '✓ SAVED'; setTimeout(() => btn.textContent = '⬇ PNG', 1500); }
   }, 'image/png');
+}
+
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  localStorage.setItem('wf_theme', isLight ? 'light' : 'dark');
+  const btn = document.getElementById('theme-toggle');
+  if (isLight) {
+    btn.textContent = '🌙 DARK';
+    btn.style.background = 'rgba(26,106,255,0.1)';
+    btn.style.borderColor = 'var(--blue)';
+    btn.style.color = 'var(--blue)';
+  } else {
+    btn.textContent = '☀ LIGHT';
+    btn.style.background = 'var(--bg3)';
+    btn.style.borderColor = 'var(--border)';
+    btn.style.color = 'var(--muted)';
+  }
+  // Redraw chart so canvas colors update
+  setTimeout(redrawChart, 50);
 }
 
 function toggleMobileMode() {
