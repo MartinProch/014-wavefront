@@ -499,43 +499,53 @@ async function fetchFinnhubFundamentals(symbol) {
   const high52 = m['52WeekHigh'] ?? m.weekHigh52;
   const low52  = m['52WeekLow']  ?? m.weekLow52;
 
+  // Finnhub stores margins/growth as percentages (e.g. 5.94 = 5.94%), convert to decimal
+  const pct  = v => v != null ? v / 100 : null;
+  // D/E field has slash in name — must use bracket notation
+  const debtEq = m['totalDebt/totalEquityQuarterly'] ?? m['totalDebt/totalEquityAnnual']
+               ?? m['longTermDebt/equityQuarterly']  ?? m['longTermDebt/equityAnnual'] ?? null;
+  // Revenue (per share × shares outstanding in millions)
+  const totalRev = (m.revenuePerShareTTM != null && p.shareOutstanding != null)
+    ? m.revenuePerShareTTM * p.shareOutstanding * 1e6 : null;
+
   return JSON.stringify({
     quoteSummary: {
       result: [{
         _source: 'finnhub',
         financialData: {
-          currentPrice:             wrap(p.marketCapitalization ? null : null) || wrap(m.currentPrice ?? null),
-          targetMeanPrice:          wrap(t.targetMean ?? null),
-          targetHighPrice:          wrap(t.targetHigh ?? null),
-          targetLowPrice:           wrap(t.targetLow  ?? null),
-          recommendationKey:        recKey,
-          numberOfAnalystOpinions:  wrap(numAnalysts),
-          totalRevenue:             wrap(m.revenuePerShareTTM && p.shareOutstanding ? m.revenuePerShareTTM * p.shareOutstanding * 1e6 : null),
-          revenueGrowth:            wrap(m.revenueGrowthTTMYoy != null ? m.revenueGrowthTTMYoy / 100 : null),
-          earningsGrowth:           wrap(m.epsGrowthTTMYoy     != null ? m.epsGrowthTTMYoy     / 100 : null),
-          grossMargins:             wrap(m.grossMarginTTM      != null ? m.grossMarginTTM      / 100 : null),
-          operatingMargins:         wrap(m.operatingMarginTTM  != null ? m.operatingMarginTTM  / 100 : null),
-          profitMargins:            wrap(m.netMarginTTM        != null ? m.netMarginTTM        / 100 : null),
-          returnOnAssets:           wrap(m.roaTTM              != null ? m.roaTTM              / 100 : null),
-          returnOnEquity:           wrap(m.roeTTM              != null ? m.roeTTM              / 100 : null),
-          debtToEquity:             wrap(m.totalDebt_totalEquityQuarterly ?? m.longTermDebt_equityQuarterly ?? null),
+          currentPrice:            wrap(p.marketCapitalization ? null : null),
+          targetMeanPrice:         wrap(t.targetMean ?? null),
+          targetHighPrice:         wrap(t.targetHigh ?? null),
+          targetLowPrice:          wrap(t.targetLow  ?? null),
+          recommendationKey:       recKey,
+          numberOfAnalystOpinions: wrap(numAnalysts),
+          totalRevenue:            wrap(totalRev),
+          revenueGrowth:           wrap(pct(m.revenueGrowthTTMYoy)),
+          earningsGrowth:          wrap(pct(m.epsGrowthTTMYoy)),
+          grossMargins:            wrap(pct(m.grossMarginTTM)),
+          operatingMargins:        wrap(pct(m.operatingMarginTTM)),
+          profitMargins:           wrap(pct(m.netProfitMarginTTM ?? m.netMarginTTM)),
+          returnOnAssets:          wrap(pct(m.roaTTM)),
+          returnOnEquity:          wrap(pct(m.roeTTM)),
+          debtToEquity:            wrap(debtEq),
         },
         defaultKeyStatistics: {
-          marketCap:       wrap(p.marketCapitalization ? p.marketCapitalization * 1e6 : null),
-          trailingPE:      wrap(m.peBasicExclExtraTTM   ?? m.peTTM ?? null),
-          forwardPE:       wrap(m.peForward ?? null),
-          priceToBook:     wrap(m.pbQuarterly           ?? m.priceToBookQuarterly ?? null),
-          trailingEps:     wrap(m.epsBasicExclExtraItemsTTM ?? m.epsTTM ?? null),
-          forwardEps:      wrap(m.epsForward ?? null),
-          pegRatio:        wrap(m.pegRatio ?? null),
-          beta:            wrap(p.beta ?? m.beta ?? null),
-          dividendYield:   wrap(divYieldRaw),
-          profitMargins:   wrap(m.netMarginTTM != null ? m.netMarginTTM / 100 : null),
-          returnOnEquity:  wrap(m.roeTTM       != null ? m.roeTTM       / 100 : null),
+          marketCap:     wrap(p.marketCapitalization ? p.marketCapitalization * 1e6 : null),
+          trailingPE:    wrap(m.peBasicExclExtraTTM ?? m.peTTM ?? null),
+          forwardPE:     wrap(m.forwardPE ?? null),
+          priceToBook:   wrap(m.pbQuarterly ?? m.pb ?? null),
+          trailingEps:   wrap(m.epsBasicExclExtraItemsTTM ?? m.epsTTM ?? null),
+          forwardEps:    wrap(null),   // Finnhub doesn't expose fwd EPS directly
+          pegRatio:      wrap(null),   // not in Finnhub free metrics
+          beta:          wrap(p.beta ?? m.beta ?? null),
+          dividendYield: wrap(divYieldRaw),
+          profitMargins: wrap(pct(m.netProfitMarginTTM ?? m.netMarginTTM)),
+          returnOnEquity:wrap(pct(m.roeTTM)),
+          debtToEquity:  wrap(debtEq),
         },
         summaryDetail: {
           previousClose:    wrap(null),
-          averageVolume:    wrap(m.averageVolume ?? null),
+          averageVolume:    wrap(m['10DayAverageTradingVolume'] ? m['10DayAverageTradingVolume'] * 1e6 : null),
           fiftyTwoWeekHigh: wrap(high52 ?? null),
           fiftyTwoWeekLow:  wrap(low52  ?? null),
           dividendYield:    wrap(divYieldRaw),
@@ -543,11 +553,11 @@ async function fetchFinnhubFundamentals(symbol) {
           currency:         p.currency || 'USD',
         },
         assetProfile: {
-          sector:              p.finnhubIndustry || undefined,
-          industry:            p.finnhubIndustry || undefined,
-          website:             p.weburl          || undefined,
-          longBusinessSummary: p.description     || undefined,
-          country:             p.country         || undefined,
+          sector:              p.ggroup    || p.finnhubIndustry || undefined,
+          industry:            p.finnhubIndustry               || undefined,
+          website:             p.weburl                        || undefined,
+          longBusinessSummary: p.description                   || undefined,
+          country:             p.country                       || undefined,
         },
         incomeStatementHistory: { incomeStatementHistory: [] },
       }],
