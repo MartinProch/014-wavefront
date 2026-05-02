@@ -155,6 +155,12 @@ Fundamentals are **cached 24h server-side** (Railway memory) so API quota is not
 
 ## Changelog
 
+### Session 3 (May 2026)
+- ✅ **dotenv support** — `require('dotenv').config()` added to server.js; `FINNHUB_KEY` and `FMP_KEY` now loaded from `.env` automatically on `node server.js`
+- ✅ **COMPARE active metric column pinned first** — selected metric pill always appears as column 3 (right after SYM), no horizontal scrolling needed; column header gets a blue underline
+- ✅ **COMPARE data fix** — one-time localStorage migration (`wf_fund_migrated_v3`) clears stale pre-Finnhub NASDAQ cache on first load; `renderCompare` now also re-fetches sparse entries
+- ✅ **Ticker watermark on chart** — active ticker symbol drawn as a semi-transparent label at the bottom-left of the chart canvas (above volume bars), always visible at a glance
+
 ### Session 2 (May 2026)
 - ✅ Dark / Light theme toggle with CSS variable overrides; saved to localStorage
 - ✅ PEG Ratio added to Fundamentals → Valuation section (color-coded: green <1, red >2)
