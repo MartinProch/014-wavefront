@@ -5856,7 +5856,7 @@ function clearCompare() {
 
 // ─── WATCHLIST RENDER ────────────────────────────────────────────────────────
 function setWatchlistSort(key) {
-  const s = state.tickersSort;
+  const s = state.watchlistSort;
   if (s.key === key && key !== 'default') {
     s.dir = s.dir === 'desc' ? 'asc' : 'desc';
   } else {
@@ -6002,7 +6002,7 @@ function renderWatchlist() {
     : state.tickers;
 
   // Update sort button active state on re-render
-  const s = state.tickersSort;
+  const s = state.watchlistSort;
   document.querySelectorAll('.sort-btn').forEach(b => {
     const active = b.dataset.sort === s.key;
     b.classList.toggle('active', active);
