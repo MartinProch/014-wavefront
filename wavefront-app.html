@@ -9343,13 +9343,14 @@ let _cmpMetric = 'pe';                       // active metric for bar chart colu
 
 function _cmpGetFundRow(sym) {
   const cached = state.fundamentals[sym];
-  if (!cached || cached.loading || cached.error || !cached.data) return null;
+  if (!cached || cached.error || !cached.data) return null;
   const d  = cached.data;
   const ks = d.defaultKeyStatistics || {};
   const fd = d.financialData        || {};
   const sd = d.summaryDetail        || {};
+  const pr = d.price                || {};  // extra fallback module
 
-  const price   = rawOf(fd.currentPrice);
+  const price   = rawOf(fd.currentPrice) ?? rawOf(pr.regularMarketPrice);
   const tgtMean = rawOf(fd.targetMeanPrice);
 
   // 3M price change from bars
@@ -9359,22 +9360,42 @@ function _cmpGetFundRow(sym) {
        / bars3m[Math.max(0, bars3m.length - 63)].c * 100)
     : null;
 
+  // Revenue growth fallback: derive from income statement history
+  let revGr = rawOf(fd.revenueGrowth);
+  if (revGr == null) {
+    const isRows = d.incomeStatementHistory?.incomeStatementHistory || [];
+    if (isRows.length >= 2) {
+      const r0 = rawOf(isRows[0]?.totalRevenue), r1 = rawOf(isRows[1]?.totalRevenue);
+      if (r0 != null && r1 != null && r1 !== 0) revGr = (r0 - r1) / Math.abs(r1);
+    }
+  }
+
+  // Earnings growth fallback: derive from income statement
+  let earnGr = rawOf(fd.earningsGrowth);
+  if (earnGr == null) {
+    const isRows = d.incomeStatementHistory?.incomeStatementHistory || [];
+    if (isRows.length >= 2) {
+      const n0 = rawOf(isRows[0]?.netIncome), n1 = rawOf(isRows[1]?.netIncome);
+      if (n0 != null && n1 != null && n1 !== 0) earnGr = (n0 - n1) / Math.abs(n1);
+    }
+  }
+
   return {
     sym,
-    pe:     rawOf(ks.trailingPE) ?? rawOf(sd.trailingPE),
-    fwdPe:  rawOf(ks.forwardPE),
-    peg:    rawOf(ks.pegRatio) ?? rawOf(ks.trailingPegRatio),
-    pb:     rawOf(ks.priceToBook),
-    eps:    rawOf(ks.trailingEps),
+    pe:     rawOf(ks.trailingPE)    ?? rawOf(sd.trailingPE)    ?? rawOf(pr.trailingPE),
+    fwdPe:  rawOf(ks.forwardPE)     ?? rawOf(sd.forwardPE),
+    peg:    rawOf(ks.pegRatio)      ?? rawOf(ks.trailingPegRatio),
+    pb:     rawOf(ks.priceToBook)   ?? rawOf(sd.priceToBook),
+    eps:    rawOf(ks.trailingEps)   ?? rawOf(sd.trailingEps),
     fwdEps: rawOf(ks.forwardEps),
-    mcap:   rawOf(ks.marketCap),
-    revGr:  rawOf(fd.revenueGrowth),
-    earnGr: rawOf(fd.earningsGrowth),
-    profM:  rawOf(fd.profitMargins),
-    roe:    rawOf(fd.returnOnEquity),
-    debtEq: rawOf(fd.debtToEquity),
-    beta:   rawOf(ks.beta),
-    divYld: rawOf(sd.dividendYield) ?? rawOf(ks.dividendYield),
+    mcap:   rawOf(ks.marketCap)     ?? rawOf(sd.marketCap)     ?? rawOf(pr.marketCap),
+    revGr,
+    earnGr,
+    profM:  rawOf(fd.profitMargins) ?? rawOf(ks.profitMargins),
+    roe:    rawOf(fd.returnOnEquity) ?? rawOf(ks.returnOnEquity),
+    debtEq: rawOf(fd.debtToEquity)  ?? rawOf(ks.debtToEquity),
+    beta:   rawOf(ks.beta)          ?? rawOf(sd.beta),
+    divYld: rawOf(sd.dividendYield) ?? rawOf(ks.dividendYield) ?? rawOf(pr.dividendYield),
     upside: (tgtMean != null && price != null) ? ((tgtMean - price) / price) : null,
     chg3m,
   };
@@ -9475,6 +9496,7 @@ function renderCompare() {
   panel.innerHTML = `
     <div class="cmp-toolbar">
       <span class="cmp-title">COMPARE (${rows.length})</span>
+      <button class="cmp-dir-btn" onclick="refreshCompare()" style="margin-left:auto;font-size:9px" title="Re-fetch fundamentals for all tickers">↺ REFRESH</button>
     </div>
     <div style="padding:6px 8px;display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--border)">
       ${pills}
@@ -9504,6 +9526,18 @@ function setCmpSort(key) {
 
 function setCmpMetric(key) {
   _cmpMetric = key;
+  // Also sort by this metric with the smart default direction
+  const meta = CMP_METRICS.find(m => m.key === key);
+  _cmpSort = { key, dir: meta?.dir === 'low' ? 'asc' : 'desc' };
+  renderCompare();
+}
+
+function refreshCompare() {
+  // Clear fundamentals cache for all tickers and re-fetch
+  state.tickers.forEach(sym => {
+    try { localStorage.removeItem('wf_fund_' + sym); } catch(e) {}
+    delete state.fundamentals[sym];
+  });
   renderCompare();
 }
 
