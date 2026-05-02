@@ -1782,6 +1782,7 @@
   .cmp-table th:hover { color:var(--text); }
   .cmp-table th.sort-asc::after  { content:' ▲'; color:var(--blue); }
   .cmp-table th.sort-desc::after { content:' ▼'; color:var(--blue); }
+  .cmp-table th.cmp-active-col   { color:var(--blue); border-bottom:2px solid var(--blue); }
   .cmp-table td { padding:5px 6px; border-bottom:1px solid rgba(30,42,58,0.5);
     white-space:nowrap; }
   .cmp-table tr:hover td { background:rgba(68,138,255,0.05); }
@@ -9501,6 +9502,12 @@ function renderCompare() {
     return `<th class="${cls}" onclick="setCmpSort('${key}')">${label}</th>`;
   };
 
+  // Build ordered metric list: active metric first, then the rest
+  const orderedMetrics = [
+    activeMeta,
+    ...CMP_METRICS.filter(m => m.key !== _cmpMetric)
+  ];
+
   const tableRows = sorted.map((r, i) => {
     const v   = r[_cmpMetric];
     const bw  = barWidth(v);
@@ -9509,8 +9516,8 @@ function renderCompare() {
     const barColor = isBest ? 'var(--green)' : isWorst ? 'var(--red)' : 'var(--blue)';
     const badge = isBest ? '<span class="cmp-badge best">BEST</span>' : isWorst ? '<span class="cmp-badge worst">WORST</span>' : '';
 
-    // Render each metric column value with colour
-    const cells = CMP_METRICS.map(m => {
+    // Render each metric column value with colour — active metric column first
+    const cells = orderedMetrics.map(m => {
       const mv = r[m.key];
       const formatted = m.fmt(mv);
       let color = '';
@@ -9523,10 +9530,11 @@ function renderCompare() {
           else if (mv === worst) color = 'color:var(--red)';
         }
       }
-      return `<td style="${color}">${formatted}</td>`;
+      const isActive = m.key === _cmpMetric;
+      return `<td style="${color}${isActive ? ';font-weight:600' : ''}">${isActive ? badge : ''}${formatted}</td>`;
     }).join('');
 
-    return `<tr class="${i === 0 && sorted[0] === sorted[0] ? '' : ''}">
+    return `<tr>
       <td style="color:var(--muted);font-family:'JetBrains Mono',monospace">${i + 1}</td>
       <td class="cmp-sym" onclick="selectTicker('${r.sym}');activateTab('fundamentals')">${r.sym}</td>
       ${cells}
@@ -9551,7 +9559,7 @@ function renderCompare() {
         <thead><tr>
           <th>#</th>
           <th>SYM</th>
-          ${CMP_METRICS.map(m => `<th class="${_cmpSort.key === m.key ? 'sort-' + _cmpSort.dir : ''}" onclick="setCmpSort('${m.key}')">${m.label}</th>`).join('')}
+          ${orderedMetrics.map(m => `<th class="${_cmpSort.key === m.key ? 'sort-' + _cmpSort.dir : ''}${m.key === _cmpMetric ? ' cmp-active-col' : ''}" onclick="setCmpSort('${m.key}')">${m.label}</th>`).join('')}
         </tr></thead>
         <tbody>${tableRows}</tbody>
       </table>
