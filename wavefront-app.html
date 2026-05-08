@@ -411,6 +411,7 @@
   .toggle-btn.vp-on     { background: rgba(0,230,118,0.12);   border-color: #00e676; color: #00e676; }
   .toggle-btn.fibtime-on { color: var(--purple, #b39ddb); border-color: var(--purple, #b39ddb); background: rgba(179,157,219,0.15); }
   .toggle-btn.divg-on   { color: var(--cyan, #18ffff); border-color: var(--cyan, #18ffff); background: rgba(24,255,255,0.12); }
+  .toggle-btn.fc-on     { color: #ff9100; border-color: #ff9100; background: rgba(255,145,0,0.12); }
   .toggle-btn.featured {
     position: relative;
     box-shadow: 0 0 8px rgba(255,215,64,0.3);
@@ -454,6 +455,19 @@
     pointer-events: none;
   }
   #chart-empty .empty-logo { font-size: 32px; color: var(--border); letter-spacing: 6px; }
+  #chart-ticker-label {
+    position: absolute;
+    bottom: 52px; /* above volume bars */
+    left: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    opacity: 0.13;
+    pointer-events: none;
+    letter-spacing: 2px;
+    user-select: none;
+  }
 
   /* RIGHT SIDEBAR */
   #sidebar-right {
@@ -1195,6 +1209,64 @@
     letter-spacing: 2px;
     line-height: 2;
   }
+
+  /* TRADE SETUP CARD (top of WAVES panel) */
+  .tsc {
+    margin-bottom: 10px;
+    border-radius: 4px;
+    overflow: hidden;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .tsc-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    background: rgba(0,0,0,0.2);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .tsc-bias {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+  }
+  .tsc-conf {
+    font-size: 9px;
+    letter-spacing: 0.8px;
+  }
+  .tsc-body {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    background: rgba(0,0,0,0.1);
+  }
+  .tsc-cell {
+    padding: 7px 6px;
+    text-align: center;
+    border-right: 1px solid rgba(255,255,255,0.05);
+  }
+  .tsc-cell:last-child { border-right: none; }
+  .tsc-lbl {
+    font-size: 8px;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 3px;
+    text-transform: uppercase;
+  }
+  .tsc-val {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .tsc-calc-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    background: rgba(0,0,0,0.15);
+  }
+  .tsc-cinput { padding: 3px 6px !important; font-size: 11px !important; }
 
   /* FORECAST SECTION */
   .forecast-section {
@@ -2099,6 +2171,7 @@
       <button id="add-btn" type="submit">+ ADD</button>
     </form>
     <div id="clock">--:--:--</div>
+    <div id="live-badge" style="font-size:9px;color:var(--green);font-family:'JetBrains Mono',monospace;letter-spacing:1px;opacity:0.85"></div>
     <div class="header-sep"></div>
     <div id="vix-badge" style="display:flex;align-items:center;gap:2px;font-family:'JetBrains Mono',monospace;white-space:nowrap"></div>
     <div class="header-sep"></div>
@@ -2150,6 +2223,8 @@
           <button class="toggle-btn ma50-on" data-toggle="ma50" data-tip="50-Day Moving Average|Tracks intermediate-term trend and momentum.|A cross above MA50 is a common buy signal. Acts as support in uptrends, resistance in downtrends.">MA50</button>
           <button class="toggle-btn ema20-on" data-toggle="ema20" data-tip="20-Day EMA|Exponential moving average — reacts faster than simple MAs to recent price changes.|Often used as a short-term trend guide. In strong uptrends, price bounces off EMA20 repeatedly.">EMA20</button>
           <button class="toggle-btn" data-toggle="wma200" data-tip="200-Day WMA|Weighted Moving Average over 200 days — gives more importance to recent prices than SMA.|More responsive than the standard MA200 at catching early trend shifts. Cyan colour distinguishes it from the orange SMA200.">WMA200</button>
+          <button class="toggle-btn" data-toggle="vwap" data-tip="VWAP|Volume Weighted Average Price — computed cumulatively from the first bar of the current view.|Price above VWAP = bullish bias; below = bearish. Acts as major intraday and swing support/resistance. Drawn as a purple dashed line.">VWAP</button>
+          <button class="toggle-btn" data-toggle="fibclusters" data-tip="Fibonacci Clusters|Highlights price bands where Fibonacci retracement/extension levels from multiple wave swings converge within 0.5% of each other.|Multi-confluence zones are the highest-probability reversal or acceleration areas — the market gravitates to them.">FIBZ</button>
           <button class="toggle-btn vol-on" data-toggle="vol" data-tip="Volume Bars|Shows how many shares were traded each day at the bottom of the chart.|High volume confirms moves — a breakout on high volume is far more reliable than one on low volume.">VOL</button>
         </div>
         <div class="toolbar-sep"></div>
@@ -2161,6 +2236,7 @@
         <div class="toolbar-sep"></div>
         <button class="toggle-btn" id="export-btn" onclick="exportChart()" data-tip="Export Chart|Saves the current chart as a PNG image with all visible overlays.|Share your wave analysis with others or keep a record of your trade setup.">⬇ PNG</button>
         <button class="toggle-btn" id="alert-btn" onclick="toggleAlerts()" data-tip="Wave Alerts|Enables automatic polling — notifies you when the wave count changes or a price target is hit.|Useful if you can't watch the screen all day.">🔕</button>
+        <button class="toggle-btn" onclick="toggleRiskCalc()" data-tip="Risk Calculator|Calculate position size, max dollar loss, and reward-to-risk ratio from entry, stop, and target prices.|Essential for consistent risk management — never risk more than 1-2% of capital per trade.">⚖ RISK</button>
       </div>
       <!-- ROW 2: Advanced overlays -->
       <div class="toolbar-row">
@@ -2173,12 +2249,16 @@
           <button class="toggle-btn candles-on" data-toggle="candles" data-tip="Candlestick Patterns|Labels 14 classic candle formations directly on the chart (Hammer, Doji, Engulfing, Morning Star, etc.).|A bullish pattern at a wave support zone dramatically increases confidence. A bearish pattern at a target = exit signal.">CNDL</button>
           <button class="toggle-btn econ-on" data-toggle="econ" data-tip="Economic Calendar|Marks FOMC (Fed decisions), CPI (inflation), and NFP (jobs) dates on the chart with vertical lines.|Stocks often stall or gap around these dates — avoid entering large positions just before them.">ECON</button>
           <button class="toggle-btn" id="sector-btn" onclick="toggleSectorOverlay()" data-tip="Sector Overlay|Overlays the performance of the stock's sector ETF (e.g. XLK for tech) on the same chart.|If the sector is weak but your stock is holding up — it's showing relative strength, a bullish signal.">SECTOR</button>
+          <button class="toggle-btn" id="options-btn" onclick="toggleOptionsOverlay()" data-tip="Options Chain|Shows max pain level, top call/put open interest strikes on the chart.|Max pain = price where option buyers lose the most money. Price often gravitates toward it near expiry.">OPT</button>
         </div>
+        <div class="toolbar-sep"></div>
+        <button class="toggle-btn" id="fc-expand-btn" onclick="toggleForecastExpand()" data-tip="Expand Forecast|Widens the forecast zone from 18% to 35% of the chart — compresses the historical bars and gives more canvas to the projection area.|Use when you want to see wave targets, the bull/bear cone, and calendar dates at a larger scale.">⟶ FC</button>
         <div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;padding-right:4px">ADVANCED OVERLAYS</div>
       </div>
     </div>
     <div id="chart-container">
       <canvas id="chart-canvas"></canvas>
+      <div id="chart-ticker-label"></div>
       <div id="chart-empty">
         <div class="empty-logo">WAVEFRONT</div>
         <div>SELECT A TICKER TO BEGIN</div>
@@ -2198,8 +2278,13 @@
       <button class="sb-tab" data-tab="heatmap">HEAT</button>
       <button class="sb-tab" data-tab="portfolio">PORTFOLIO</button>
       <button class="sb-tab" data-tab="compare">COMPARE</button>
+      <button class="sb-tab" data-tab="forecast">FORECAST</button>
+      <button class="sb-tab" data-tab="signals">SIGNALS</button>
     </div>
     <div id="sidebar-body">
+      <div id="forecast-panel" class="sb-pane">
+        <div class="panel-empty">NO TICKER SELECTED<br>ADD A TICKER TO SEE<br>FORECAST</div>
+      </div>
       <div id="analysis-panel" class="sb-pane active">
         <div class="panel-empty">NO TICKER SELECTED<br>ADD A TICKER TO SEE<br>WAVE ANALYSIS</div>
       </div>
@@ -2226,6 +2311,9 @@
       </div>
       <div id="compare-panel" class="sb-pane">
         <div class="panel-empty">CLICK COMPARE TAB<br>TO RANK YOUR WATCHLIST</div>
+      </div>
+      <div id="signals-panel" class="sb-pane">
+        <div class="panel-empty">CLICK SIGNALS TAB<br>TO SEE SIGNAL BOARD</div>
       </div>
     </div>
   </aside>
@@ -2276,6 +2364,8 @@ let state = {
   timeframe: '3M',
   showSector: false,
   sectorData: {},   // etfSym -> bar data
+  showOptions: false,
+  optionsData: {},  // sym -> { maxPain, topCalls, topPuts, expiry, totalCallOI, totalPutOI }
   watchlistSort: { key: 'default', dir: 'desc' },
   showZones: true,      // buy/sell zone bands
   showStop: true,       // stop loss line
@@ -2292,11 +2382,13 @@ let state = {
   showMA50: true,
   showEMA20: true,
   showWMA200: false,
-  showMM: false,         // measured move AB=CD projections
-  showChan: true,        // auto regression channel
-  showVP: false,         // volume profile
-  showFibTime: false,    // fibonacci time zones
-  showDivergence: false, // RSI divergence scanner
+  showMM: false,          // measured move AB=CD projections
+  showChan: true,         // auto regression channel
+  showVP: false,          // volume profile
+  showFibTime: false,     // fibonacci time zones
+  showDivergence: false,  // RSI divergence scanner
+  showVWAP: false,        // volume-weighted average price
+  showFibClusters: false, // multi-source Fibonacci confluence zones
   folders: [{ id: 'all', name: 'ALL', tickers: [] }],
   activeFolder: 'all',
   waves: {},     // symbol -> wave analysis result
@@ -2314,6 +2406,8 @@ let state = {
   _drawStart: null,     // in-progress trendline start point
   zoomRange: null,      // null = full TF range | { startIdx, endIdx } into TF bars
   featured: {},         // toggle-key → true  e.g. { 'waves': true, 'fibs': true }
+  forecastExpanded: false, // true = wider forecast zone (35% vs 18%)
+  journalPrefill: null,   // set by logSetupFromForecast(), consumed once by renderJournal()
 };
 
 // ─── PERSISTENCE ────────────────────────────────────────────────────────────
@@ -3498,7 +3592,7 @@ function redrawChart() {
   const chartH = chartBottom - chartTop;
 
   // Reserve right portion of chart for forecast timeline
-  const FORECAST_RATIO = 0.18;
+  const FORECAST_RATIO = state.forecastExpanded ? 0.35 : 0.18;
   const forecastW = Math.floor(chartW * FORECAST_RATIO);
   const barsW = chartW - forecastW;
   const barsRight = chartLeft + barsW;
@@ -3513,7 +3607,36 @@ function redrawChart() {
 
   let minP = Math.min(...bars.map(b => b.l));
   let maxP = Math.max(...bars.map(b => b.h));
-  // y-axis is based only on actual bar data — forecast/fib zones outside range are clipped
+
+  // Expand Y range so wave target lines stay on-canvas instead of being clipped.
+  // Cap at 60% of bar range to avoid excessive zoom-out for wild projections.
+  if (fcWave && !fcWave.complete) {
+    const _wd  = fcWave.waveData;
+    const _isUp = fcWave.direction === 'up';
+    const _wPrices = [];
+    if (fcWave.pattern === 'IMPULSE' && _wd) {
+      const { p3, p4, w1 } = _wd;
+      if (p3) _wPrices.push(p3.price);
+      if (p4) _wPrices.push(p4.price);
+      if (p4 && w1 != null) {
+        _wPrices.push(_isUp ? p4.price + w1       : p4.price - w1);
+        _wPrices.push(_isUp ? p4.price + w1 * 1.618 : p4.price - w1 * 1.618);
+      }
+    } else if (fcWave.pattern === 'CORRECTION' && fcWave.fibLevels) {
+      fcWave.fibLevels
+        .filter(f => f.ratio === 1.618 || f.ratio === 2.618)
+        .forEach(f => _wPrices.push(f.price));
+    }
+    const _barRange = maxP - minP;
+    const _cap = _barRange * 0.6;
+    _wPrices.forEach(p => {
+      if (isFinite(p)) {
+        if (p > maxP && p <= maxP + _cap) maxP = p;
+        else if (p < minP && p >= minP - _cap) minP = p;
+      }
+    });
+  }
+
   const pRange = maxP - minP;
   minP -= pRange * 0.05;
   maxP += pRange * 0.05;
@@ -3547,14 +3670,20 @@ function redrawChart() {
   }
   // Date labels at bottom
   const dateLabelCount = Math.min(6, bars.length);
-  const step = Math.floor(bars.length / dateLabelCount);
   ctx.fillStyle = MUTED_COL;
   ctx.font = '10px JetBrains Mono, monospace';
   ctx.textAlign = 'center';
-  for (let di = 0; di < bars.length; di += step) {
+  // Distribute labels evenly from first to last bar, always including the last date
+  for (let li = 0; li < dateLabelCount; li++) {
+    const di = dateLabelCount === 1 ? 0
+      : Math.round(li * (bars.length - 1) / (dateLabelCount - 1));
     const x = px(di);
     const d = bars[di].date;
-    const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const mo = d.toLocaleDateString('en-US', { month: 'short' });
+    const yr = String(d.getFullYear()).slice(2);
+    const label = `${mo} '${yr}`;
+    const isLast = li === dateLabelCount - 1;
+    ctx.fillStyle = isLast ? 'rgba(68,138,255,0.9)' : MUTED_COL;
     ctx.fillText(label, x, h - PAD_BOTTOM + 14);
     // vertical grid line
     ctx.strokeStyle = 'rgba(30,42,58,0.4)';
@@ -3563,6 +3692,7 @@ function redrawChart() {
     ctx.lineTo(x, chartBottom);
     ctx.stroke();
   }
+  ctx.fillStyle = MUTED_COL;
 
   // 1b. Volume Profile (draw early so it's behind everything)
   _prom = state.featured['vp'] ? 2.2 : 1;
@@ -3577,6 +3707,73 @@ function redrawChart() {
     drawRegressionChannel(ctx, bars, px, py, chartLeft, chartRight, chartTop, chartBottom);
   }
   _prom = 1;
+
+  // 1b. Fibonacci cluster zones (multi-source confluence bands)
+  const _wr = state.waves[state.selected];
+  if (state.showFibClusters && _wr?.fibLevels) {
+    ctx.save();
+    // Gather price levels from all sources: fib levels + wave target lines + S/R
+    const allLevels = [];
+    // Source 1: primary fib grid
+    _wr.fibLevels.forEach(f => { if (f.price > 0) allLevels.push({ p: f.price, src: 'fib' }); });
+    // Source 2: S/R levels
+    (state.srLevels?.[state.selected] || []).forEach(sr => allLevels.push({ p: sr.price, src: 'sr' }));
+    // Source 3: wave target prices from waveData
+    const wd = _wr.waveData;
+    if (wd) {
+      ['w5t1','w5t2','cT1','cT2','cT3','aT1','aT2'].forEach(k => {
+        if (wd[k] > 0) allLevels.push({ p: wd[k], src: 'target' });
+      });
+    }
+
+    // Cluster levels within 0.5%
+    const used = new Array(allLevels.length).fill(false);
+    const clusters = [];
+    for (let i = 0; i < allLevels.length; i++) {
+      if (used[i]) continue;
+      const cluster = [allLevels[i]];
+      used[i] = true;
+      for (let j = i + 1; j < allLevels.length; j++) {
+        if (used[j]) continue;
+        if (Math.abs(allLevels[j].p - allLevels[i].p) / allLevels[i].p < 0.005) {
+          cluster.push(allLevels[j]);
+          used[j] = true;
+        }
+      }
+      if (cluster.length >= 2) clusters.push(cluster);
+    }
+
+    // Draw bands
+    clusters.forEach(cl => {
+      const prices = cl.map(c => c.p);
+      const lo = Math.min(...prices);
+      const hi = Math.max(...prices);
+      const midP = (lo + hi) / 2;
+      const yMid = py(midP);
+      const bandHalf = Math.max(3, Math.abs(py(lo) - py(hi)) / 2 + 3);
+      const strength = Math.min(cl.length, 4); // 2–4
+      const alpha = 0.07 + strength * 0.04;
+      if (yMid < chartTop || yMid > chartBottom) return;
+
+      // Fill band
+      ctx.fillStyle = `rgba(255,214,0,${alpha})`;
+      ctx.fillRect(chartLeft, yMid - bandHalf, barsW, bandHalf * 2);
+      // Top & bottom border lines
+      ctx.strokeStyle = `rgba(255,214,0,${alpha * 3})`;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(chartLeft, yMid - bandHalf); ctx.lineTo(chartLeft + barsW, yMid - bandHalf); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(chartLeft, yMid + bandHalf); ctx.lineTo(chartLeft + barsW, yMid + bandHalf); ctx.stroke();
+      ctx.setLineDash([]);
+      // Right label
+      const lbl = `×${cl.length}`;
+      ctx.font = 'bold 8px JetBrains Mono, monospace';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = `rgba(255,214,0,0.8)`;
+      ctx.fillText(lbl, chartLeft + barsW - 3, yMid + 3);
+    });
+    ctx.restore();
+  }
 
   // 2. Fibonacci lines (retracements + extensions)
   const waveResult = state.waves[state.selected];
@@ -3778,7 +3975,7 @@ function redrawChart() {
 
   // 5b. Moving average lines — computed from full bar history
   const fullBars = state.data[state.selected]?.bars || bars;
-  if (state.showMA200 || state.showMA50 || state.showEMA20 || state.showWMA200) {
+  if (state.showMA200 || state.showMA50 || state.showEMA20 || state.showWMA200 || state.showVWAP) {
     if (state.showMA200) {
       _prom = state.featured['ma200'] ? 2.2 : 1;
       const sma200 = calcSMA(fullBars, 200);
@@ -3802,6 +3999,45 @@ function redrawChart() {
       const wma200 = calcWMA(fullBars, 200);
       drawMA(ctx, wma200, bars, fullBars, px, py, '#00e5ffcc', [6, 3]);
       _prom = 1;
+    }
+    if (state.showVWAP && bars.length > 1) {
+      _prom = state.featured['vwap'] ? 2.2 : 1;
+      const vwapVals = (() => {
+        let cumTP = 0, cumVol = 0;
+        return bars.map(b => {
+          const tp = (b.h + b.l + b.c) / 3;
+          const v  = b.v || 1;
+          cumTP  += tp * v;
+          cumVol += v;
+          return cumTP / cumVol;
+        });
+      })();
+      const vwapCol = '#b388ff'; // soft purple — distinct from all existing MAs
+      ctx.save();
+      ctx.strokeStyle = vwapCol + (Math.round(0xcc * _prom > 0xff ? 0xff : 0xcc * _prom)).toString(16).padStart(2,'0').slice(-2);
+      ctx.lineWidth = 1.5 * _prom;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      let vwapStarted = false;
+      vwapVals.forEach((v, i) => {
+        const x = px(i);
+        const y = py(v);
+        if (y < chartTop || y > chartBottom) { vwapStarted = false; return; }
+        if (!vwapStarted) { ctx.moveTo(x, y); vwapStarted = true; }
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+      _prom = 1;
+      // Add to right-axis labels below
+      const lastVWAP = vwapVals[vwapVals.length - 1];
+      if (lastVWAP != null && lastVWAP >= minP && lastVWAP <= maxP) {
+        ctx.font = '9px JetBrains Mono, monospace';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = vwapCol;
+        ctx.fillText('VWAP', chartRight + 4, py(lastVWAP) - 2);
+      }
     }
 
     // MA value labels on right axis
@@ -4059,37 +4295,55 @@ function redrawChart() {
         ctx.fillText(label, badgeX, badgeY + 2);
       }
 
-      // ── Wave target lines (W3 and W5 extensions) ────────────────────────
-      if (waveResult.fibLevels && !waveResult.complete) {
+      // ── Wave target lines (W3 / W4 / W5) ───────────────────────────────
+      if (!waveResult.complete) {
         const isUp = waveResult.direction === 'up';
-        const targets = [
-          { ratio: 1.618, label: 'W3 ×1.618', col: '#18ffff' },
-          { ratio: 2.618, label: 'W5 ×2.618', col: '#00e5ff' },
-        ];
-        targets.forEach(({ ratio, label: tLabel, col }) => {
-          const fib = waveResult.fibLevels.find(f => f.ratio === ratio);
-          if (!fib) return;
-          const y = py(fib.price);
+        const wd   = waveResult.waveData;
+        const wTargets = [];
+
+        // Date-estimation helpers for projected target labels
+        const _lastBar   = bars[bars.length - 1];
+        const _avgBarMs  = bars.length >= 2
+          ? (_lastBar.date - bars[0].date) / (bars.length - 1) : 86400000;
+        const _hrzBars   = Math.round(bars.length * 0.30);
+        const _projDate  = tFrac => {
+          const d = new Date(_lastBar.date.getTime() + tFrac * _hrzBars * _avgBarMs);
+          return `~${d.toLocaleDateString('en-US',{month:'short'})} '${String(d.getFullYear()).slice(2)}`;
+        };
+
+        if (waveResult.pattern === 'IMPULSE' && wd) {
+          const { p3, p4, w1 } = wd;
+          if (p3) wTargets.push({ price: p3.price,                              label: 'W3',        col: '#448aff', dash: false });
+          if (p4) wTargets.push({ price: p4.price,                              label: 'W4',        col: '#ffd740', dash: false });
+          if (p4) wTargets.push({ price: isUp ? p4.price + w1       : p4.price - w1,       label: 'W5 =W1',    col: '#18ffff', dash: true, tFrac: 0.50 });
+          if (p4) wTargets.push({ price: isUp ? p4.price + w1 * 1.618 : p4.price - w1 * 1.618, label: 'W5 ×1.618', col: '#00e5ff', dash: true, tFrac: 0.85 });
+        } else if (waveResult.pattern === 'CORRECTION' && waveResult.fibLevels) {
+          const fib3 = waveResult.fibLevels.find(f => f.ratio === 1.618);
+          const fib5 = waveResult.fibLevels.find(f => f.ratio === 2.618);
+          if (fib3) {
+            wTargets.push({ price: fib3.price, label: 'C ×1.618', col: '#18ffff', dash: true, tFrac: 0.25 });
+            if (fib5) {
+              const cMove = Math.abs(fib3.price - fib5.price);
+              const midBounce = isUp ? fib3.price - cMove * 0.5 : fib3.price + cMove * 0.5;
+              wTargets.push({ price: midBounce, label: 'C mid',    col: '#ffd740', dash: true, tFrac: 0.42 });
+            }
+          }
+          if (fib5) wTargets.push({ price: fib5.price, label: 'C ×2.618', col: '#00e5ff', dash: true, tFrac: 0.60 });
+        }
+
+        wTargets.forEach(({ price, label: tLabel, col, dash, tFrac }) => {
+          const y = py(price);
           if (y < chartTop || y > chartBottom) return;
-
-          const fullLabel = `${tLabel}  $${fmtPrice(fib.price)}`;
-
+          const dateTag  = (dash && tFrac != null) ? `  ${_projDate(tFrac)}` : '';
+          const fullLabel = `${tLabel}  $${fmtPrice(price)}${dateTag}`;
           ctx.save();
-          // Glow band
-          ctx.fillStyle = col + '14';
-          ctx.fillRect(chartLeft, y - 6, chartRight - chartLeft, 12);
-
-          // Line
-          ctx.setLineDash([8, 4]);
-          ctx.strokeStyle = col + 'bb';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(chartLeft, y);
-          ctx.lineTo(chartRight, y);
-          ctx.stroke();
+          ctx.fillStyle = col + '12';
+          ctx.fillRect(chartLeft, y - 5, chartRight - chartLeft, 10);
+          ctx.setLineDash(dash ? [8, 4] : [4, 3]);
+          ctx.strokeStyle = col + (dash ? 'bb' : '88');
+          ctx.lineWidth = dash ? 1.5 : 1;
+          ctx.beginPath(); ctx.moveTo(chartLeft, y); ctx.lineTo(chartRight, y); ctx.stroke();
           ctx.setLineDash([]);
-
-          // Label pill (left side) — includes price
           ctx.font = 'bold 9px JetBrains Mono, monospace';
           ctx.textAlign = 'left';
           const lw = ctx.measureText(fullLabel).width + 10;
@@ -4098,8 +4352,7 @@ function redrawChart() {
           ctx.roundRect ? ctx.roundRect(chartLeft + 1, y - 7, lw, 13, 2) : ctx.rect(chartLeft + 1, y - 7, lw, 13);
           ctx.fill();
           ctx.strokeStyle = col + '66';
-          ctx.lineWidth = 1;
-          ctx.stroke();
+          ctx.lineWidth = 1; ctx.stroke();
           ctx.fillStyle = col;
           ctx.fillText(fullLabel, chartLeft + 6, y + 3.5);
           ctx.restore();
@@ -4293,6 +4546,13 @@ function redrawChart() {
     ctx.lineTo(barsRight, chartBottom);
     ctx.stroke();
     ctx.setLineDash([]);
+    // "NOW" label at top of the divider line
+    ctx.save();
+    ctx.font = 'bold 9px JetBrains Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(68,138,255,0.85)';
+    ctx.fillText('NOW', barsRight, chartTop + 10);
+    ctx.restore();
 
     // Forecast region background
     ctx.fillStyle = 'rgba(68,138,255,0.04)';
@@ -4303,6 +4563,71 @@ function redrawChart() {
     ctx.font = 'bold 9px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
     ctx.fillText('FORECAST', forecastLeft + forecastW / 2, chartTop + 11);
+
+    // ── Bull / Base / Bear scenario cone ───────────────────────────────────
+    {
+      const wr = waveResult;
+      const isUp = wr?.direction === 'up';
+      let bullP = null, bearP = null;
+
+      if (wr && !wr.complete && wr.waveData) {
+        if (wr.pattern === 'IMPULSE') {
+          const { p4, w1 } = wr.waveData;
+          if (p4 && w1) {
+            bullP = isUp ? p4.price + w1 * 1.618 : p4.price - w1 * 0.5;
+            bearP = isUp ? p4.price + w1 * 0.5   : p4.price - w1 * 1.618;
+          }
+        } else if (wr.pattern === 'CORRECTION' && wr.fibLevels) {
+          const f786  = wr.fibLevels.find(f => f.ratio === 0.786);
+          const f1618 = wr.fibLevels.find(f => f.ratio === 1.618);
+          if (f786 && f1618) {
+            bullP = isUp ? f1618.price : f786.price;
+            bearP = isUp ? f786.price  : f1618.price;
+          }
+        }
+      }
+
+      if (bullP != null && bearP != null) {
+        const apex  = { x: lastBarX, y: py(curPrice0) };
+        const bullY = py(bullP);
+        const bearY = py(bearP);
+        const endX  = chartRight - 6;
+
+        ctx.save();
+        // Filled cone
+        ctx.beginPath();
+        ctx.moveTo(apex.x, apex.y);
+        ctx.lineTo(endX, bullY);
+        ctx.lineTo(endX, bearY);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(120,140,220,0.07)';
+        ctx.fill();
+
+        // Bull edge
+        ctx.setLineDash([4, 3]);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#00e676' + '55';
+        ctx.beginPath(); ctx.moveTo(apex.x, apex.y); ctx.lineTo(endX, bullY); ctx.stroke();
+        // Bear edge
+        ctx.strokeStyle = '#ff5252' + '55';
+        ctx.beginPath(); ctx.moveTo(apex.x, apex.y); ctx.lineTo(endX, bearY); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Right-edge labels + prices
+        ctx.font = 'bold 8px JetBrains Mono, monospace';
+        ctx.textAlign = 'right';
+        // Bull label
+        const bullLbl = `BULL $${fmtPrice(bullP)}`;
+        ctx.fillStyle = '#00e676cc';
+        ctx.fillText(bullLbl, endX - 2, Math.max(chartTop + 10, bullY - 3));
+        // Bear label
+        const bearLbl = `BEAR $${fmtPrice(bearP)}`;
+        ctx.fillStyle = '#ff5252cc';
+        ctx.fillText(bearLbl, endX - 2, Math.min(chartBottom - 3, bearY + 10));
+
+        ctx.restore();
+      }
+    }
 
     // ── Wave-target ZIGZAG projection ──────────────────────────────────────
     // Draws every wave target with a tFrac time position as a connected
@@ -4771,19 +5096,152 @@ function redrawChart() {
     ctx.restore();
   }
 
-  // 8. Ticker label (bottom-left of chart, above volume area)
-  if (state.selected) {
-    ctx.save();
-    ctx.font = 'bold 22px JetBrains Mono, monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    const lbl = state.selected;
-    const lw = ctx.measureText(lbl).width;
-    const lx = chartLeft + 12;
-    const ly = chartBottom - 12;
-    ctx.fillStyle = isLightTheme() ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)';
-    ctx.fillText(lbl, lx, ly);
-    ctx.restore();
+  // 7e. Open journal trade overlays (entry / stop lines + risk-zone fill)
+  {
+    const openTrades = getJournal().filter(e => e.sym === state.selected && !e.exitPrice);
+    if (openTrades.length) {
+      ctx.save();
+      openTrades.forEach(trade => {
+        const isLong   = trade.direction === 'long';
+        const entryCol = isLong ? '#00e676' : '#ff1744';
+        const stopCol  = isLong ? '#ff1744' : '#00e676';
+        const f        = n => '$' + Number(n).toFixed(2);
+        const ey       = py(trade.entryPrice);
+        const sy       = trade.stopPrice != null ? py(trade.stopPrice) : null;
+
+        // Risk-zone fill between entry and stop
+        if (sy != null) {
+          const fillTop    = Math.min(ey, sy);
+          const fillBottom = Math.max(ey, sy);
+          ctx.fillStyle    = 'rgba(255,23,68,0.06)';
+          ctx.fillRect(chartLeft, fillTop, barsW, fillBottom - fillTop);
+        }
+
+        const drawLevel = (yPos, col, badge, priceVal) => {
+          if (yPos < chartTop || yPos > chartBottom) return;
+          ctx.setLineDash([6, 3]);
+          ctx.strokeStyle = col;
+          ctx.lineWidth   = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(chartLeft, yPos);
+          ctx.lineTo(chartLeft + barsW, yPos);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          // Left badge
+          ctx.font      = 'bold 9px JetBrains Mono, monospace';
+          ctx.textAlign = 'left';
+          const lw = ctx.measureText(badge).width + 10;
+          ctx.fillStyle = col + '25';
+          ctx.fillRect(chartLeft + 1, yPos - 7, lw, 13);
+          ctx.fillStyle = col;
+          ctx.fillText(badge, chartLeft + 5, yPos + 3.5);
+          // Right price tag
+          const ps = f(priceVal);
+          const pw = ctx.measureText(ps).width + 10;
+          ctx.fillStyle = col;
+          ctx.fillRect(chartRight + 2, yPos - 7, pw, 14);
+          ctx.fillStyle = BG;
+          ctx.textAlign = 'center';
+          ctx.fillText(ps, chartRight + 2 + pw / 2, yPos + 3.5);
+        };
+
+        drawLevel(ey, entryCol, '📓 ENTRY', trade.entryPrice);
+        if (sy != null) drawLevel(sy, stopCol, '✕ STOP', trade.stopPrice);
+      });
+      ctx.restore();
+    }
+  }
+
+  // 8. Options chain overlay (max pain + key strikes)
+  if (state.showOptions && state.selected) {
+    const opt = state.optionsData[state.selected];
+    if (opt) {
+      ctx.save();
+      // Max pain line
+      if (opt.maxPain != null) {
+        const yMP = py(opt.maxPain);
+        if (yMP >= chartTop && yMP <= chartBottom) {
+          ctx.setLineDash([6, 4]);
+          ctx.strokeStyle = '#ff9800cc';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(chartLeft, yMP); ctx.lineTo(chartRight, yMP); ctx.stroke();
+          ctx.setLineDash([]);
+          // Label
+          ctx.font = 'bold 9px JetBrains Mono, monospace';
+          ctx.fillStyle = '#ff9800';
+          ctx.textAlign = 'left';
+          ctx.fillText(`MAX PAIN $${opt.maxPain.toFixed(0)}`, chartLeft + 5, yMP - 4);
+          // Right price tag
+          const mpStr = `$${opt.maxPain.toFixed(0)}`;
+          const mpW = ctx.measureText(mpStr).width + 8;
+          ctx.fillStyle = '#ff9800';
+          ctx.fillRect(chartRight + 2, yMP - 8, mpW, 16);
+          ctx.fillStyle = BG;
+          ctx.textAlign = 'center';
+          ctx.fillText(mpStr, chartRight + 2 + mpW/2, yMP + 4);
+        }
+      }
+      // Top call strikes (resistance — red dashes)
+      (opt.topCalls || []).slice(0, 3).forEach(c => {
+        const y = py(c.strike);
+        if (y < chartTop || y > chartBottom) return;
+        ctx.setLineDash([3, 5]);
+        ctx.strokeStyle = 'rgba(255,82,82,0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(chartLeft, y); ctx.lineTo(chartRight, y); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font = '8px JetBrains Mono, monospace';
+        ctx.fillStyle = 'rgba(255,82,82,0.8)';
+        ctx.textAlign = 'right';
+        ctx.fillText(`C $${c.strike} OI:${(c.oi/1000).toFixed(0)}k`, chartRight - 4, y - 3);
+      });
+      // Top put strikes (support — green dashes)
+      (opt.topPuts || []).slice(0, 3).forEach(p => {
+        const y = py(p.strike);
+        if (y < chartTop || y > chartBottom) return;
+        ctx.setLineDash([3, 5]);
+        ctx.strokeStyle = 'rgba(0,230,118,0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(chartLeft, y); ctx.lineTo(chartRight, y); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font = '8px JetBrains Mono, monospace';
+        ctx.fillStyle = 'rgba(0,230,118,0.8)';
+        ctx.textAlign = 'right';
+        ctx.fillText(`P $${p.strike} OI:${(p.oi/1000).toFixed(0)}k`, chartRight - 4, y + 9);
+      });
+      ctx.restore();
+    }
+  }
+
+  // 8b. Ticker label — rendered as HTML overlay (see #chart-ticker-label), not canvas
+
+  // 8b. TF confluence badge (top-right of chart bars area)
+  if (state.selected && state.data[state.selected]) {
+    const conf = calcConfluence(state.selected);
+    if (conf && conf.total >= 2) {
+      ctx.save();
+      const isUp  = conf.dominant === 'up';
+      const col   = conf.score === conf.total ? (isUp ? '#00e676' : '#ff5252')
+                  : conf.score >= conf.total * 0.6 ? (isUp ? '#69f0ae' : '#ff8a80') : '#ffd740';
+      const lbl   = `TF ${conf.score}/${conf.total} ${isUp ? '▲' : '▼'}`;
+      ctx.font     = 'bold 10px JetBrains Mono, monospace';
+      ctx.textAlign = 'right';
+      const tw = ctx.measureText(lbl).width + 12;
+      const bx = chartLeft + barsW - 4;
+      const by = chartTop + 6;
+      ctx.fillStyle = col + '18';
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(bx - tw, by, tw, 16, 3) : ctx.fillRect(bx - tw, by, tw, 16);
+      ctx.fill();
+      ctx.strokeStyle = col + '55';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(bx - tw, by, tw, 16, 3) : ctx.strokeRect(bx - tw, by, tw, 16);
+      ctx.stroke();
+      ctx.fillStyle = col;
+      ctx.fillText(lbl, bx - 6, by + 11);
+      ctx.restore();
+    }
   }
 
   // 9. Crosshair
@@ -4809,17 +5267,37 @@ function redrawChart() {
       ctx.fillText(fmtPrice(crossPrice), chartRight + 2 + (PAD_RIGHT - 4) / 2, y + 3.5);
 
       // date tooltip
-      const idxF = (x - chartLeft) / chartW * (bars.length - 1);
+      const idxF = (x - chartLeft) / barsW * (bars.length - 1);
       const idx = Math.round(Math.min(bars.length - 1, Math.max(0, idxF)));
-      if (bars[idx]) {
+      if (x <= barsRight && bars[idx]) {
+        // historical bar date
         const dateStr = bars[idx].date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         ctx.fillStyle = 'rgba(15,20,32,0.9)';
+        ctx.font = '10px JetBrains Mono, monospace';
         const tw = ctx.measureText(dateStr).width + 12;
         ctx.fillRect(x - tw / 2, chartBottom + 4, tw, 16);
         ctx.fillStyle = TEXT_COL;
-        ctx.font = '10px JetBrains Mono, monospace';
         ctx.textAlign = 'center';
         ctx.fillText(dateStr, x, chartBottom + 15);
+      } else if (x > barsRight && bars.length >= 2) {
+        // forecast zone — project calendar date from last bar
+        const lastBar  = bars[bars.length - 1];
+        const firstBar = bars[0];
+        const avgMs    = (lastBar.date - firstBar.date) / (bars.length - 1);
+        const barsAhead = (x - barsRight) / (barsW / (bars.length - 1));
+        const projDate  = new Date(lastBar.date.getTime() + barsAhead * avgMs);
+        const projStr   = '~' + projDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        ctx.font = '10px JetBrains Mono, monospace';
+        const tw = ctx.measureText(projStr).width + 12;
+        ctx.fillStyle = 'rgba(68,138,255,0.18)';
+        ctx.fillRect(x - tw / 2, chartBottom + 4, tw, 16);
+        ctx.strokeStyle = 'rgba(68,138,255,0.4)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
+        ctx.strokeRect(x - tw / 2, chartBottom + 4, tw, 16);
+        ctx.fillStyle = 'rgba(68,138,255,0.9)';
+        ctx.textAlign = 'center';
+        ctx.fillText(projStr, x, chartBottom + 15);
       }
     }
   }
@@ -4905,7 +5383,7 @@ canvas.addEventListener('wheel', e => {
   const PAD_LEFT = 14, PAD_RIGHT = 70;
   const chartLeft = PAD_LEFT, chartRight = w - PAD_RIGHT;
   const chartW = chartRight - chartLeft;
-  const FORECAST_RATIO = 0.18;
+  const FORECAST_RATIO = state.forecastExpanded ? 0.35 : 0.18;
   const barsW = chartW * (1 - FORECAST_RATIO);
   const fracX = Math.max(0, Math.min(1, (mouseX - chartLeft) / barsW));
   const anchorBar = cur.startIdx + fracX * (visibleCount - 1);
@@ -4959,7 +5437,7 @@ canvas.addEventListener('mousemove', e => {
 
   const w = canvas.clientWidth;
   const PAD_LEFT = 14, PAD_RIGHT = 70;
-  const barsW = (w - PAD_LEFT - PAD_RIGHT) * 0.82;
+  const barsW = (w - PAD_LEFT - PAD_RIGHT) * (1 - (state.forecastExpanded ? 0.35 : 0.18));
   const visibleCount = _panStart.endIdx - _panStart.startIdx + 1;
   const pxPerBar = barsW / visibleCount;
 
@@ -5003,7 +5481,7 @@ canvas.addEventListener('dblclick', e => {
     const dist = Math.hypot(x1 - x0, y1 - y0);
     const w = canvas.clientWidth;
     const PAD_LEFT = 14, PAD_RIGHT = 70;
-    const barsW = (w - PAD_LEFT - PAD_RIGHT) * 0.82;
+    const barsW = (w - PAD_LEFT - PAD_RIGHT) * (1 - (state.forecastExpanded ? 0.35 : 0.18));
     const midFrac = Math.max(0, Math.min(1, (midX - PAD_LEFT) / barsW));
     return { dist, midFrac };
   }
@@ -5047,7 +5525,7 @@ canvas.addEventListener('dblclick', e => {
       // Swipe pan
       const w = canvas.clientWidth;
       const PAD_LEFT = 14, PAD_RIGHT = 70;
-      const barsW = (w - PAD_LEFT - PAD_RIGHT) * 0.82;
+      const barsW = (w - PAD_LEFT - PAD_RIGHT) * (1 - (state.forecastExpanded ? 0.35 : 0.18));
       const visibleCount = _touchPanStart.endIdx - _touchPanStart.startIdx + 1;
       const pxPerBar = barsW / visibleCount;
       const dx = _touchPanStart.x - e.touches[0].clientX;
@@ -5775,6 +6253,16 @@ function addAlert(sym) {
   showToast(`Alert set: ${sym} ${dir} $${fmtPrice(price)}`);
 }
 
+function addAlertDirect(sym, price) {
+  if (!sym || price == null || isNaN(price) || price <= 0) return;
+  const bars = state.data[sym]?.bars;
+  const currentPrice = bars?.[bars.length - 1]?.c ?? 0;
+  const dir = price > currentPrice ? 'above' : 'below';
+  if (state.alerts.some(a => a.sym === sym && Math.abs(a.price - price) < 0.01)) return; // dedup
+  state.alerts.push({ sym, price, dir, triggered: false });
+  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+}
+
 function removeAlert(idx) {
   state.alerts.splice(idx, 1);
   saveState();
@@ -5808,8 +6296,11 @@ function checkAlerts() {
 
 async function pollLivePrices() {
   if (!state.livePolling) return;
-  const syms = [...new Set(state.alerts.filter(a => !a.triggered).map(a => a.sym))];
+  // Poll all watchlist tickers + any alert tickers
+  const alertSyms = state.alerts.filter(a => !a.triggered).map(a => a.sym);
+  const syms = [...new Set([...state.tickers, ...alertSyms])];
   if (!syms.length) return;
+
   await Promise.all(syms.map(async sym => {
     try {
       const r = await fetch(`${API_BASE}/api/quote/${sym}`);
@@ -5817,17 +6308,24 @@ async function pollLivePrices() {
       const q = await r.json();
       if (q.price) {
         state.livePrices[sym] = { price: q.price, updatedAt: Date.now() };
-        // update last bar price so chart crosshair reflects live price
+        // Update last bar close so chart reflects live price
         if (state.data[sym]?.bars?.length) {
           state.data[sym].bars[state.data[sym].bars.length - 1].c = q.price;
         }
       }
     } catch(e) {}
   }));
+
   checkAlerts();
-  if (state.selected && state.alerts.some(a => a.sym === state.selected && !a.triggered)) {
-    renderAlertList(state.selected);
+  renderWatchlist();  // refresh price/change in watchlist panel
+  if (state.selected) {
+    redrawChart();
+    renderAnalysis();
+    if (state.rightTab === 'portfolio') renderPortfolio();
   }
+  // Update live badge timestamp
+  const badge = document.getElementById('live-badge');
+  if (badge) badge.textContent = '🟢 LIVE ' + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
 let _pollInterval = null;
@@ -5839,6 +6337,8 @@ function setLivePolling(on) {
     if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
   } else {
     if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+    const badge = document.getElementById('live-badge');
+    if (badge) badge.textContent = '';
   }
   if (state.selected) renderAlertList(state.selected);
 }
@@ -6628,6 +7128,484 @@ function buildForecast(wave, currentPrice, fundData) {
   };
 }
 
+// ─── TIMEFRAME CONFLUENCE ────────────────────────────────────────────────────
+const _confCache = {};
+function calcConfluence(sym) {
+  if (!state.data[sym]) return null;
+  const cacheKey = sym + '_' + (state.data[sym].bars?.length ?? 0);
+  if (_confCache[cacheKey]) return _confCache[cacheKey];
+  const allBars = state.data[sym].bars;
+  const dirs = ['1M','3M','1Y','2Y','5Y'].map(tf => {
+    const b = filterBars(allBars, tf);
+    if (b.length < 10) return null;
+    const w = detectWaves(b);
+    return w?.direction ?? null;
+  }).filter(Boolean);
+  const bullCount = dirs.filter(d => d === 'up').length;
+  const bearCount = dirs.filter(d => d === 'down').length;
+  const dominant  = bullCount >= bearCount ? 'up' : 'down';
+  const score     = Math.max(bullCount, bearCount);
+  const result    = { bullCount, bearCount, total: dirs.length, score, dominant };
+  _confCache[cacheKey] = result;
+  return result;
+}
+
+// ─── SIGNAL BOARD RENDER ─────────────────────────────────────────────────────
+function renderSignals() {
+  const panel = document.getElementById('signals-panel');
+  if (!panel) return;
+
+  const ready = state.tickers.filter(sym => state.data[sym] && state.waves[sym]);
+  if (!ready.length) {
+    panel.innerHTML = '<div class="panel-empty">NO DATA YET<br>ADD TICKERS TO YOUR WATCHLIST</div>';
+    return;
+  }
+
+  const f2  = n => n != null ? '$' + Number(n).toFixed(2) : '—';
+  const pct = n => (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+
+  // Build card data
+  const cards = ready.map(sym => {
+    const bars     = filterBars(state.data[sym].bars, state.timeframe);
+    const last     = bars[bars.length - 1];
+    const prev     = bars.length > 1 ? bars[bars.length - 2] : last;
+    const chgPct   = (last.c - prev.c) / prev.c * 100;
+    const wave     = state.waves[sym];
+    const fundData = state.fundamentals[sym] && !state.fundamentals[sym].error
+      ? state.fundamentals[sym].data : null;
+    const fc       = wave ? buildForecast(wave, last.c, fundData) : null;
+    const isUp     = wave?.direction === 'up';
+    const conf     = wave?.confidence ?? 0;
+
+    // In-zone check
+    const inBuyZone  = fc && fc.buyLow  != null && fc.buyHigh  != null
+      && last.c >= fc.buyLow  && last.c <= fc.buyHigh;
+    const inSellZone = fc && fc.sellLow != null && fc.sellHigh != null
+      && last.c >= fc.sellLow && last.c <= fc.sellHigh;
+    const inZone = inBuyZone || inSellZone;
+
+    // Open journal entries for this ticker
+    const openTrades = getJournal().filter(e => e.sym === sym && !e.exitPrice).length;
+
+    return { sym, last, chgPct, wave, fc, isUp, conf, inZone, openTrades };
+  }).sort((a, b) => {
+    // Sort: in-zone first, then by confidence desc
+    if (a.inZone !== b.inZone) return a.inZone ? -1 : 1;
+    return b.conf - a.conf;
+  });
+
+  let html = `<div style="padding:10px 12px">`;
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted)">
+      SIGNAL BOARD · ${state.timeframe}
+    </span>
+    <span style="font-size:9px;color:var(--muted)">
+      ${cards.filter(c=>c.inZone).length} IN ZONE
+    </span>
+  </div>`;
+
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">`;
+
+  cards.forEach(({ sym, last, chgPct, wave, fc, isUp, conf, inZone, openTrades }) => {
+    const col     = isUp ? 'var(--green)' : 'var(--red)';
+    const chgCol  = chgPct >= 0 ? 'var(--green)' : 'var(--red)';
+    const border  = inZone ? col : 'var(--border)';
+    const glow    = inZone ? `box-shadow:0 0 8px ${isUp ? '#00e67644' : '#ff174444'};` : '';
+
+    html += `<div onclick="selectTicker('${sym}')" style="
+      cursor:pointer;background:var(--bg2);
+      border:1px solid ${border};border-radius:5px;
+      padding:8px 9px;position:relative;${glow}
+      transition:border-color 0.2s;">
+
+      <!-- Header row: sym + in-zone badge -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:12px;
+          color:${state.selected===sym?'var(--blue)':'var(--text)'}">${sym}</span>
+        ${inZone
+          ? `<span style="font-size:8px;color:${col};font-weight:700;letter-spacing:0.5px">⚡IN</span>`
+          : openTrades
+            ? `<span style="font-size:8px;color:var(--gold);letter-spacing:0.5px">📓${openTrades}</span>`
+            : ''}
+      </div>
+
+      <!-- Wave label + confidence -->
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${col};font-weight:700;margin-bottom:2px">
+        ${isUp ? '▲' : '▼'} ${wave?.currentWave || '?'}
+        <span style="font-size:8px;color:var(--muted);font-weight:400;margin-left:3px">${conf}%</span>
+      </div>
+
+      <!-- Price + % change -->
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted)">
+        <span style="color:var(--text)">${f2(last.c)}</span>
+        <span style="color:${chgCol};margin-left:3px">${pct(chgPct)}</span>
+      </div>
+
+      ${fc && fc.entry != null
+        ? `<div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--muted);margin-top:3px;letter-spacing:0.3px">
+            Entry ${f2(fc.buyLow ?? fc.sellHigh)}
+            ${fc.rr != null ? `· R:R ${Number(fc.rr).toFixed(1)}` : ''}
+          </div>`
+        : ''}
+      ${(() => {
+        const c = calcConfluence(sym);
+        if (!c || c.total < 2) return '';
+        const isUp = c.dominant === 'up';
+        const cCol = c.score === c.total ? (isUp ? '#00e676' : '#ff5252')
+                   : c.score >= c.total * 0.6 ? (isUp ? '#69f0ae' : '#ff8a80') : '#ffd740';
+        return `<div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:${cCol};margin-top:3px">TF ${c.score}/${c.total}</div>`;
+      })()}
+    </div>`;
+  });
+
+  html += `</div>`;
+
+  // Tickers with no wave data
+  const noWave = state.tickers.filter(sym => state.data[sym] && !state.waves[sym]);
+  if (noWave.length) {
+    html += `<div style="margin-top:8px;font-size:9px;color:var(--muted);text-align:center;
+      font-family:'JetBrains Mono',monospace">
+      No wave data: ${noWave.join(', ')} — try a longer timeframe
+    </div>`;
+  }
+
+  html += `</div>`;
+  panel.innerHTML = html;
+}
+
+// ─── FORECAST TAB RENDER ─────────────────────────────────────────────────────
+function renderForecast() {
+  const panel = document.getElementById('forecast-panel');
+  if (!panel) return;
+  const sym = state.selected;
+  if (!sym || !state.data[sym]) {
+    panel.innerHTML = '<div class="panel-empty">NO TICKER SELECTED<br>ADD A TICKER TO SEE<br>FORECAST</div>';
+    return;
+  }
+  const bars  = getDisplayBars();
+  const last  = bars[bars.length - 1];
+  const wave  = state.waves[sym];
+  const fundData = state.fundamentals[sym] && !state.fundamentals[sym].error
+    ? state.fundamentals[sym].data : null;
+  const fc = wave ? buildForecast(wave, last.c, fundData) : null;
+
+  if (!wave || !fc) {
+    panel.innerHTML = '<div class="panel-empty">NO WAVE DATA<br>TRY A LONGER TIMEFRAME</div>';
+    return;
+  }
+
+  // Calendar-date helper — same formula as the chart wave target lines
+  const avgBarMs  = bars.length >= 2 ? (last.date - bars[0].date) / (bars.length - 1) : 86400000;
+  const hrzBars   = Math.round(bars.length * 0.30);
+  const projDate  = tFrac => {
+    if (tFrac == null) return '';
+    const d = new Date(last.date.getTime() + tFrac * hrzBars * avgBarMs);
+    return `~${d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).replace(' ', " '")}`;
+  };
+
+  // Assign tFrac to waveTargets by status order
+  let activeIdx = 0, projIdx = 0;
+  const activeFracs   = [0.25, 0.50, 0.70];
+  const projFracs     = [0.50, 0.70, 0.85, 1.00];
+  const targetsWithDates = fc.waveTargets.map(wt => {
+    let tFrac = null;
+    if (wt.status === 'active')     tFrac = activeFracs[Math.min(activeIdx++, activeFracs.length - 1)];
+    if (wt.status === 'projected')  tFrac = projFracs [Math.min(projIdx++,  projFracs.length  - 1)];
+    return { ...wt, tFrac };
+  });
+
+  const f   = p => '$' + fmtPrice(p);
+  const biasCol = fc.isBull ? 'var(--green)' : 'var(--red)';
+  const confCol = fc.confidence.startsWith('VERY HIGH') ? 'var(--green)'
+                : fc.confidence.startsWith('HIGH')      ? 'var(--blue)'
+                : fc.confidence.startsWith('LOW')       ? 'var(--red)'
+                : 'var(--gold)';
+
+  // Bull/bear scenario prices (same logic as chart cone)
+  let bullP = null, bearP = null;
+  if (!wave.complete && wave.waveData) {
+    if (wave.pattern === 'IMPULSE') {
+      const { p4, w1 } = wave.waveData;
+      const isUp = wave.direction === 'up';
+      if (p4 && w1) {
+        bullP = isUp ? p4.price + w1 * 1.618 : p4.price - w1 * 0.5;
+        bearP = isUp ? p4.price + w1 * 0.5   : p4.price - w1 * 1.618;
+      }
+    } else if (wave.pattern === 'CORRECTION' && wave.fibLevels) {
+      const isUp = wave.direction === 'up';
+      const f786  = wave.fibLevels.find(f2 => f2.ratio === 0.786);
+      const f1618 = wave.fibLevels.find(f2 => f2.ratio === 1.618);
+      if (f786 && f1618) {
+        bullP = isUp ? f1618.price : f786.price;
+        bearP = isUp ? f786.price  : f1618.price;
+      }
+    }
+  }
+
+  // Multi-TF confluence (same as WAVES panel)
+  const TFS = ['1M','3M','1Y','2Y','5Y'];
+  const allBars = state.data[sym].bars;
+  const tfResults = TFS.map(tf => {
+    const tfBars = filterBars(allBars, tf);
+    const w = tfBars.length >= 10 ? detectWaves(tfBars) : null;
+    return { tf, wave: w, active: tf === state.timeframe };
+  }).filter(r => r.wave);
+
+  let html = `<div style="padding:10px 12px">`;
+
+  // ── Header ─────────────────────────────────────────────────────────────────
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--text);letter-spacing:1px">${sym}</span>
+    <div style="display:flex;gap:6px;align-items:center">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;
+        color:${biasCol};border:1px solid ${biasCol}55;border-radius:3px;padding:2px 8px;background:${biasCol}11">
+        ${fc.isBull ? '▲' : '▼'} ${fc.bias}
+      </span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${confCol};
+        border:1px solid ${confCol}55;border-radius:3px;padding:2px 7px">${fc.confidence}</span>
+      ${(() => {
+        const c = calcConfluence(sym);
+        if (!c || c.total < 2) return '';
+        const isUp = c.dominant === 'up';
+        const col  = c.score === c.total ? (isUp ? '#00e676' : '#ff5252')
+                   : c.score >= c.total * 0.6 ? (isUp ? '#69f0ae' : '#ff8a80') : '#ffd740';
+        return `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${col};
+          border:1px solid ${col}55;border-radius:3px;padding:2px 7px;background:${col}11"
+          title="Timeframe confluence: ${c.bullCount} bull / ${c.bearCount} bear across ${c.total} TFs">
+          TF ${c.score}/${c.total}</span>`;
+      })()}
+    </div>
+  </div>`;
+
+  // ── Trade setup grid ───────────────────────────────────────────────────────
+  const entryTxt  = fc.buyLow  != null ? `${f(fc.buyLow)} – ${f(fc.buyHigh)}` : f(last.c) + ' (now)';
+  const stopTxt   = fc.stop    != null ? f(fc.stop)   : '—';
+  const targetTxt = fc.target  != null ? f(fc.target) : '—';
+  const rrTxt     = fc.rr      != null ? `${fc.rr.toFixed(1)} : 1` : '—';
+  const rrCol     = fc.rr == null ? 'var(--muted)' : fc.rr >= 2 ? 'var(--green)' : fc.rr < 1 ? 'var(--red)' : 'var(--gold)';
+  const expectedPct = fc.expectedReturn != null ? ((fc.expectedReturn >= 0 ? '+' : '') + (fc.expectedReturn * 100).toFixed(1) + '%') : null;
+
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);
+    border:1px solid var(--border);border-radius:4px;overflow:hidden;margin-bottom:10px">
+    <div style="background:var(--bg2);padding:8px 10px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:3px">ENTRY ZONE</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--text)">${entryTxt}</div>
+    </div>
+    <div style="background:var(--bg2);padding:8px 10px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:3px">STOP LOSS</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--red)">${stopTxt}</div>
+    </div>
+    <div style="background:var(--bg2);padding:8px 10px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:3px">TARGET${expectedPct ? ' (' + expectedPct + ')' : ''}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--green)">${targetTxt}</div>
+    </div>
+    <div style="background:var(--bg2);padding:8px 10px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:3px">RISK / REWARD</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:${rrCol}">${rrTxt}</div>
+    </div>
+  </div>`;
+
+  // ── Bull / Bear scenario ───────────────────────────────────────────────────
+  if (bullP != null && bearP != null) {
+    const bullPct = ((bullP - last.c) / last.c * 100);
+    const bearPct = ((bearP - last.c) / last.c * 100);
+    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+      <div style="padding:8px 10px;background:rgba(0,230,118,0.06);border:1px solid rgba(0,230,118,0.3);border-radius:4px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1px;color:#00e676;margin-bottom:3px">BULL CASE</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#00e676">${f(bullP)}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(0,230,118,0.7)">+${bullPct.toFixed(1)}% from here</div>
+      </div>
+      <div style="padding:8px 10px;background:rgba(255,82,82,0.06);border:1px solid rgba(255,82,82,0.3);border-radius:4px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1px;color:#ff5252;margin-bottom:3px">BEAR CASE</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#ff5252">${f(bearP)}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,82,82,0.7)">${bearPct.toFixed(1)}% from here</div>
+      </div>
+    </div>`;
+  }
+
+  // ── Wave price targets with calendar dates ─────────────────────────────────
+  if (targetsWithDates.length) {
+    html += `<div style="margin-bottom:10px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.5px;
+        color:var(--muted);margin-bottom:6px">WAVE PRICE TARGETS</div>
+      <table style="width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace">`;
+    targetsWithDates.forEach(wt => {
+      const dPct = wt.delta != null ? ((wt.delta >= 0 ? '+' : '') + (wt.delta * 100).toFixed(1) + '%') : '';
+      const dCol = wt.delta == null ? '' : wt.delta >= 0 ? 'color:var(--green)' : 'color:var(--red)';
+      const dotCol = wt.status === 'active' ? 'var(--gold)' : wt.status === 'projected' ? 'var(--blue)' : 'var(--muted)';
+      const rowOp  = wt.status === 'done' ? 'opacity:0.45;' : '';
+      const dateStr = projDate(wt.tFrac);
+      html += `<tr style="${rowOp}border-bottom:1px dotted rgba(255,255,255,0.04)">
+        <td style="width:10px;padding:5px 4px 5px 0">
+          <span style="display:inline-block;width:7px;height:7px;border-radius:50%;
+            background:${dotCol}${wt.status==='active'?';box-shadow:0 0 5px '+dotCol:''}"></span>
+        </td>
+        <td style="font-size:11px;color:var(--text);padding:5px 4px">${wt.label}</td>
+        <td style="font-size:11px;font-weight:600;color:var(--text);text-align:right;padding:5px 4px">${f(wt.price)}</td>
+        <td style="font-size:10px;text-align:right;padding:5px 0 5px 4px;${dCol}">${dPct}</td>
+        <td style="font-size:9px;color:var(--blue);text-align:right;padding:5px 0 5px 6px;white-space:nowrap">${dateStr}</td>
+      </tr>`;
+    });
+    html += `</table></div>`;
+  }
+
+  // ── Buy / Sell zones ────────────────────────────────────────────────────────
+  const hasZones = fc.buyLow != null || fc.sellLow != null;
+  if (hasZones) {
+    html += `<div style="display:grid;grid-template-columns:${(fc.buyLow != null && fc.sellLow != null) ? '1fr 1fr' : '1fr'};gap:6px;margin-bottom:10px">`;
+    if (fc.buyLow != null) {
+      const inZone = last.c >= fc.buyLow && last.c <= fc.buyHigh;
+      html += `<div style="padding:8px 10px;background:rgba(0,230,118,0.06);border:1px solid rgba(0,230,118,${inZone?'0.6':'0.3'});border-radius:4px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1px;color:#00e676;margin-bottom:3px">${fc.buyLabel || 'BUY ZONE'}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--text)">${f(fc.buyLow)} – ${f(fc.buyHigh)}</div>
+        ${inZone ? '<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:var(--gold);margin-top:2px;animation:pulse 1.4s ease-in-out infinite">⚡ PRICE IN ZONE</div>' : ''}
+      </div>`;
+    }
+    if (fc.sellLow != null) {
+      const inZone = last.c >= fc.sellLow && last.c <= fc.sellHigh;
+      html += `<div style="padding:8px 10px;background:rgba(255,82,82,0.06);border:1px solid rgba(255,82,82,${inZone?'0.6':'0.3'});border-radius:4px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1px;color:#ff5252;margin-bottom:3px">${fc.sellLabel || 'SELL ZONE'}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--text)">${f(fc.sellLow)} – ${f(fc.sellHigh)}</div>
+        ${inZone ? '<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:var(--gold);margin-top:2px;animation:pulse 1.4s ease-in-out infinite">⚡ PRICE IN ZONE</div>' : ''}
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  // ── Analyst confluence ─────────────────────────────────────────────────────
+  if (fc.analystTarget != null) {
+    const agree = !fc.confidence.includes('CONFLICT');
+    html += `<div style="padding:8px 10px;background:rgba(68,138,255,0.04);border:1px solid rgba(68,138,255,0.2);
+      border-radius:4px;margin-bottom:10px;font-family:'JetBrains Mono',monospace">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+        <span style="font-size:9px;color:var(--muted);letter-spacing:1px">ANALYST TARGET</span>
+        <span style="font-size:11px;font-weight:600;color:var(--text)">$${fmtNum(fc.analystTarget)}
+          <span style="font-size:9px;color:${fc.analystUpside>=0?'var(--green)':'var(--red)'}">
+            (${fc.analystUpside>=0?'+':''}${(fc.analystUpside*100).toFixed(1)}%)
+          </span>
+        </span>
+      </div>
+      <div style="font-size:10px;color:${agree?'var(--green)':'var(--gold)'}">${agree ? '✓ Wave & analyst agree' : '⚠ Wave & analyst disagree'}</div>
+    </div>`;
+  }
+
+  // ── Multi-TF confluence ────────────────────────────────────────────────────
+  if (tfResults.length >= 1) {
+    const WAVE_DIR_COL = { up: '#00e676', down: '#ff5252' };
+    html += `<div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.5px;
+        color:var(--muted);margin-bottom:6px">MULTI-TIMEFRAME</div>
+      <div style="display:grid;grid-template-columns:repeat(${tfResults.length},1fr);gap:4px">
+        ${tfResults.map(({ tf, wave: w, active }) => {
+          const col = WAVE_DIR_COL[w.direction] || 'var(--muted)';
+          const conf = computeWaveConfidence(w);
+          return `<div style="background:${col}0f;border:1px solid ${col}${active?'88':'33'};border-radius:4px;
+            padding:5px;text-align:center;cursor:pointer;${active?'box-shadow:0 0 0 1px '+col+'44':''}"
+            onclick="state.timeframe='${tf}';applySubwaveAutoToggle('${tf}');
+              state.waves[state.selected]=detectWaves(filterBars(state.data[state.selected].bars,'${tf}'));
+              redrawChart();renderForecast();"
+            title="Switch to ${tf}">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;
+              color:${active?col:'var(--muted)'}${active?';font-weight:700':''}">${tf}${active?' ●':''}</div>
+            <div style="font-size:12px;font-weight:700;color:${col};margin:2px 0">${w.direction==='up'?'▲':'▼'} ${w.currentWave}</div>
+            <div style="font-size:9px;color:var(--muted)">${conf}%</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  if (fc.note) {
+    html += `<div style="margin-top:10px;padding:8px 10px;border-left:2px solid var(--blue);
+      font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);line-height:1.5;
+      font-style:italic">${fc.note}</div>`;
+  }
+
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px">
+    <button onclick="logSetupFromForecast()" style="
+      padding:8px;background:rgba(68,138,255,0.12);border:1px solid rgba(68,138,255,0.35);
+      border-radius:4px;color:var(--blue);font-family:'JetBrains Mono',monospace;
+      font-size:10px;letter-spacing:1px;cursor:pointer;font-weight:700">
+      📓 LOG SETUP</button>
+    <button onclick="setForecastAlerts()" style="
+      padding:8px;background:rgba(255,193,7,0.10);border:1px solid rgba(255,193,7,0.35);
+      border-radius:4px;color:#ffc107;font-family:'JetBrains Mono',monospace;
+      font-size:10px;letter-spacing:1px;cursor:pointer;font-weight:700">
+      🔔 SET ALERTS</button>
+  </div>`;
+
+  html += `</div>`;
+  panel.innerHTML = html;
+}
+
+function logSetupFromForecast() {
+  const sym  = state.selected;
+  if (!sym || !state.data[sym]) return;
+  const bars  = getDisplayBars();
+  const last  = bars[bars.length - 1];
+  const wave  = state.waves[sym];
+  const fundData = state.fundamentals[sym] && !state.fundamentals[sym].error
+    ? state.fundamentals[sym].data : null;
+  const fc = wave ? buildForecast(wave, last.c, fundData) : null;
+  if (!fc) return;
+
+  const entryMid = fc.buyLow != null && fc.buyHigh != null
+    ? (fc.buyLow + fc.buyHigh) / 2
+    : (fc.sellLow != null && fc.sellHigh != null ? (fc.sellLow + fc.sellHigh) / 2 : last.c);
+  const dir = fc.bias === 'BULLISH' ? 'long' : 'short';
+  const f   = n => n != null ? '$' + Number(n).toFixed(2) : '—';
+  const noteParts = [
+    fc.buyLow  != null ? `Entry zone: ${f(fc.buyLow)}–${f(fc.buyHigh)}` : null,
+    fc.stop    != null ? `Stop: ${f(fc.stop)}`   : null,
+    fc.target  != null ? `Target: ${f(fc.target)}` : null,
+    fc.rr      != null ? `R:R ${Number(fc.rr).toFixed(1)}` : null,
+  ].filter(Boolean).join(' | ');
+
+  // Pre-fill shares from the position-size calculator's saved settings
+  const _calcAcct  = (() => { try { return parseFloat(localStorage.getItem('wf_calc_acct')) || 0; } catch(e) { return 0; } })();
+  const _calcRisk  = (() => { try { return parseFloat(localStorage.getItem('wf_calc_risk')) || 0; } catch(e) { return 0; } })();
+  const _stopDist  = fc.stop != null ? Math.abs(entryMid - fc.stop) : 0;
+  const _prefShares = (_calcAcct > 0 && _calcRisk > 0 && _stopDist > 0.01)
+    ? Math.floor(_calcAcct * _calcRisk / 100 / _stopDist) : null;
+
+  state.journalPrefill = {
+    sym,
+    direction:   dir,
+    entryPrice:  Number(entryMid).toFixed(2),
+    stopPrice:   fc.stop != null ? Number(fc.stop).toFixed(2) : null,
+    shares:      _prefShares,
+    waveCtx:     `Wave ${wave.currentWave} ${fc.bias === 'BULLISH' ? '▲' : '▼'}`,
+    note:        noteParts,
+  };
+  activateTab('journal');
+}
+
+function setForecastAlerts() {
+  const sym  = state.selected;
+  if (!sym || !state.data[sym]) return;
+  const bars = getDisplayBars();
+  const last = bars[bars.length - 1];
+  const wave = state.waves[sym];
+  const fundData = state.fundamentals[sym] && !state.fundamentals[sym].error
+    ? state.fundamentals[sym].data : null;
+  const fc = wave ? buildForecast(wave, last.c, fundData) : null;
+  if (!fc) return;
+
+  const levels = [
+    fc.buyLow   != null ? { p: fc.buyLow,   label: 'entry zone low'  } : null,
+    fc.buyHigh  != null ? { p: fc.buyHigh,  label: 'entry zone high' } : null,
+    fc.sellLow  != null ? { p: fc.sellLow,  label: 'sell zone low'   } : null,
+    fc.sellHigh != null ? { p: fc.sellHigh, label: 'sell zone high'  } : null,
+    fc.stop     != null ? { p: fc.stop,     label: 'stop loss'       } : null,
+    fc.target   != null ? { p: fc.target,   label: 'target'          } : null,
+  ].filter(Boolean);
+
+  if (!levels.length) { showToast('No levels to alert on'); return; }
+  levels.forEach(l => addAlertDirect(sym, l.p));
+  saveState();
+  showToast(`${levels.length} alerts set for ${sym} (entry zone, stop, target)`);
+}
+
 // ─── ANALYSIS PANEL RENDER ───────────────────────────────────────────────────
 function renderAnalysis() {
   const panel = document.getElementById('analysis-panel');
@@ -6647,6 +7625,48 @@ function renderAnalysis() {
   const f      = p => '$' + fmtPrice(p);
 
   let html = '';
+
+  // ── TRADE SETUP CARD ───────────────────────────────────────────────────────
+  {
+    const _fd = state.fundamentals[sym] && !state.fundamentals[sym].error
+      ? state.fundamentals[sym].data : null;
+    const _fc = wave ? buildForecast(wave, last.c, _fd) : null;
+    const _acctSaved = (() => { try { return JSON.parse(localStorage.getItem('wf_calc_acct') || '10000'); } catch(e) { return 10000; } })();
+    const _riskSaved = (() => { try { return JSON.parse(localStorage.getItem('wf_calc_risk') || '2');     } catch(e) { return 2;     } })();
+    if (_fc) {
+      const biasCol = _fc.isBull ? 'var(--green)' : 'var(--red)';
+      const confCol = _fc.confidence.startsWith('VERY HIGH') ? 'var(--green)'
+                    : _fc.confidence.startsWith('HIGH')      ? 'var(--blue)'
+                    : _fc.confidence.startsWith('LOW')       ? 'var(--red)'
+                    : 'var(--gold)';
+      const entryTxt = _fc.buyLow != null
+        ? `$${fmtPrice(_fc.buyLow)}–${fmtPrice(_fc.buyHigh)}`
+        : '—';
+      const stopTxt   = _fc.stop   != null ? `$${fmtPrice(_fc.stop)}`   : '—';
+      const targetTxt = _fc.target != null ? `$${fmtPrice(_fc.target)}` : '—';
+      const rrTxt  = _fc.rr != null ? `${_fc.rr.toFixed(1)}:1` : '—';
+      const rrCol  = _fc.rr == null ? 'var(--muted)' : _fc.rr >= 2 ? 'var(--green)' : _fc.rr < 1 ? 'var(--red)' : 'var(--gold)';
+      html += `<div class="tsc" style="border:1px solid ${biasCol}33">
+        <div class="tsc-head" style="background:${biasCol}0d">
+          <span class="tsc-bias" style="color:${biasCol}">${_fc.isBull ? '▲' : '▼'} ${_fc.bias}</span>
+          <span class="tsc-conf" style="color:${confCol}">${_fc.confidence}</span>
+        </div>
+        <div class="tsc-body">
+          <div class="tsc-cell"><div class="tsc-lbl">ENTRY</div><div class="tsc-val">${entryTxt}</div></div>
+          <div class="tsc-cell"><div class="tsc-lbl">STOP</div><div class="tsc-val" style="color:var(--red)">${stopTxt}</div></div>
+          <div class="tsc-cell"><div class="tsc-lbl">TARGET</div><div class="tsc-val" style="color:var(--green)">${targetTxt}</div></div>
+          <div class="tsc-cell"><div class="tsc-lbl">R:R</div><div class="tsc-val" style="color:${rrCol}">${rrTxt}</div></div>
+        </div>
+        <div class="tsc-calc-row">
+          <span class="tsc-lbl" style="white-space:nowrap">ACCT $</span>
+          <input class="pos-calc-input tsc-cinput" id="calc-acct" type="number" value="${_acctSaved}" min="0" step="1000" style="width:80px;flex:none">
+          <span class="tsc-lbl" style="white-space:nowrap">RISK %</span>
+          <input class="pos-calc-input tsc-cinput" id="calc-risk" type="number" value="${_riskSaved}" min="0.1" max="20" step="0.5" style="width:50px;flex:none">
+          <div class="pos-calc-result" id="calc-result" style="flex:1;margin-top:0;font-size:11px;text-align:right"></div>
+        </div>
+      </div>`;
+    }
+  }
 
   // ── AI ANALYSIS ────────────────────────────────────────────────────────────
   html += `<div class="ai-analysis-section" id="ai-analysis-section">
@@ -6728,28 +7748,27 @@ function renderAnalysis() {
 
   // ── MULTI-TIMEFRAME CONFLUENCE ─────────────────────────────────────────────
   {
-    const TFS = ['1M','3M','1Y','2Y'];
+    const TFS = ['1M','3M','1Y','2Y','5Y'];
+    const activeTf = state.timeframe;
     const tfResults = TFS.map(tf => {
       const tfBars = filterBars(bars, tf);
       const w = tfBars.length >= 10 ? detectWaves(tfBars) : null;
-      return { tf, wave: w };
+      return { tf, wave: w, active: tf === activeTf };
     });
 
     const validTfs = tfResults.filter(r => r.wave);
-    if (validTfs.length >= 2) {
+    if (validTfs.length >= 1) {
       const bullCount = validTfs.filter(r => r.wave.direction === 'up').length;
       const bearCount = validTfs.filter(r => r.wave.direction === 'down').length;
       const allBull = bullCount === validTfs.length;
       const allBear = bearCount === validTfs.length;
       const confluenceColor = allBull ? '#00e676' : allBear ? '#ff5252' : '#ffd740';
-      const confluenceLabel = allBull ? '▲ BULLISH CONFLUENCE'
-        : allBear ? '▼ BEARISH CONFLUENCE'
-        : '⚠ MIXED SIGNALS';
+      const confluenceLabel = allBull ? '▲ BULL' : allBear ? '▼ BEAR' : '⚠ MIXED';
       const confluenceDesc = allBull
-        ? `All ${validTfs.length} timeframes show bullish wave structure — high-conviction long setup.`
+        ? `All ${validTfs.length} timeframes bullish — high-conviction long.`
         : allBear
-        ? `All ${validTfs.length} timeframes show bearish wave structure — high-conviction short setup.`
-        : `Timeframes conflict — trade only in direction of the longest timeframe.`;
+        ? `All ${validTfs.length} timeframes bearish — high-conviction short.`
+        : `Mixed signals — trade in direction of longest timeframe.`;
 
       const WAVE_DIR_COL = { up: '#00e676', down: '#ff5252' };
       const IMPULSE_SHORT = { 'IMPULSE': 'IMP', 'CORRECTION': 'COR' };
@@ -6763,14 +7782,18 @@ function renderAnalysis() {
         </div>
         <div style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:8px">${confluenceDesc}</div>
         <div style="display:grid;grid-template-columns:repeat(${validTfs.length},1fr);gap:5px">
-          ${validTfs.map(({ tf, wave: w }) => {
+          ${validTfs.map(({ tf, wave: w, active }) => {
             const col = WAVE_DIR_COL[w.direction] || 'var(--muted)';
             const dir = w.direction === 'up' ? '▲' : '▼';
             const pat = IMPULSE_SHORT[w.pattern] || w.pattern;
             const conf = computeWaveConfidence(w);
+            const activeBorder = active ? `border-color:${col};box-shadow:0 0 0 1px ${col}66` : '';
             return `<div style="background:${col}0f;border:1px solid ${col}33;border-radius:4px;
-              padding:6px;text-align:center">
-              <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px">${tf}</div>
+              padding:6px;text-align:center;cursor:pointer;${activeBorder}"
+              onclick="state.timeframe='${tf}';applySubwaveAutoToggle('${tf}');state.waves[state.selected]=detectWaves(filterBars(state.data[state.selected].bars,'${tf}'));redrawChart();renderAnalysis();"
+              title="Switch to ${tf}">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;
+                color:${active ? col : 'var(--muted)'}${active ? ';font-weight:700' : ''}">${tf}${active ? ' ●' : ''}</div>
               <div style="font-size:13px;font-weight:700;color:${col};margin:2px 0">${dir} ${w.currentWave}</div>
               <div style="font-size:9px;color:var(--muted)">${pat} ${conf}%</div>
             </div>`;
@@ -7103,24 +8126,7 @@ function renderAnalysis() {
     </div>
   </div>`;
 
-  // ── POSITION SIZE CALCULATOR ──────────────────────────────────────────────
-  const fr2 = forecast;
-  const acctSaved = (() => { try { return JSON.parse(localStorage.getItem('wf_calc_acct') || '10000'); } catch(e) { return 10000; } })();
-  const riskSaved = (() => { try { return JSON.parse(localStorage.getItem('wf_calc_risk') || '2'); } catch(e) { return 2; } })();
-  html += `<div class="panel-section">
-    <div class="panel-title">⚖ POSITION SIZE</div>
-    <div class="pos-calc">
-      <div class="pos-calc-row">
-        <span class="pos-calc-label">Account $</span>
-        <input class="pos-calc-input" id="calc-acct" type="number" value="${acctSaved}" min="0" step="1000">
-      </div>
-      <div class="pos-calc-row">
-        <span class="pos-calc-label">Risk %</span>
-        <input class="pos-calc-input" id="calc-risk" type="number" value="${riskSaved}" min="0.1" max="20" step="0.5">
-      </div>
-      <div class="pos-calc-result" id="calc-result"></div>
-    </div>
-  </div>`;
+  // Position size calculator inputs are now embedded in the .tsc card at the top
 
   // ── PRICE ALERTS ──────────────────────────────────────────────────────────
   const liveOn   = state.livePolling;
@@ -7154,26 +8160,33 @@ function renderAnalysis() {
   // Wire up position calculator
   const acctEl = document.getElementById('calc-acct');
   const riskEl = document.getElementById('calc-risk');
-  const calcStop = fr2?.stop ?? null;
   function updateCalc() {
-    const acct = parseFloat(acctEl?.value) || 0;
-    const riskPct = parseFloat(riskEl?.value) || 0;
-    localStorage.setItem('wf_calc_acct', JSON.stringify(acct));
-    localStorage.setItem('wf_calc_risk', JSON.stringify(riskPct));
+    if (!acctEl || !riskEl) return; // card not rendered (no wave data)
+    const acct    = parseFloat(acctEl.value) || 0;
+    const riskPct = parseFloat(riskEl.value) || 0;
+    if (acct > 0) localStorage.setItem('wf_calc_acct', JSON.stringify(acct));
+    if (riskPct > 0) localStorage.setItem('wf_calc_risk', JSON.stringify(riskPct));
     const res = document.getElementById('calc-result');
     if (!res) return;
-    if (calcStop == null) {
-      res.textContent = 'Set stop loss to calculate';
-      res.style.color = 'var(--muted)';
+    const _fc2 = wave ? buildForecast(wave, last.c, state.fundamentals[sym]?.data) : null;
+    if (!_fc2 || _fc2.stop == null) {
+      res.innerHTML = '<span style="color:var(--muted)">no stop</span>';
       return;
     }
-    const riskAmt = acct * riskPct / 100;
-    const stopDist = Math.abs(last.c - calcStop);
-    if (stopDist < 0.01) { res.textContent = 'Stop too close'; return; }
-    const shares = Math.floor(riskAmt / stopDist);
-    const pos = (shares * last.c).toFixed(0);
-    res.style.color = 'var(--green)';
-    res.textContent = `Buy ${shares} shares ($${Number(pos).toLocaleString()}) · Risk $${riskAmt.toFixed(0)}`;
+    const entryMid = _fc2.buyLow != null ? (_fc2.buyLow + _fc2.buyHigh) / 2 : last.c;
+    const stopDist = Math.abs(entryMid - _fc2.stop);
+    if (stopDist < 0.01) { res.innerHTML = '<span style="color:var(--muted)">entry≈stop</span>'; return; }
+    const dollarRisk = acct * riskPct / 100;
+    const shares     = Math.floor(dollarRisk / stopDist);
+    const totalCost  = shares * entryMid;
+    const profitDollar = _fc2.target != null ? shares * Math.abs(_fc2.target - entryMid) : null;
+    const fmt = n => n >= 1000 ? '$' + (n / 1000).toFixed(1) + 'k' : '$' + n.toFixed(0);
+    res.innerHTML =
+      `<span style="color:var(--text);font-weight:700">${shares.toLocaleString()} sh</span>` +
+      ` <span style="color:var(--muted)">·</span>` +
+      ` <span style="color:var(--red)">${fmt(dollarRisk)} risk</span>` +
+      (profitDollar != null ? ` <span style="color:var(--muted)">·</span> <span style="color:var(--green)">${fmt(profitDollar)} profit</span>` : '') +
+      ` <span style="color:var(--muted);font-size:9px">(${fmt(totalCost)})</span>`;
   }
   if (acctEl) { acctEl.addEventListener('input', updateCalc); riskEl.addEventListener('input', updateCalc); }
   updateCalc();
@@ -8165,6 +9178,8 @@ function activateTab(tab) {
   document.getElementById('heatmap-panel').classList.toggle('active', tab === 'heatmap');
   document.getElementById('portfolio-panel').classList.toggle('active', tab === 'portfolio');
   document.getElementById('compare-panel').classList.toggle('active', tab === 'compare');
+  document.getElementById('forecast-panel').classList.toggle('active', tab === 'forecast');
+  document.getElementById('signals-panel').classList.toggle('active', tab === 'signals');
   if (tab === 'fundamentals') renderFundamentals();
   else if (tab === 'research') renderResearch();
   else if (tab === 'journal') renderJournal();
@@ -8173,6 +9188,8 @@ function activateTab(tab) {
   else if (tab === 'heatmap') renderHeatmap();
   else if (tab === 'portfolio') renderPortfolio();
   else if (tab === 'compare') renderCompare();
+  else if (tab === 'forecast') renderForecast();
+  else if (tab === 'signals') renderSignals();
   else renderAnalysis();
 }
 document.querySelectorAll('.sb-tab').forEach(btn => {
@@ -8180,8 +9197,14 @@ document.querySelectorAll('.sb-tab').forEach(btn => {
 });
 
 // ─── SELECT TICKER ────────────────────────────────────────────────────────────
+function updateTickerLabel(sym) {
+  const el = document.getElementById('chart-ticker-label');
+  if (el) el.textContent = sym || '';
+}
+
 function selectTicker(sym) {
   state.selected = sym;
+  updateTickerLabel(sym);
   document.querySelectorAll('.ticker-card').forEach(c => c.classList.remove('active'));
   const card = document.getElementById('card-' + sym);
   if (card) card.classList.add('active');
@@ -8200,6 +9223,8 @@ function selectTicker(sym) {
   else if (state.rightTab === 'research') renderResearch();
   else if (state.rightTab === 'journal') renderJournal();
   else if (state.rightTab === 'portfolio') renderPortfolio();
+  else if (state.rightTab === 'forecast') renderForecast();
+  else if (state.rightTab === 'signals') renderSignals();
 }
 
 // ─── LOAD TICKER DATA (always fetches, used by init & addTicker) ─────────────
@@ -8227,12 +9252,15 @@ async function loadTickerData(sym, autoSelect = true) {
     if (state.rightTab === 'portfolio') renderPortfolio();
     if (state.rightTab === 'screener') renderScreener();
     if (state.rightTab === 'compare') renderCompare();
+    if (state.rightTab === 'forecast') renderForecast();
+    if (state.rightTab === 'signals') renderSignals();
   } catch(e) {
-    state.tickers = state.tickers.filter(t => t !== sym);
+    // Don't remove ticker — failure may be a transient rate-limit or network blip.
+    // addTicker() re-throws and removes only freshly-added tickers that never loaded.
     delete state.data[sym];
-    saveState();
     renderWatchlist();
     showToast(`Could not load ${sym}: ${e.message}`);
+    throw e;
   }
 }
 
@@ -8248,7 +9276,16 @@ async function addTicker(sym) {
   state.tickers.push(sym);
   saveState();
   renderWatchlist();
-  await loadTickerData(sym, true);
+  try {
+    await loadTickerData(sym, true);
+  } catch(e) {
+    // Only evict if the ticker never loaded (bad symbol / first-time failure)
+    if (!state.data[sym]) {
+      state.tickers = state.tickers.filter(t => t !== sym);
+      saveState();
+      renderWatchlist();
+    }
+  }
 }
 
 // ─── REMOVE TICKER ────────────────────────────────────────────────────────────
@@ -8344,6 +9381,12 @@ document.querySelectorAll('.toggle-btn').forEach(btn => {
     } else if (key === 'divergence') {
       state.showDivergence = !state.showDivergence;
       btn.classList.toggle('divg-on', state.showDivergence);
+    } else if (key === 'vwap') {
+      state.showVWAP = !state.showVWAP;
+      btn.classList.toggle('vwap-on', state.showVWAP);
+    } else if (key === 'fibclusters') {
+      state.showFibClusters = !state.showFibClusters;
+      btn.classList.toggle('fibclusters-on', state.showFibClusters);
     }
     redrawChart();
   });
@@ -8372,6 +9415,31 @@ function getJournal() {
 }
 function saveJournal(entries) {
   localStorage.setItem('wf_journal', JSON.stringify(entries));
+}
+
+function exportJournalCSV() {
+  const entries = getJournal();
+  if (!entries.length) return;
+  const header = ['Date','Symbol','Direction','Wave','Entry Price','Exit Price','Stop Price','Shares','P&L %','P&L $','Result','Note'];
+  const rows = entries.map(e => {
+    const pnlPct = e.exitPrice
+      ? ((e.direction === 'long' ? (e.exitPrice - e.entryPrice) / e.entryPrice : (e.entryPrice - e.exitPrice) / e.entryPrice) * 100).toFixed(2)
+      : '';
+    const pnlDollar = e.exitPrice && e.shares
+      ? ((e.direction === 'long' ? e.exitPrice - e.entryPrice : e.entryPrice - e.exitPrice) * e.shares).toFixed(2)
+      : '';
+    const result = e.exitPrice ? (parseFloat(pnlPct) >= 0 ? 'WIN' : 'LOSS') : 'OPEN';
+    const date = e.id ? new Date(e.id).toISOString().slice(0, 10) : '';
+    return [date, e.sym, e.direction, e.waveCtx, e.entryPrice, e.exitPrice||'', e.stopPrice||'', e.shares||'', pnlPct, pnlDollar, result, (e.note||'').replace(/,/g, ';')];
+  });
+  const csv = [header, ...rows].map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `wavefront-journal-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function addJournalEntry(entry) {
@@ -8410,12 +9478,22 @@ function renderJournal() {
   }, 0);
   const winRate = closed.length ? Math.round(wins.length / closed.length * 100) : null;
 
-  // Current wave context for pre-fill
-  const cwLabel = wave?.currentWave || '';
-  const cwDir   = wave?.direction === 'up' ? 'long' : 'short';
-  const curPrice = sym && state.data[sym] ? state.data[sym].bars.slice(-1)[0]?.c : '';
+  // Current wave context for pre-fill (or consume forecast prefill)
+  const pf      = state.journalPrefill;
+  state.journalPrefill = null; // consume once
+  const cwLabel = pf?.waveCtx || wave?.currentWave || '';
+  const cwDir   = pf?.direction || (wave?.direction === 'up' ? 'long' : 'short');
+  const curPrice = pf?.entryPrice ?? (sym && state.data[sym] ? state.data[sym].bars.slice(-1)[0]?.c : '');
+  const prefillNote = pf?.note || '';
 
   let html = `<div style="padding:10px 12px">`;
+
+  // CSV export button (only if entries exist)
+  if (allEntries.length) {
+    html += `<div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+      <button onclick="exportJournalCSV()" style="font-size:9px;font-family:'JetBrains Mono',monospace;padding:3px 8px;background:rgba(68,138,255,0.1);border:1px solid var(--blue);color:var(--blue);border-radius:3px;cursor:pointer;letter-spacing:1px">⬇ EXPORT CSV</button>
+    </div>`;
+  }
 
   // Stats bar
   if (entries.length) {
@@ -8437,6 +9515,82 @@ function renderJournal() {
         <div class="journal-stat-lbl">TOTAL P&amp;L</div>
       </div>
     </div>`;
+
+    // Equity curve sparkline (cumulative R, closed trades with stop set)
+    const closedR = closed.filter(e => e.stopPrice).map(e => {
+      const risk = e.direction === 'long' ? e.entryPrice - e.stopPrice : e.stopPrice - e.entryPrice;
+      if (risk <= 0) return 0;
+      return (e.direction === 'long' ? e.exitPrice - e.entryPrice : e.entryPrice - e.exitPrice) / risk;
+    });
+    if (closedR.length >= 2) {
+      const cumR = closedR.reduce((acc, r) => { acc.push((acc[acc.length-1]||0) + r); return acc; }, [0]);
+      const minR = Math.min(...cumR), maxR = Math.max(...cumR);
+      const rangeR = maxR - minR || 1;
+      const W = 220, H = 36, pad = 4;
+      const pts = cumR.map((r, i) => {
+        const x = pad + (i / (cumR.length - 1)) * (W - pad * 2);
+        const y = H - pad - ((r - minR) / rangeR) * (H - pad * 2);
+        return `${x},${y}`;
+      }).join(' ');
+      const lastR = cumR[cumR.length - 1];
+      const lineCol = lastR >= 0 ? '#00e676' : '#ff1744';
+      html += `<div style="margin-bottom:8px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">
+          EQUITY CURVE (R) · ${lastR >= 0 ? '+' : ''}${lastR.toFixed(2)}R total
+        </div>
+        <svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block;height:${H}px">
+          <defs>
+            <linearGradient id="ecGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="${lineCol}" stop-opacity="0.25"/>
+              <stop offset="100%" stop-color="${lineCol}" stop-opacity="0.02"/>
+            </linearGradient>
+          </defs>
+          <polyline points="${pts}" fill="none" stroke="${lineCol}" stroke-width="1.5" stroke-linejoin="round"/>
+          <line x1="${pad}" y1="${H-pad-((0-minR)/rangeR)*(H-pad*2)}" x2="${W-pad}" y2="${H-pad-((0-minR)/rangeR)*(H-pad*2)}"
+            stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="2,3"/>
+        </svg>
+      </div>`;
+    }
+
+    // Setup breakdown by wave context
+    const bySetup = {};
+    closed.forEach(e => {
+      const key = e.waveCtx || 'Unknown';
+      if (!bySetup[key]) bySetup[key] = { wins: 0, total: 0, totalR: 0, hasR: 0 };
+      const isWin = (e.direction === 'long' ? e.exitPrice - e.entryPrice : e.entryPrice - e.exitPrice) > 0;
+      bySetup[key].total++;
+      if (isWin) bySetup[key].wins++;
+      if (e.stopPrice) {
+        const risk = e.direction === 'long' ? e.entryPrice - e.stopPrice : e.stopPrice - e.entryPrice;
+        if (risk > 0) { bySetup[key].totalR += (e.direction === 'long' ? e.exitPrice - e.entryPrice : e.entryPrice - e.exitPrice) / risk; bySetup[key].hasR++; }
+      }
+    });
+    const setupKeys = Object.keys(bySetup);
+    if (setupKeys.length >= 1 && closed.length >= 2) {
+      html += `<div style="margin-bottom:8px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">BY SETUP</div>
+        <table style="width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:9px">
+          <thead><tr>
+            <th style="color:var(--muted);font-weight:400;text-align:left;padding:2px 0">SETUP</th>
+            <th style="color:var(--muted);font-weight:400;text-align:right;padding:2px 4px">W/L</th>
+            <th style="color:var(--muted);font-weight:400;text-align:right;padding:2px 0">AVG R</th>
+          </tr></thead>
+          <tbody>
+            ${setupKeys.sort((a,b) => bySetup[b].wins/bySetup[b].total - bySetup[a].wins/bySetup[a].total).map(k => {
+              const s = bySetup[k];
+              const wr = Math.round(s.wins/s.total*100);
+              const avgR = s.hasR ? (s.totalR/s.hasR).toFixed(1) : '—';
+              const col = wr >= 50 ? 'var(--green)' : 'var(--red)';
+              return `<tr>
+                <td style="color:var(--text);padding:2px 0;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${k}</td>
+                <td style="text-align:right;padding:2px 4px;color:${col}">${s.wins}/${s.total}</td>
+                <td style="text-align:right;padding:2px 0;color:${s.totalR>=0?'var(--green)':'var(--red)'}">${avgR}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    }
   }
 
   // Add trade form
@@ -8454,11 +9608,13 @@ function renderJournal() {
       </select>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px">
-      <input id="jnl-entry" type="number" step="0.01" placeholder="Entry price" value="${curPrice ? Number(curPrice).toFixed(2) : ''}">
-      <input id="jnl-exit"  type="number" step="0.01" placeholder="Exit price (opt.)">
+      <input id="jnl-entry"  type="number" step="0.01" placeholder="Entry price"  value="${curPrice ? Number(curPrice).toFixed(2) : ''}">
+      <input id="jnl-stop"   type="number" step="0.01" placeholder="Stop price"   value="${pf?.stopPrice ?? ''}">
+      <input id="jnl-exit"   type="number" step="0.01" placeholder="Exit (opt.)">
+      <input id="jnl-shares" type="number" step="1"    placeholder="Shares (opt.)" value="${pf?.shares ?? ''}">
     </div>
-    <input id="jnl-wave" placeholder="Wave context (e.g. Wave Ⅲ bull)" value="${cwLabel ? 'Wave ' + cwLabel + (wave?.direction==='up'?' ▲':' ▼') : ''}">
-    <textarea id="jnl-note" placeholder="Notes…"></textarea>
+    <input id="jnl-wave" placeholder="Wave context (e.g. Wave Ⅲ bull)" value="${pf ? cwLabel : (cwLabel ? 'Wave ' + cwLabel + (wave?.direction==='up'?' ▲':' ▼') : '')}">
+    <textarea id="jnl-note" placeholder="Notes…">${prefillNote}</textarea>
     <button class="journal-submit-btn" onclick="submitJournalEntry()">LOG TRADE</button>
   </div>`;
 
@@ -8472,9 +9628,31 @@ function renderJournal() {
         ? ((e.direction === 'long' ? e.exitPrice - e.entryPrice : e.entryPrice - e.exitPrice) / e.entryPrice * 100)
         : null;
       const pnlStr = pnlPct == null ? '' : (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '%';
-      const outcomeTag = !hasPnl ? `<span class="journal-tag open">OPEN</span>`
-        : pnlPct >= 0 ? `<span class="journal-tag win">WIN ${pnlStr}</span>`
-        : `<span class="journal-tag loss">LOSS ${pnlStr}</span>`;
+
+      // Live unrealized P&L for open trades
+      const curPx = !hasPnl
+        ? (state.livePrices[e.sym]?.price ?? state.data[e.sym]?.bars?.slice(-1)[0]?.c ?? null)
+        : null;
+      const unrealPct = curPx != null
+        ? ((e.direction === 'long' ? curPx - e.entryPrice : e.entryPrice - curPx) / e.entryPrice * 100)
+        : null;
+      const unrealDollar = unrealPct != null && e.shares
+        ? (e.direction === 'long' ? curPx - e.entryPrice : e.entryPrice - curPx) * e.shares
+        : null;
+      const unrealR = (() => {
+        if (curPx == null || !e.stopPrice) return null;
+        const risk = e.direction === 'long' ? e.entryPrice - e.stopPrice : e.stopPrice - e.entryPrice;
+        if (risk <= 0) return null;
+        return (e.direction === 'long' ? curPx - e.entryPrice : e.entryPrice - curPx) / risk;
+      })();
+
+      const outcomeTag = hasPnl
+        ? (pnlPct >= 0 ? `<span class="journal-tag win">WIN ${pnlStr}</span>` : `<span class="journal-tag loss">LOSS ${pnlStr}</span>`)
+        : unrealPct != null
+          ? `<span class="journal-tag ${unrealPct >= 0 ? 'win' : 'loss'}" style="opacity:0.8">
+              OPEN ${unrealPct >= 0 ? '+' : ''}${unrealPct.toFixed(2)}%${unrealDollar != null ? ' / ' + (unrealDollar >= 0 ? '+' : '') + '$' + Math.abs(unrealDollar).toFixed(0) : ''}
+             </span>`
+          : `<span class="journal-tag open">OPEN</span>`;
       html += `<div class="journal-entry">
         <button class="journal-del" onclick="deleteJournalEntry(${e.id})" title="Delete">×</button>
         <div class="journal-entry-header">
@@ -8488,7 +9666,18 @@ function renderJournal() {
         </div>
         <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:3px">
           Entry <span style="color:var(--text)">$${Number(e.entryPrice).toFixed(2)}</span>
-          ${e.exitPrice ? ` → Exit <span style="color:var(--text)">$${Number(e.exitPrice).toFixed(2)}</span>` : ''}
+          ${e.shares     ? ` · <span style="color:var(--muted)">${e.shares} sh</span>` : ''}
+          ${e.stopPrice  ? ` · Stop <span style="color:var(--red)">$${Number(e.stopPrice).toFixed(2)}</span>` : ''}
+          ${e.exitPrice  ? ` → Exit <span style="color:var(--text)">$${Number(e.exitPrice).toFixed(2)}</span>` : ''}
+          ${e.exitPrice && e.stopPrice ? (() => {
+            const risk   = e.direction === 'long' ? e.entryPrice - e.stopPrice : e.stopPrice - e.entryPrice;
+            if (risk <= 0) return '';
+            const gained = e.direction === 'long' ? e.exitPrice - e.entryPrice : e.entryPrice - e.exitPrice;
+            const rMult  = gained / risk;
+            const col    = rMult >= 0 ? 'var(--green)' : 'var(--red)';
+            return ` · <span style="color:${col};font-weight:700">${rMult >= 0 ? '+' : ''}${rMult.toFixed(2)}R</span>`;
+          })() : ''}
+          ${unrealR != null ? ` · <span style="color:${unrealR>=0?'var(--green)':'var(--red)'};font-weight:700;font-size:9px">${unrealR>=0?'+':''}${unrealR.toFixed(2)}R live</span>` : ''}
         </div>
         ${e.note ? `<div class="journal-entry-note">${e.note}</div>` : ''}
       </div>`;
@@ -8512,7 +9701,9 @@ function submitJournalEntry() {
   const sym    = document.getElementById('jnl-sym')?.value?.trim();
   const dir    = document.getElementById('jnl-dir')?.value;
   const entry  = parseFloat(document.getElementById('jnl-entry')?.value);
+  const stop   = parseFloat(document.getElementById('jnl-stop')?.value);
   const exit   = parseFloat(document.getElementById('jnl-exit')?.value);
+  const shares = parseInt(document.getElementById('jnl-shares')?.value);
   const wave   = document.getElementById('jnl-wave')?.value?.trim();
   const note   = document.getElementById('jnl-note')?.value?.trim();
   if (!sym || isNaN(entry)) return;
@@ -8520,7 +9711,9 @@ function submitJournalEntry() {
     sym,
     direction:  dir,
     entryPrice: entry,
-    exitPrice:  isNaN(exit) ? null : exit,
+    stopPrice:  isNaN(stop)   ? null : stop,
+    exitPrice:  isNaN(exit)   ? null : exit,
+    shares:     isNaN(shares) ? null : shares,
     waveCtx:    wave || null,
     note:       note || null,
   });
@@ -8574,7 +9767,7 @@ function pixelToChart(px_coord, py_coord) {
   const chartLeft = PAD_LEFT, chartRight = w - PAD_RIGHT;
   const chartTop = PAD_TOP, chartBottom = h - PAD_BOTTOM - VOL_H;
   const chartW = chartRight - chartLeft, chartH = chartBottom - chartTop;
-  const FORECAST_RATIO = 0.18;
+  const FORECAST_RATIO = state.forecastExpanded ? 0.35 : 0.18;
   const barsW = chartW - Math.floor(chartW * FORECAST_RATIO);
   const prices = bars.map(b => b.c);
   const minP = Math.min(...bars.map(b => b.l));
@@ -9163,6 +10356,32 @@ async function toggleSectorOverlay() {
   redrawChart();
 }
 
+async function toggleOptionsOverlay() {
+  state.showOptions = !state.showOptions;
+  const btn = document.getElementById('options-btn');
+  if (btn) btn.classList.toggle('active', state.showOptions);
+  if (state.showOptions && state.selected) {
+    await fetchOptionsData(state.selected);
+  }
+  redrawChart();
+}
+
+async function fetchOptionsData(sym) {
+  if (state.optionsData[sym]) return; // already loaded
+  try {
+    const r = await fetch(`${API_BASE}/api/options/${sym}`);
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.error) {
+      state.optionsData[sym] = d;
+      // Show P/C ratio in a toast
+      const pcr = d.totalPutOI && d.totalCallOI ? (d.totalPutOI / d.totalCallOI).toFixed(2) : null;
+      const expDate = d.expiry ? new Date(d.expiry * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+      showToast(`${sym} options (exp ${expDate}) — Max pain $${d.maxPain?.toFixed(0) ?? '?'} · P/C ratio ${pcr ?? '?'}`);
+    }
+  } catch(e) {}
+}
+
 async function ensureSectorData(sym) {
   const etf = getSectorEtf(sym);
   if (!etf || state.sectorData[etf]?.length > 1) return;
@@ -9172,6 +10391,13 @@ async function ensureSectorData(sym) {
     const data = await fetchTicker(etf);
     if (data?.bars?.length) state.sectorData[etf] = data.bars;
   } catch(e) {}
+}
+
+function toggleForecastExpand() {
+  state.forecastExpanded = !state.forecastExpanded;
+  const btn = document.getElementById('fc-expand-btn');
+  btn.classList.toggle('fc-on', state.forecastExpanded);
+  redrawChart();
 }
 
 function exportChart() {
@@ -9374,23 +10600,29 @@ function renderScreener() {
 }
 
 // ─── FUNDAMENTAL COMPARE TABLE ───────────────────────────────────────────────
+// NM = metric cannot be calculated (e.g. P/E with negative EPS); null = data not available
+const NM = '__NM__';
+const _fNA = `<span style="color:var(--muted);font-size:9px;letter-spacing:.5px">N/A</span>`;
+const _fNM = `<span style="color:var(--muted);font-size:9px;letter-spacing:.5px" title="Not meaningful — negative earnings make this metric undefined">N/M</span>`;
+const _cmpV = v => v === NM ? _fNM : v == null ? _fNA : null; // returns label or null to continue
+
 const CMP_METRICS = [
-  { key:'pe',      label:'P/E',          tip:'P/E (TTM)|Trailing price-to-earnings. Lower = cheaper relative to earnings.',   dir:'low',  fmt: v => v == null ? '—' : fmtNum(v) },
-  { key:'fwdPe',   label:'FWD P/E',      tip:'Forward P/E|Price divided by next-12-month EPS estimate. Lower = cheaper on expected earnings.',  dir:'low',  fmt: v => v == null ? '—' : fmtNum(v) },
-  { key:'peg',     label:'PEG',          tip:'PEG Ratio|P/E ÷ growth rate. <1 = cheap relative to growth. Best metric for growth stocks.',   dir:'low',  fmt: v => v == null ? '—' : fmtNum(v) },
-  { key:'pb',      label:'P/B',          tip:'Price-to-Book|Price ÷ book value per share. Lower = more assets per dollar.',   dir:'low',  fmt: v => v == null ? '—' : fmtNum(v) },
-  { key:'eps',     label:'EPS',          tip:'Earnings Per Share (TTM)|Net income per share. Higher = more profitable.',     dir:'high', fmt: v => v == null ? '—' : '$' + fmtNum(v) },
-  { key:'fwdEps',  label:'FWD EPS',      tip:'Forward EPS|Analyst consensus estimate for next 12 months. Higher = better earnings expected.',  dir:'high', fmt: v => v == null ? '—' : '$' + fmtNum(v) },
-  { key:'mcap',    label:'MKT CAP',      tip:'Market Capitalisation|Total company value. Indicates size tier.',              dir:'high', fmt: v => v == null ? '—' : fmtBig(v) },
-  { key:'revGr',   label:'REV GR%',      tip:'Revenue Growth (YoY)|Year-over-year revenue increase. Higher = faster top-line growth.',  dir:'high', fmt: v => v == null ? '—' : fmtPct(v) },
-  { key:'earnGr',  label:'EPS GR%',      tip:'Earnings Growth (YoY)|Year-over-year earnings increase. Higher = profit scaling faster.',  dir:'high', fmt: v => v == null ? '—' : fmtPct(v) },
-  { key:'profM',   label:'NET MGN',      tip:'Net Profit Margin|Net income as % of revenue. Higher = more efficient business.',  dir:'high', fmt: v => v == null ? '—' : fmtPct(v) },
-  { key:'roe',     label:'ROE',          tip:'Return on Equity|Profit generated per dollar of shareholder equity. >15% is strong.',  dir:'high', fmt: v => v == null ? '—' : fmtPct(v) },
-  { key:'debtEq',  label:'D/E',          tip:'Debt-to-Equity|Total debt ÷ equity. Lower = safer balance sheet.',             dir:'low',  fmt: v => v == null ? '—' : fmtNum(v) },
-  { key:'beta',    label:'BETA',         tip:'Beta|Volatility vs market. 1.0 = market. Higher = more volatile.',             dir:'none', fmt: v => v == null ? '—' : fmtNum(v) },
-  { key:'divYld',  label:'DIV YLD',      tip:'Dividend Yield|Annual dividend ÷ price. Higher = more income per dollar invested.',  dir:'high', fmt: v => v == null ? '—' : fmtPct(v) },
-  { key:'upside',  label:'UPSIDE',       tip:'Analyst Upside|Gap between current price and analyst mean target. Higher = more room to run.',  dir:'high', fmt: v => v == null ? '—' : fmtPct(v) },
-  { key:'chg3m',   label:'3M CHG%',      tip:'3-Month Price Change|How much the stock moved in the last 3 months. Momentum signal.',  dir:'high', fmt: v => v == null ? '—' : (v >= 0 ? '+' : '') + fmtNum(v) + '%' },
+  { key:'pe',      label:'P/E',          tip:'P/E (TTM)|Trailing price-to-earnings. Lower = cheaper relative to earnings.',   dir:'low',  fmt: v => _cmpV(v) ?? fmtNum(v) },
+  { key:'fwdPe',   label:'FWD P/E',      tip:'Forward P/E|Price divided by next-12-month EPS estimate. Lower = cheaper on expected earnings.',  dir:'low',  fmt: v => _cmpV(v) ?? fmtNum(v) },
+  { key:'peg',     label:'PEG',          tip:'PEG Ratio|P/E ÷ growth rate. <1 = cheap relative to growth. Best metric for growth stocks.',   dir:'low',  fmt: v => _cmpV(v) ?? fmtNum(v) },
+  { key:'pb',      label:'P/B',          tip:'Price-to-Book|Price ÷ book value per share. Lower = more assets per dollar.',   dir:'low',  fmt: v => _cmpV(v) ?? fmtNum(v) },
+  { key:'eps',     label:'EPS',          tip:'Earnings Per Share (TTM)|Net income per share. Higher = more profitable.',     dir:'high', fmt: v => _cmpV(v) ?? ('$' + fmtNum(v)) },
+  { key:'fwdEps',  label:'FWD EPS',      tip:'Forward EPS|Analyst consensus estimate for next 12 months. Higher = better earnings expected.',  dir:'high', fmt: v => _cmpV(v) ?? ('$' + fmtNum(v)) },
+  { key:'mcap',    label:'MKT CAP',      tip:'Market Capitalisation|Total company value. Indicates size tier.',              dir:'high', fmt: v => _cmpV(v) ?? fmtBig(v) },
+  { key:'revGr',   label:'REV GR%',      tip:'Revenue Growth (YoY)|Year-over-year revenue increase. Higher = faster top-line growth.',  dir:'high', fmt: v => _cmpV(v) ?? fmtPct(v) },
+  { key:'earnGr',  label:'EPS GR%',      tip:'Earnings Growth (YoY)|Year-over-year earnings increase. Higher = profit scaling faster.',  dir:'high', fmt: v => _cmpV(v) ?? fmtPct(v) },
+  { key:'profM',   label:'NET MGN',      tip:'Net Profit Margin|Net income as % of revenue. Higher = more efficient business.',  dir:'high', fmt: v => _cmpV(v) ?? fmtPct(v) },
+  { key:'roe',     label:'ROE',          tip:'Return on Equity|Profit generated per dollar of shareholder equity. >15% is strong.',  dir:'high', fmt: v => _cmpV(v) ?? fmtPct(v) },
+  { key:'debtEq',  label:'D/E',          tip:'Debt-to-Equity|Total debt ÷ equity. Lower = safer balance sheet.',             dir:'low',  fmt: v => _cmpV(v) ?? fmtNum(v) },
+  { key:'beta',    label:'BETA',         tip:'Beta|Volatility vs market. 1.0 = market. Higher = more volatile.',             dir:'none', fmt: v => _cmpV(v) ?? fmtNum(v) },
+  { key:'divYld',  label:'DIV YLD',      tip:'Dividend Yield|Annual dividend ÷ price. Higher = more income per dollar invested.',  dir:'high', fmt: v => _cmpV(v) ?? fmtPct(v) },
+  { key:'upside',  label:'UPSIDE',       tip:'Analyst Upside|Gap between current price and analyst mean target. Higher = more room to run.',  dir:'high', fmt: v => _cmpV(v) ?? fmtPct(v) },
+  { key:'chg3m',   label:'3M CHG%',      tip:'3-Month Price Change|How much the stock moved in the last 3 months. Momentum signal.',  dir:'high', fmt: v => _cmpV(v) ?? ((v >= 0 ? '+' : '') + fmtNum(v) + '%') },
 ];
 
 let _cmpSort  = { key: 'pe', dir: 'asc' };  // current sort column + direction
@@ -9435,13 +10667,23 @@ function _cmpGetFundRow(sym) {
     }
   }
 
+  const trailEps = rawOf(ks.trailingEps) ?? rawOf(sd.trailingEps);
+  // P/E is N/M when EPS is known-negative (not just missing)
+  const pe = rawOf(ks.trailingPE) ?? rawOf(sd.trailingPE) ?? rawOf(pr.trailingPE)
+    ?? (trailEps != null && trailEps < 0 ? NM : null);
+  // PEG is N/M when P/E is N/M, or when P/E exists but growth is negative/zero
+  const peg = rawOf(ks.pegRatio) ?? rawOf(ks.trailingPegRatio)
+    ?? (pe === NM ? NM
+      : pe != null && earnGr != null && earnGr <= 0 ? NM
+      : null);
+
   return {
     sym,
-    pe:     rawOf(ks.trailingPE)    ?? rawOf(sd.trailingPE)    ?? rawOf(pr.trailingPE),
+    pe,
     fwdPe:  rawOf(ks.forwardPE)     ?? rawOf(sd.forwardPE),
-    peg:    rawOf(ks.pegRatio)      ?? rawOf(ks.trailingPegRatio),
+    peg,
     pb:     rawOf(ks.priceToBook)   ?? rawOf(sd.priceToBook),
-    eps:    rawOf(ks.trailingEps)   ?? rawOf(sd.trailingEps),
+    eps:    trailEps,
     fwdEps: rawOf(ks.forwardEps),
     mcap:   rawOf(ks.marketCap)     ?? rawOf(sd.marketCap)     ?? rawOf(pr.marketCap),
     revGr,
@@ -9489,22 +10731,23 @@ function renderCompare() {
     return;
   }
 
-  // Sort rows
+  // Sort rows — NM sorts to bottom alongside null
   const sortMeta = CMP_METRICS.find(m => m.key === _cmpSort.key);
   const sorted = [...rows].sort((a, b) => {
     const av = a[_cmpSort.key], bv = b[_cmpSort.key];
-    if (av == null && bv == null) return 0;
-    if (av == null) return 1;
-    if (bv == null) return -1;
+    const an = av == null || av === NM, bn = bv == null || bv === NM;
+    if (an && bn) return 0;
+    if (an) return 1;
+    if (bn) return -1;
     return _cmpSort.dir === 'asc' ? av - bv : bv - av;
   });
 
-  // Bar scale for active metric column
-  const vals = rows.map(r => r[_cmpMetric]).filter(v => v != null);
+  // Bar scale for active metric column — exclude NM
+  const vals = rows.map(r => r[_cmpMetric]).filter(v => v != null && v !== NM);
   const vMin = vals.length ? Math.min(...vals) : 0;
   const vMax = vals.length ? Math.max(...vals) : 1;
   const vRange = vMax - vMin || 1;
-  const barWidth = v => v == null ? 0 : Math.max(4, Math.round(((v - vMin) / vRange) * 80));
+  const barWidth = v => (v == null || v === NM) ? 0 : Math.max(4, Math.round(((v - vMin) / vRange) * 80));
 
   // Determine best/worst for active metric
   const metDir = activeMeta.dir;
@@ -9536,8 +10779,8 @@ function renderCompare() {
       const mv = r[m.key];
       const formatted = m.fmt(mv);
       let color = '';
-      if (mv != null && m.dir !== 'none') {
-        const allV = rows.map(x => x[m.key]).filter(x => x != null);
+      if (mv != null && mv !== NM && m.dir !== 'none') {
+        const allV = rows.map(x => x[m.key]).filter(x => x != null && x !== NM);
         if (allV.length > 1) {
           const best  = m.dir === 'low'  ? Math.min(...allV) : Math.max(...allV);
           const worst = m.dir === 'low'  ? Math.max(...allV) : Math.min(...allV);
@@ -10246,6 +11489,106 @@ function deletePosition(idx) {
   document.addEventListener('click',  hideTip);
   document.addEventListener('scroll', hideTip, true);
 })();
+</script>
+
+<!-- ── RISK CALCULATOR ─────────────────────────────────────────── -->
+<div id="risk-calc" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:9999;background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+  padding:18px 20px;min-width:300px;box-shadow:0 8px 32px rgba(0,0,0,0.5);font-family:'JetBrains Mono',monospace">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <span style="font-size:11px;letter-spacing:2px;color:var(--text);font-weight:700">⚖ RISK CALCULATOR</span>
+    <button onclick="document.getElementById('risk-calc').style.display='none'"
+      style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1">✕</button>
+  </div>
+  <div style="display:grid;gap:8px;margin-bottom:12px">
+    <label style="font-size:9px;color:var(--muted);letter-spacing:1px">ACCOUNT SIZE ($)
+      <input id="rc-account" type="number" value="10000" min="1" step="100"
+        oninput="calcRisk()" style="width:100%;margin-top:4px;background:var(--bg3);border:1px solid var(--border);
+        border-radius:4px;padding:5px 8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px">
+    </label>
+    <label style="font-size:9px;color:var(--muted);letter-spacing:1px">RISK PER TRADE (%)
+      <input id="rc-risk-pct" type="number" value="1" min="0.1" max="10" step="0.1"
+        oninput="calcRisk()" style="width:100%;margin-top:4px;background:var(--bg3);border:1px solid var(--border);
+        border-radius:4px;padding:5px 8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px">
+    </label>
+    <label style="font-size:9px;color:var(--muted);letter-spacing:1px">ENTRY PRICE ($)
+      <input id="rc-entry" type="number" min="0" step="0.01"
+        oninput="calcRisk()" style="width:100%;margin-top:4px;background:var(--bg3);border:1px solid var(--border);
+        border-radius:4px;padding:5px 8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px">
+    </label>
+    <label style="font-size:9px;color:var(--muted);letter-spacing:1px">STOP PRICE ($)
+      <input id="rc-stop" type="number" min="0" step="0.01"
+        oninput="calcRisk()" style="width:100%;margin-top:4px;background:var(--bg3);border:1px solid var(--border);
+        border-radius:4px;padding:5px 8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px">
+    </label>
+    <label style="font-size:9px;color:var(--muted);letter-spacing:1px">TARGET PRICE ($) <span style="opacity:0.5">(optional)</span>
+      <input id="rc-target" type="number" min="0" step="0.01"
+        oninput="calcRisk()" style="width:100%;margin-top:4px;background:var(--bg3);border:1px solid var(--border);
+        border-radius:4px;padding:5px 8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px">
+    </label>
+  </div>
+  <div id="rc-results" style="background:var(--bg3);border-radius:5px;padding:10px 12px;font-size:11px;line-height:2;border:1px solid var(--border)">
+    <span style="color:var(--muted);font-size:9px;letter-spacing:1px">FILL IN PRICES ABOVE</span>
+  </div>
+</div>
+
+<script>
+function toggleRiskCalc() {
+  const el = document.getElementById('risk-calc');
+  if (el.style.display === 'none') {
+    // Pre-fill entry from current price, stop from wave forecast
+    const sym = state.selected;
+    if (sym && state.data[sym]) {
+      const price = state.data[sym].bars.slice(-1)[0]?.c;
+      if (price) document.getElementById('rc-entry').value = price.toFixed(2);
+    }
+    const forecast = sym && state.waves[sym] ? buildForecast(state.waves[sym], state.data[sym]?.bars?.slice(-1)[0]?.c, null) : null;
+    if (forecast?.stop) document.getElementById('rc-stop').value = forecast.stop.toFixed(2);
+    if (forecast?.target1) document.getElementById('rc-target').value = forecast.target1.toFixed(2);
+    el.style.display = 'block';
+    calcRisk();
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function calcRisk() {
+  const account  = parseFloat(document.getElementById('rc-account').value) || 0;
+  const riskPct  = parseFloat(document.getElementById('rc-risk-pct').value) || 0;
+  const entry    = parseFloat(document.getElementById('rc-entry').value)    || 0;
+  const stop     = parseFloat(document.getElementById('rc-stop').value)     || 0;
+  const target   = parseFloat(document.getElementById('rc-target').value)   || 0;
+  const res      = document.getElementById('rc-results');
+
+  if (!account || !riskPct || !entry || !stop) {
+    res.innerHTML = '<span style="color:var(--muted);font-size:9px;letter-spacing:1px">FILL IN PRICES ABOVE</span>';
+    return;
+  }
+
+  const maxLoss    = account * (riskPct / 100);
+  const riskPerSh  = Math.abs(entry - stop);
+  if (riskPerSh === 0) { res.innerHTML = '<span style="color:var(--red)">ENTRY = STOP — INVALID</span>'; return; }
+
+  const shares     = Math.floor(maxLoss / riskPerSh);
+  const cost       = shares * entry;
+  const stopLossDollar = shares * riskPerSh;
+  const rrr        = target ? Math.abs(target - entry) / riskPerSh : null;
+  const potProfit  = target && shares ? shares * Math.abs(target - entry) : null;
+
+  const dir = entry > stop ? 'LONG 📈' : 'SHORT 📉';
+  const rColor = rrr == null ? '' : rrr >= 2 ? 'var(--green)' : rrr >= 1 ? 'var(--gold)' : 'var(--red)';
+
+  res.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">
+      <span style="color:var(--muted);font-size:9px">DIRECTION</span><span style="font-weight:700">${dir}</span>
+      <span style="color:var(--muted);font-size:9px">POSITION SIZE</span><span style="color:var(--blue);font-weight:700">${shares.toLocaleString()} shares</span>
+      <span style="color:var(--muted);font-size:9px">POSITION COST</span><span>$${cost.toLocaleString(undefined,{maximumFractionDigits:0})}</span>
+      <span style="color:var(--muted);font-size:9px">MAX LOSS</span><span style="color:var(--red);font-weight:700">-$${stopLossDollar.toFixed(0)} (${riskPct}%)</span>
+      <span style="color:var(--muted);font-size:9px">RISK/SHARE</span><span>$${riskPerSh.toFixed(2)}</span>
+      ${rrr != null ? `<span style="color:var(--muted);font-size:9px">R:R RATIO</span><span style="color:${rColor};font-weight:700">${rrr.toFixed(2)}:1</span>` : ''}
+      ${potProfit != null ? `<span style="color:var(--muted);font-size:9px">POTENTIAL PROFIT</span><span style="color:var(--green);font-weight:700">+$${potProfit.toFixed(0)}</span>` : ''}
+    </div>`;
+}
 </script>
 </body>
 </html>

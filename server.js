@@ -508,12 +508,26 @@ async function fetchFinnhubFundamentals(symbol) {
   const totalRev = (m.revenuePerShareTTM != null && p.shareOutstanding != null)
     ? m.revenuePerShareTTM * p.shareOutstanding * 1e6 : null;
 
+  // Derived price: PE × EPS (fallback: marketCap ÷ shares)
+  const trailingPeVal = m.peBasicExclExtraTTM ?? m.peTTM;
+  const trailingEpsVal = m.epsBasicExclExtraItemsTTM ?? m.epsTTM;
+  const derivedPrice = (trailingPeVal != null && trailingEpsVal != null)
+    ? trailingPeVal * trailingEpsVal
+    : (p.marketCapitalization != null && p.shareOutstanding != null && p.shareOutstanding > 0)
+      ? p.marketCapitalization / p.shareOutstanding
+      : null;
+
+  // Forward EPS: price ÷ forward PE
+  const fwdPeVal = m.forwardPE;
+  const derivedFwdEps = (derivedPrice != null && fwdPeVal != null && fwdPeVal > 0)
+    ? derivedPrice / fwdPeVal : null;
+
   return JSON.stringify({
     quoteSummary: {
       result: [{
         _source: 'finnhub',
         financialData: {
-          currentPrice:            wrap(p.marketCapitalization ? null : null),
+          currentPrice:            wrap(derivedPrice),
           targetMeanPrice:         wrap(t.targetMean ?? null),
           targetHighPrice:         wrap(t.targetHigh ?? null),
           targetLowPrice:          wrap(t.targetLow  ?? null),
@@ -531,12 +545,12 @@ async function fetchFinnhubFundamentals(symbol) {
         },
         defaultKeyStatistics: {
           marketCap:     wrap(p.marketCapitalization ? p.marketCapitalization * 1e6 : null),
-          trailingPE:    wrap(m.peBasicExclExtraTTM ?? m.peTTM ?? null),
-          forwardPE:     wrap(m.forwardPE ?? null),
+          trailingPE:    wrap(trailingPeVal ?? null),
+          forwardPE:     wrap(fwdPeVal ?? null),
           priceToBook:   wrap(m.pbQuarterly ?? m.pb ?? null),
-          trailingEps:   wrap(m.epsBasicExclExtraItemsTTM ?? m.epsTTM ?? null),
-          forwardEps:    wrap(null),   // Finnhub doesn't expose fwd EPS directly
-          pegRatio:      wrap(null),   // not in Finnhub free metrics
+          trailingEps:   wrap(trailingEpsVal ?? null),
+          forwardEps:    wrap(derivedFwdEps),
+          pegRatio:      wrap(m.pegTTM ?? null),
           beta:          wrap(p.beta ?? m.beta ?? null),
           dividendYield: wrap(divYieldRaw),
           profitMargins: wrap(pct(m.netProfitMarginTTM ?? m.netMarginTTM)),
@@ -1130,6 +1144,71 @@ const server = http.createServer(async (req, res) => {
       res.end(json);
     } catch (e) {
       console.error('[econ-calendar]', e.message);
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // ── /api/options/:symbol — Yahoo Finance options chain (nearest expiry) ─────
+  if (pathname.startsWith('/api/options/')) {
+    const symbol = decodeURIComponent(pathname.split('/')[3] || '').toUpperCase();
+    if (!symbol || !/^[A-Z0-9.\-]{1,12}$/.test(symbol)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid symbol' })); return;
+    }
+    try {
+      // Yahoo Finance options endpoint — no auth needed
+      await ensureCrumb();
+      const data = await new Promise((resolve, reject) => {
+        const opts = {
+          hostname: 'query2.finance.yahoo.com',
+          path: `/v7/finance/options/${encodeURIComponent(symbol)}?crumb=${encodeURIComponent(session.crumb || '')}`,
+          headers: { 'User-Agent': session.ua, 'Accept': 'application/json', 'Cookie': session.cookies.join('; ') },
+        };
+        https.get(opts, r => {
+          let buf = '';
+          r.on('data', d => buf += d);
+          r.on('end', () => {
+            if (r.statusCode === 429) { reject(new Error('Rate limited — try again shortly')); return; }
+            if (r.statusCode === 401 || r.statusCode === 403) { session.crumb = null; reject(new Error('Session expired')); return; }
+            try { resolve(JSON.parse(buf)); } catch(e) { reject(new Error('Parse error: ' + buf.slice(0,40))); }
+          });
+        }).on('error', reject);
+      });
+
+      const result = data?.optionChain?.result?.[0];
+      if (!result) throw new Error('No options data');
+
+      const calls  = result.options?.[0]?.calls  || [];
+      const puts   = result.options?.[0]?.puts   || [];
+      const price  = result.quote?.regularMarketPrice;
+      const expiry = result.options?.[0]?.expirationDate;
+
+      // Max pain: strike where total loss for option buyers is maximized
+      // For each strike, sum intrinsic value of all calls + puts across all strikes
+      const allStrikes = [...new Set([...calls, ...puts].map(o => o.strike))].sort((a,b) => a-b);
+      let maxPainStrike = null, minPain = Infinity;
+      allStrikes.forEach(s => {
+        const callPain = calls.reduce((t, c) => t + Math.max(0, s - c.strike) * (c.openInterest || 0), 0);
+        const putPain  = puts.reduce((t,  p) => t + Math.max(0, p.strike - s) * (p.openInterest || 0), 0);
+        const total    = callPain + putPain;
+        if (total < minPain) { minPain = total; maxPainStrike = s; }
+      });
+
+      // Top 5 OI strikes for calls and puts (gamma wall)
+      const topCalls = [...calls].sort((a,b) => (b.openInterest||0)-(a.openInterest||0)).slice(0,5)
+        .map(o => ({ strike: o.strike, oi: o.openInterest, vol: o.volume, iv: o.impliedVolatility }));
+      const topPuts  = [...puts].sort((a,b)  => (b.openInterest||0)-(a.openInterest||0)).slice(0,5)
+        .map(o => ({ strike: o.strike, oi: o.openInterest, vol: o.volume, iv: o.impliedVolatility }));
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ symbol, price, expiry, maxPain: maxPainStrike, topCalls, topPuts,
+        totalCallOI: calls.reduce((t,c) => t+(c.openInterest||0),0),
+        totalPutOI:  puts.reduce((t,p)  => t+(p.openInterest||0),0),
+      }));
+    } catch(e) {
+      console.error(`  [options] ${symbol}: ${e.message}`);
       res.writeHead(502, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: e.message }));
     }

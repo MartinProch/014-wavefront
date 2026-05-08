@@ -104,13 +104,14 @@ Click the **COMPARE** tab in the right sidebar to rank all watchlist tickers sid
 
 ---
 
-## Right Panel Tabs (3×3 grid)
+## Right Panel Tabs
 
 | Row | Tabs |
 |-----|------|
 | 1 | WAVES · FUND. · RESEARCH |
 | 2 | JOURNAL · SCREENER · RS RANK |
 | 3 | HEAT · PORTFOLIO · COMPARE |
+| — | FORECAST (dedicated trade plan tab) |
 
 ---
 
@@ -155,11 +156,32 @@ Fundamentals are **cached 24h server-side** (Railway memory) so API quota is not
 
 ## Changelog
 
+### Session 5 (May 2026)
+- ✅ **FORECAST tab** — dedicated sidebar tab showing full trade plan: entry zone, stop loss, target, R:R, bull/bear scenario cards, wave price targets with calendar-estimated dates, buy/sell zones with ⚡ pulse when price is in zone, analyst target confluence, and clickable multi-TF cards
+- ✅ **Trade setup card in WAVES panel** — always-visible header card at top of WAVES panel with ENTRY / STOP / TARGET / R:R grid plus embedded position size calculator (account size + risk % → shares, dollar risk, profit potential)
+- ✅ **⟶ FC expand button** — toolbar button that widens the forecast zone from 18% to 35% of chart width for more detail on projected wave targets; orange highlight when active
+- ✅ **Position size calculator** — embedded in trade setup card; uses entry-zone midpoint (not current price) for accurate sizing; persists account size and risk % to localStorage
+
+### Session 4 (May 2026)
+- ✅ **PEG ratio in COMPARE** — Finnhub `pegTTM` field used directly; `currentPrice` derivation fixed (`trailingPE × trailingEPS`); `forwardEps` now correctly derived from `currentPrice / forwardPE`
+- ✅ **N/A vs N/M in COMPARE** — "N/A" for missing data, "N/M" (not meaningful) for metrics undefined due to negative earnings (P/E, PEG for RKLB, ASTS, etc.)
+- ✅ **Wave 3/4/5 target lines on chart** — horizontal lines for confirmed W3/W4 pivots and dashed W5 projections (=W1 and ×1.618) for IMPULSE; C ×1.618, C mid, C ×2.618 for CORRECTION
+- ✅ **Chart Y-axis auto-zoom** — expands to include wave target prices (capped at 60% of bar range) so targets never render off-canvas
+- ✅ **X-axis date labels** — labels now include year (`May '24`) and always span first→last bar; last slot replaced by `May '26` in blue so data cutoff is unambiguous
+- ✅ **"NOW" marker** — blue label at top of forecast separator line; makes historical/forecast boundary explicit
+- ✅ **Crosshair date bug fixed** — was using `chartW` (full width) instead of `barsW` (82%) to map mouse → bar index, causing last ~18% of bar data to appear in the forecast zone; now uses `barsW` and hides date tooltip in forecast zone
+- ✅ **Forecast crosshair projected dates** — hovering in the forecast zone shows a blue `~May 15, 2026` tooltip extrapolated from average bar interval
+- ✅ **Multi-TF confluence upgraded** — now covers 1M/3M/1Y/2Y/5Y, highlights active timeframe with a glow border, shows even with 1 valid TF, each card is clickable to switch timeframe
+
 ### Session 3 (May 2026)
 - ✅ **dotenv support** — `require('dotenv').config()` added to server.js; `FINNHUB_KEY` and `FMP_KEY` now loaded from `.env` automatically on `node server.js`
 - ✅ **COMPARE active metric column pinned first** — selected metric pill always appears as column 3 (right after SYM), no horizontal scrolling needed; column header gets a blue underline
 - ✅ **COMPARE data fix** — one-time localStorage migration (`wf_fund_migrated_v3`) clears stale pre-Finnhub NASDAQ cache on first load; `renderCompare` now also re-fetches sparse entries
-- ✅ **Ticker watermark on chart** — active ticker symbol drawn as a semi-transparent label at the bottom-left of the chart canvas (above volume bars), always visible at a glance
+- ✅ **Ticker label on chart** — active ticker symbol shown as a crisp HTML overlay at the bottom-left of the chart (always visible, no canvas fighting)
+- ✅ **Journal CSV export** — ⬇ EXPORT CSV button in JOURNAL tab; exports all trades with date, symbol, direction, wave, entry/exit/stop prices, shares, P&L %, P&L $, result
+- ✅ **Risk calculator** — ⚖ RISK button in toolbar; floating calculator for position size, max dollar loss, and R:R ratio; auto-fills entry/stop/target from current price and wave forecast
+- ✅ **Live price streaming** — polling now covers all watchlist tickers (not just alert symbols); updates watchlist prices, chart, and portfolio every 60s; 🟢 LIVE badge in header shows last update time
+- ✅ **Options chain overlay** — OPT toggle in toolbar; fetches nearest-expiry options from Yahoo Finance; draws max pain line (orange), top call OI strikes (red dashes), top put OI strikes (green dashes); toast shows P/C ratio on load
 
 ### Session 2 (May 2026)
 - ✅ Dark / Light theme toggle with CSS variable overrides; saved to localStorage
@@ -188,15 +210,12 @@ Fundamentals are **cached 24h server-side** (Railway memory) so API quota is not
 
 ## Planned Features
 
-- 🔜 Options chain overlay (strike prices, max pain)
 - 🔜 Dark pool detection (unusual volume)
 - 🔜 Backtesting engine (replay strategies on historical data)
-- 🔜 Live price streaming (WebSocket updates)
 - 🔜 Custom indicators (ADX, Stochastic RSI)
 - 🔜 Email/SMS alerts
 - 🔜 Chart snapshots (save/share annotations)
-- 🔜 Journal export to CSV
-- 🔜 Risk calculator (position size → max loss / R:R)
+- 🔜 Options flow / unusual activity scanner
 
 ---
 
