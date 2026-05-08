@@ -417,6 +417,7 @@
   .toggle-btn.darkpool-on { color: #ff6d00; border-color: #ff6d00; background: rgba(255,109,0,0.12); }
   .toggle-btn.gaps-on     { color: #80cbc4; border-color: #80cbc4; background: rgba(128,203,196,0.12); }
   .toggle-btn.wk52-on    { color: #ffd740; border-color: #ffd740; background: rgba(255,215,64,0.12); }
+  .toggle-btn.pivots-on  { color: #ce93d8; border-color: #ce93d8; background: rgba(206,147,216,0.12); }
   .toggle-btn.featured {
     position: relative;
     box-shadow: 0 0 8px rgba(255,215,64,0.3);
@@ -2266,6 +2267,7 @@
           <button class="toggle-btn" id="darkpool-btn" data-toggle="darkpool" data-tip="Dark Pool / Block Volume|Highlights candles where volume exceeds 2.5× the 20-bar average — potential institutional block trades or dark pool prints.|Large institutions often accumulate or distribute at wave pivots. Unusual volume confirms the move.">DARK</button>
           <button class="toggle-btn" id="gaps-btn" data-toggle="gaps" data-tip="Gap Detector|Highlights price gaps between sessions: gap-up (open above prior high) in green, gap-down (open below prior low) in red. Unfilled gaps remain shaded until price returns to close them.|Price frequently returns to fill gaps — unfilled gaps act as magnets and are high-probability targets.">GAPS</button>
           <button class="toggle-btn" id="wk52-btn" data-toggle="wk52" data-tip="52-Week High / Low|Draws horizontal lines at the 52-week high (gold) and 52-week low (red) with distance labels.|A breakout above the 52W high on high volume is one of the strongest momentum signals. Stocks near the 52W low are either deep value or falling knives — wave count confirms which.">52W</button>
+          <button class="toggle-btn" id="pivots-btn" data-toggle="pivots" data-tip="Pivot Points|Classic floor-trader pivot levels calculated from the prior period's High/Low/Close: PP (pivot), R1/R2 (resistance), S1/S2 (support).|Price often pauses, reverses, or accelerates at pivot levels. Combine with wave counts: a Wave 3 breakout through R1 signals strong momentum; a Wave 4 holding above S1 confirms corrective support.">PVTS</button>
         </div>
         <div class="toolbar-sep"></div>
         <button class="toggle-btn" onclick="openSnapshots()" data-tip="Chart Snapshots|Save named snapshots of your current chart annotations and trendlines. Recall any snapshot instantly.|Preserve your analysis at key wave pivots, earnings releases, or before major economic events.">📷 SNAP</button>
@@ -2457,6 +2459,7 @@ let state = {
   showDarkPool: false,   // dark pool / unusual volume candle highlight
   showGaps:    false,    // gap detector overlay
   show52W:     false,    // 52-week high/low lines
+  showPivots:  false,    // pivot points S1/S2/PP/R1/R2
   snapshots: [],         // named chart annotation snapshots
   _aiCommentary: {},     // sym -> { text, at }
   folders: [{ id: 'all', name: 'ALL', tickers: [] }],
@@ -3417,6 +3420,47 @@ function calcStochRSI(bars, rsiPeriod = 14, stochPeriod = 14, kSmooth = 3, dSmoo
   return { k: kSmoothed, d };
 }
 
+// ─── PIVOT POINTS ────────────────────────────────────────────────────────────
+function drawPivotPoints(ctx, bars, px, py, chartLeft, chartRight, chartTop, chartBottom) {
+  if (bars.length < 2) return;
+  // Use the prior completed bar's H/L/C as the pivot period
+  const prev = bars[bars.length - 2];
+  const PP = (prev.h + prev.l + prev.c) / 3;
+  const R1 = 2 * PP - prev.l;
+  const S1 = 2 * PP - prev.h;
+  const R2 = PP + (prev.h - prev.l);
+  const S2 = PP - (prev.h - prev.l);
+
+  const levels = [
+    { val: R2, label: 'R2', color: '#ef5350' },
+    { val: R1, label: 'R1', color: '#ef9a9a' },
+    { val: PP, label: 'PP', color: '#ce93d8' },
+    { val: S1, label: 'S1', color: '#80cbc4' },
+    { val: S2, label: 'S2', color: '#26a69a' },
+  ];
+
+  ctx.save();
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textBaseline = 'middle';
+  for (const lv of levels) {
+    const y = py(lv.val);
+    if (y < chartTop || y > chartBottom) continue;
+    ctx.strokeStyle = lv.color;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(chartLeft, y);
+    ctx.lineTo(chartRight, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = lv.color;
+    ctx.fillText(lv.label, chartRight + 4, y);
+  }
+  ctx.restore();
+}
+
 // ─── 52-WEEK HIGH / LOW ───────────────────────────────────────────────────────
 function draw52WHighLow(ctx, bars, px, py, chartLeft, chartRight, chartTop, chartBottom, curPrice) {
   // Use last 252 trading days (≈1 year). If fewer bars available, use what we have.
@@ -4323,7 +4367,12 @@ function redrawChart() {
     drawGaps(ctx, bars, px, py, chartLeft, chartRight, chartTop, chartBottom);
   }
 
-  // 3c. 52-week high/low
+  // 3c. Pivot points
+  if (state.showPivots) {
+    drawPivotPoints(ctx, bars, px, py, chartLeft, chartRight, chartTop, chartBottom);
+  }
+
+  // 3d. 52-week high/low
   if (state.show52W) {
     draw52WHighLow(ctx, bars, px, py, chartLeft, chartRight, chartTop, chartBottom, bars[bars.length - 1].c);
   }
@@ -10410,6 +10459,9 @@ document.querySelectorAll('.toggle-btn').forEach(btn => {
     } else if (key === 'wk52') {
       state.show52W = !state.show52W;
       btn.classList.toggle('wk52-on', state.show52W);
+    } else if (key === 'pivots') {
+      state.showPivots = !state.showPivots;
+      btn.classList.toggle('pivots-on', state.showPivots);
     }
     redrawChart();
   });
