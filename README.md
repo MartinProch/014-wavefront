@@ -156,6 +156,12 @@ Fundamentals are **cached 24h server-side** (Railway memory) so API quota is not
 
 ## Changelog
 
+### Session 8 (May 2026)
+- ✅ **52-week high/low lines** — **52W** toolbar toggle; gold dashed line at 52W high, red at 52W low; right-side tag shows price + distance % from current; Y-axis auto-expands to include both levels
+- ✅ **Correlation matrix** — **CORR** sidebar tab; Pearson return-correlation heatmap across all watchlist tickers for the active timeframe; green = move together, red = move opposite, near-0 = good diversification; cell size adapts to watchlist size
+- ✅ **Earnings expected-move cone** — earnings date line now includes days-to-earnings countdown and a `±N%` expected-move estimate; a shaded gold cone projects from current price to the earnings date showing the ±1σ expected range (derived from historical EPS surprise magnitude, falling back to 5-day historical-volatility proxy)
+- ✅ **Y-axis auto-zoom** — chart Y-axis now expands to include all drawn forecast prices: wave targets, bull/bear cone endpoints, stop loss, buy/sell zones, analyst mean/high target, and options max pain (hard cap: 3× bar range prevents wild zoom-out)
+
 ### Session 7 (May 2026)
 - ✅ **Gap detector** — **GAPS** toolbar toggle; shades gap-up zones (green) and gap-down zones (red) on the chart; unfilled gaps stay bright with dashed edges and a GAP↑/↓ label — filled gaps fade; price frequently returns to fill gaps making them reliable targets
 - ✅ **AI trade thesis** — **▶ GENERATE** button at the bottom of the WAVES panel; sends wave position, RSI, ADX, Stochastic RSI, and key fundamentals (P/E, revenue growth, analyst target) to Claude; returns a 3-sentence thesis covering wave phase, key price level, and overall bias; result cached per ticker; requires `ANTHROPIC_API_KEY` env var
@@ -227,8 +233,10 @@ Fundamentals are **cached 24h server-side** (Railway memory) so API quota is not
 - 🔜 Backtesting strategy builder (multi-indicator rules, not just wave entry)
 - 🔜 Chart snapshot sharing (export snapshot URL / image with annotations)
 - 🔜 Custom indicator builder (user-defined formulas)
-- 🔜 Portfolio correlation matrix
-- 🔜 Earnings volatility predictor
+- 🔜 SMS alerts (Twilio integration)
+- 🔜 Backtesting strategy builder (multi-indicator rule combinations)
+- 🔜 Chart snapshot sharing (export image with annotations embedded)
+- 🔜 Custom indicator builder (user-defined price formulas)
 
 ---
 

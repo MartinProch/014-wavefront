@@ -416,6 +416,7 @@
   .toggle-btn.stochrsi-on { color: #40c4ff; border-color: #40c4ff; background: rgba(64,196,255,0.12); }
   .toggle-btn.darkpool-on { color: #ff6d00; border-color: #ff6d00; background: rgba(255,109,0,0.12); }
   .toggle-btn.gaps-on     { color: #80cbc4; border-color: #80cbc4; background: rgba(128,203,196,0.12); }
+  .toggle-btn.wk52-on    { color: #ffd740; border-color: #ffd740; background: rgba(255,215,64,0.12); }
   .toggle-btn.featured {
     position: relative;
     box-shadow: 0 0 8px rgba(255,215,64,0.3);
@@ -2258,6 +2259,7 @@
           <button class="toggle-btn" id="stochrsi-btn" data-toggle="stochrsi" data-tip="Stochastic RSI|RSI smoothed through Stochastic formula: %K and %D lines oscillating 0–100. Below 20 = oversold, above 80 = overbought.|More sensitive than standard RSI. Crossovers near 20 or 80 are high-probability entry signals, especially at wave pivots.">STOCH</button>
           <button class="toggle-btn" id="darkpool-btn" data-toggle="darkpool" data-tip="Dark Pool / Block Volume|Highlights candles where volume exceeds 2.5× the 20-bar average — potential institutional block trades or dark pool prints.|Large institutions often accumulate or distribute at wave pivots. Unusual volume confirms the move.">DARK</button>
           <button class="toggle-btn" id="gaps-btn" data-toggle="gaps" data-tip="Gap Detector|Highlights price gaps between sessions: gap-up (open above prior high) in green, gap-down (open below prior low) in red. Unfilled gaps remain shaded until price returns to close them.|Price frequently returns to fill gaps — unfilled gaps act as magnets and are high-probability targets.">GAPS</button>
+          <button class="toggle-btn" id="wk52-btn" data-toggle="wk52" data-tip="52-Week High / Low|Draws horizontal lines at the 52-week high (gold) and 52-week low (red) with distance labels.|A breakout above the 52W high on high volume is one of the strongest momentum signals. Stocks near the 52W low are either deep value or falling knives — wave count confirms which.">52W</button>
         </div>
         <div class="toolbar-sep"></div>
         <button class="toggle-btn" onclick="openSnapshots()" data-tip="Chart Snapshots|Save named snapshots of your current chart annotations and trendlines. Recall any snapshot instantly.|Preserve your analysis at key wave pivots, earnings releases, or before major economic events.">📷 SNAP</button>
@@ -2291,6 +2293,7 @@
       <button class="sb-tab" data-tab="forecast">FORECAST</button>
       <button class="sb-tab" data-tab="signals">SIGNALS</button>
       <button class="sb-tab" data-tab="backtest">BACKTEST</button>
+      <button class="sb-tab" data-tab="corr">CORR</button>
     </div>
     <div id="sidebar-body">
       <div id="forecast-panel" class="sb-pane">
@@ -2365,6 +2368,9 @@
           <button onclick="runBacktest()" style="width:100%;padding:8px;background:var(--blue);color:#fff;border:none;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">▶ RUN BACKTEST</button>
           <div id="bt-results" style="margin-top:12px"></div>
         </div>
+      </div>
+      <div id="corr-panel" class="sb-pane">
+        <div class="panel-empty">CLICK CORR TAB<br>TO SEE CORRELATION MATRIX</div>
       </div>
     </div>
   </aside>
@@ -2444,6 +2450,7 @@ let state = {
   showStochRSI: false,   // Stochastic RSI sub-indicator panel
   showDarkPool: false,   // dark pool / unusual volume candle highlight
   showGaps:    false,    // gap detector overlay
+  show52W:     false,    // 52-week high/low lines
   snapshots: [],         // named chart annotation snapshots
   _aiCommentary: {},     // sym -> { text, at }
   folders: [{ id: 'all', name: 'ALL', tickers: [] }],
@@ -3404,6 +3411,55 @@ function calcStochRSI(bars, rsiPeriod = 14, stochPeriod = 14, kSmooth = 3, dSmoo
   return { k: kSmoothed, d };
 }
 
+// ─── 52-WEEK HIGH / LOW ───────────────────────────────────────────────────────
+function draw52WHighLow(ctx, bars, px, py, chartLeft, chartRight, chartTop, chartBottom, curPrice) {
+  // Use last 252 trading days (≈1 year). If fewer bars available, use what we have.
+  const window = bars.slice(-252);
+  const high52 = Math.max(...window.map(b => b.h));
+  const low52  = Math.min(...window.map(b => b.l));
+
+  const drawLevel = (price, color, label) => {
+    const y = py(price);
+    if (y < chartTop || y > chartBottom) return;
+    const dist = ((curPrice - price) / price * 100).toFixed(1);
+    const distLbl = dist > 0 ? `+${dist}%` : `${dist}%`;
+
+    ctx.save();
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = color + 'bb';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(chartLeft, y);
+    ctx.lineTo(chartRight, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Left badge
+    ctx.font = 'bold 9px JetBrains Mono, monospace';
+    ctx.textAlign = 'left';
+    const lw = ctx.measureText(label).width + 10;
+    ctx.fillStyle = color + '22';
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(chartLeft + 1, y - 8, lw, 14, 2) : ctx.rect(chartLeft + 1, y - 8, lw, 14);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.fillText(label, chartLeft + 5, y + 3);
+
+    // Right price + distance tag
+    const priceStr = `$${fmtPrice(price)} ${distLbl}`;
+    const pw = ctx.measureText(priceStr).width + 10;
+    ctx.fillStyle = color;
+    ctx.fillRect(chartRight + 2, y - 8, pw, 16);
+    ctx.fillStyle = '#0a0e17';
+    ctx.textAlign = 'center';
+    ctx.fillText(priceStr, chartRight + 2 + pw / 2, y + 4);
+    ctx.restore();
+  };
+
+  drawLevel(high52, '#ffd740', '52W HIGH');
+  drawLevel(low52,  '#ff5252', '52W LOW');
+}
+
 // ─── GAP DETECTOR ────────────────────────────────────────────────────────────
 function detectGaps(bars) {
   const gaps = [];
@@ -4261,6 +4317,11 @@ function redrawChart() {
     drawGaps(ctx, bars, px, py, chartLeft, chartRight, chartTop, chartBottom);
   }
 
+  // 3c. 52-week high/low
+  if (state.show52W) {
+    draw52WHighLow(ctx, bars, px, py, chartLeft, chartRight, chartTop, chartBottom, bars[bars.length - 1].c);
+  }
+
   // 4. Price area fill — stronger gradient so the filled region is clearly visible
   const grad = ctx.createLinearGradient(0, chartTop, 0, chartBottom);
   const isUpTrend = bars[bars.length - 1].c >= bars[0].c;
@@ -4874,7 +4935,7 @@ function redrawChart() {
       ctx.fillText('STOP $' + fmtPrice(forecast.stop), chartLeft + 4, yS - 3);
     }
 
-    // Earnings date vertical line
+    // Earnings date vertical line + expected-move cone
     const fundD2 = state.fundamentals[state.selected]?.data;
     const earnTs = fundD2?.calendarEvents?.earnings?.earningsDate?.[0];
     const earnRaw = earnTs ? (typeof earnTs === 'object' ? earnTs.raw : earnTs) : null;
@@ -4889,8 +4950,73 @@ function redrawChart() {
         ctx.setLineDash([4, 3]);
         ctx.beginPath(); ctx.moveTo(earnX, chartTop); ctx.lineTo(earnX, chartBottom); ctx.stroke();
         ctx.setLineDash([]);
-        // label pill
-        const lbl = 'EARN ' + earnDate.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+
+        // Expected move: derive from historical earnings reactions (avg abs % move)
+        const earnHistory = state.fundamentals[state.selected]?.data?.earningsHistory
+          || fundD2?.earnings?.earningsHistory?.history;
+        let expMovePct = null;
+        if (earnHistory && Array.isArray(earnHistory) && earnHistory.length >= 2) {
+          const moves = earnHistory
+            .map(e => {
+              const act = typeof e.epsActual === 'object' ? e.epsActual?.raw : e.epsActual;
+              const est = typeof e.epsEstimate === 'object' ? e.epsEstimate?.raw : e.epsEstimate;
+              return (act != null && est != null && est !== 0)
+                ? Math.abs((act - est) / Math.abs(est)) * 100 : null;
+            })
+            .filter(v => v != null);
+          if (moves.length) expMovePct = moves.reduce((a, b) => a + b, 0) / moves.length;
+        }
+        // Fall back to implied volatility proxy: ATM IV ≈ straddle / stock price
+        if (expMovePct == null) {
+          // Rough proxy: use 30-day historical volatility scaled to ~1 week
+          const closes = bars.slice(-22).map(b => b.c);
+          if (closes.length >= 10) {
+            const returns = closes.slice(1).map((c, i) => Math.log(c / closes[i]));
+            const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+            const variance = returns.reduce((s, r) => s + (r - mean) ** 2, 0) / returns.length;
+            const dailyVol = Math.sqrt(variance);
+            expMovePct = dailyVol * Math.sqrt(5) * 100; // ~1 trading week
+          }
+        }
+
+        // Draw expected-move cone if we have a projection and the earnings is in future
+        const isFuture = earnDate > new Date(bars[bars.length - 1].date);
+        if (expMovePct != null && isFuture) {
+          const curP = bars[bars.length - 1].c;
+          const upP  = curP * (1 + expMovePct / 100);
+          const dnP  = curP * (1 - expMovePct / 100);
+          const yUp  = py(upP), yDn = py(dnP), yCur = py(curP);
+          const xNow = px(bars.length - 1);
+          // Shaded cone from NOW to earnings line
+          ctx.beginPath();
+          ctx.moveTo(xNow, yCur);
+          ctx.lineTo(earnX, yUp);
+          ctx.lineTo(earnX, yDn);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(255,215,64,0.07)';
+          ctx.fill();
+          // Upper / lower bound dashes
+          ctx.setLineDash([3, 4]);
+          ctx.strokeStyle = 'rgba(255,215,64,0.4)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(xNow, yCur); ctx.lineTo(earnX, yUp);
+          ctx.moveTo(xNow, yCur); ctx.lineTo(earnX, yDn);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          // ±% labels at earnings line
+          ctx.font = '9px JetBrains Mono, monospace';
+          ctx.textAlign = 'left';
+          ctx.fillStyle = '#ffd740bb';
+          if (yUp > chartTop)  ctx.fillText(`+${expMovePct.toFixed(1)}%`, earnX + 3, yUp + 3);
+          if (yDn < chartBottom) ctx.fillText(`-${expMovePct.toFixed(1)}%`, earnX + 3, yDn + 3);
+        }
+
+        // label pill — include days to earnings and expected move if available
+        const daysTo = Math.ceil((earnDate - Date.now()) / 86400000);
+        const daysLbl = isFuture ? ` · ${daysTo}d` : '';
+        const movLbl  = (expMovePct != null && isFuture) ? ` ±${expMovePct.toFixed(1)}%` : '';
+        const lbl = 'EARN ' + earnDate.toLocaleDateString('en-US', { month:'short', day:'numeric' }) + daysLbl + movLbl;
         ctx.font = 'bold 10px JetBrains Mono, monospace';
         ctx.textAlign = 'center';
         const tw = ctx.measureText(lbl).width + 10;
@@ -7547,6 +7673,97 @@ function calcConfluence(sym) {
   return result;
 }
 
+// ─── CORRELATION MATRIX ──────────────────────────────────────────────────────
+function renderCorrelation() {
+  const panel = document.getElementById('corr-panel');
+  if (!panel) return;
+
+  const syms = state.tickers.filter(s => state.data[s]?.bars?.length > 20);
+  if (syms.length < 2) {
+    panel.innerHTML = '<div class="panel-empty">ADD AT LEAST 2 TICKERS<br>WITH DATA TO SEE<br>CORRELATION MATRIX</div>';
+    return;
+  }
+
+  // Build daily-return series for each symbol aligned to common dates
+  const returnSeries = {};
+  syms.forEach(s => {
+    const bars = filterBars(state.data[s].bars, state.timeframe);
+    returnSeries[s] = bars.slice(1).map((b, i) => (b.c - bars[i].c) / bars[i].c);
+  });
+
+  // Pearson correlation
+  function corr(a, b) {
+    const len = Math.min(a.length, b.length);
+    if (len < 5) return null;
+    const xa = a.slice(-len), xb = b.slice(-len);
+    const ma = xa.reduce((s, v) => s + v, 0) / len;
+    const mb = xb.reduce((s, v) => s + v, 0) / len;
+    let num = 0, da = 0, db = 0;
+    for (let i = 0; i < len; i++) {
+      const ea = xa[i] - ma, eb = xb[i] - mb;
+      num += ea * eb; da += ea * ea; db += eb * eb;
+    }
+    return (da === 0 || db === 0) ? null : num / Math.sqrt(da * db);
+  }
+
+  // Color: -1 red → 0 gray → +1 green
+  function corrColor(r) {
+    if (r === null) return 'var(--border)';
+    if (r > 0) {
+      const t = r;
+      const g = Math.round(100 + t * 130);
+      return `rgba(0,${g},100,${0.15 + t * 0.55})`;
+    } else {
+      const t = -r;
+      return `rgba(255,${Math.round(60 - t * 60)},68,${0.15 + t * 0.55})`;
+    }
+  }
+  function corrText(r) {
+    if (r === null) return '—';
+    return r.toFixed(2);
+  }
+
+  const n = syms.length;
+  const cellPx = Math.max(32, Math.min(52, Math.floor(248 / n)));
+  const fontSize = cellPx < 40 ? 8 : 10;
+
+  let html = `<div style="padding:10px 12px">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:10px">
+      RETURN CORRELATION · ${state.timeframe}
+    </div>
+    <div style="overflow-x:auto">
+    <table style="border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:${fontSize}px">
+      <thead><tr><td style="width:${cellPx}px"></td>`;
+
+  syms.forEach(s => {
+    html += `<th style="width:${cellPx}px;text-align:center;padding:2px;color:var(--muted);font-weight:600;font-size:${fontSize}px">${s}</th>`;
+  });
+  html += `</tr></thead><tbody>`;
+
+  syms.forEach(sa => {
+    html += `<tr><td style="color:var(--muted);padding:2px 4px;white-space:nowrap;font-weight:600;font-size:${fontSize}px">${sa}</td>`;
+    syms.forEach(sb => {
+      const r = sa === sb ? 1 : corr(returnSeries[sa], returnSeries[sb]);
+      const bg = sa === sb ? 'rgba(68,138,255,0.2)' : corrColor(r);
+      const textCol = sa === sb ? 'var(--blue)' : 'var(--text)';
+      html += `<td style="width:${cellPx}px;height:${cellPx}px;text-align:center;background:${bg};
+        color:${textCol};font-weight:${Math.abs(r ?? 0) > 0.7 ? 700 : 400};
+        border:1px solid rgba(255,255,255,0.04);padding:2px">${sa === sb ? '1.00' : corrText(r)}</td>`;
+    });
+    html += `</tr>`;
+  });
+
+  html += `</tbody></table></div>
+    <div style="margin-top:10px;font-size:9px;color:var(--muted);line-height:1.6">
+      <span style="color:var(--green)">■</span> High positive (move together) &nbsp;
+      <span style="color:var(--red)">■</span> High negative (move opposite)<br>
+      Values near 0 = uncorrelated (good diversification)
+    </div>
+  </div>`;
+
+  panel.innerHTML = html;
+}
+
 // ─── BACKTESTER ──────────────────────────────────────────────────────────────
 function initBacktestPanel() {
   const sel = document.getElementById('bt-sym');
@@ -9813,6 +10030,7 @@ function activateTab(tab) {
   document.getElementById('forecast-panel').classList.toggle('active', tab === 'forecast');
   document.getElementById('signals-panel').classList.toggle('active', tab === 'signals');
   document.getElementById('backtest-panel').classList.toggle('active', tab === 'backtest');
+  document.getElementById('corr-panel').classList.toggle('active', tab === 'corr');
   if (tab === 'fundamentals') renderFundamentals();
   else if (tab === 'research') renderResearch();
   else if (tab === 'journal') renderJournal();
@@ -9824,6 +10042,7 @@ function activateTab(tab) {
   else if (tab === 'forecast') renderForecast();
   else if (tab === 'signals') renderSignals();
   else if (tab === 'backtest') initBacktestPanel();
+  else if (tab === 'corr') renderCorrelation();
   else renderAnalysis();
 }
 document.querySelectorAll('.sb-tab').forEach(btn => {
@@ -10033,6 +10252,9 @@ document.querySelectorAll('.toggle-btn').forEach(btn => {
     } else if (key === 'gaps') {
       state.showGaps = !state.showGaps;
       btn.classList.toggle('gaps-on', state.showGaps);
+    } else if (key === 'wk52') {
+      state.show52W = !state.show52W;
+      btn.classList.toggle('wk52-on', state.show52W);
     }
     redrawChart();
   });
