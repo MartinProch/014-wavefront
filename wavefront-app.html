@@ -411,7 +411,10 @@
   .toggle-btn.vp-on     { background: rgba(0,230,118,0.12);   border-color: #00e676; color: #00e676; }
   .toggle-btn.fibtime-on { color: var(--purple, #b39ddb); border-color: var(--purple, #b39ddb); background: rgba(179,157,219,0.15); }
   .toggle-btn.divg-on   { color: var(--cyan, #18ffff); border-color: var(--cyan, #18ffff); background: rgba(24,255,255,0.12); }
-  .toggle-btn.fc-on     { color: #ff9100; border-color: #ff9100; background: rgba(255,145,0,0.12); }
+  .toggle-btn.fc-on       { color: #ff9100; border-color: #ff9100; background: rgba(255,145,0,0.12); }
+  .toggle-btn.adx-on      { color: #e040fb; border-color: #e040fb; background: rgba(224,64,251,0.12); }
+  .toggle-btn.stochrsi-on { color: #40c4ff; border-color: #40c4ff; background: rgba(64,196,255,0.12); }
+  .toggle-btn.darkpool-on { color: #ff6d00; border-color: #ff6d00; background: rgba(255,109,0,0.12); }
   .toggle-btn.featured {
     position: relative;
     box-shadow: 0 0 8px rgba(255,215,64,0.3);
@@ -2250,7 +2253,12 @@
           <button class="toggle-btn econ-on" data-toggle="econ" data-tip="Economic Calendar|Marks FOMC (Fed decisions), CPI (inflation), and NFP (jobs) dates on the chart with vertical lines.|Stocks often stall or gap around these dates — avoid entering large positions just before them.">ECON</button>
           <button class="toggle-btn" id="sector-btn" onclick="toggleSectorOverlay()" data-tip="Sector Overlay|Overlays the performance of the stock's sector ETF (e.g. XLK for tech) on the same chart.|If the sector is weak but your stock is holding up — it's showing relative strength, a bullish signal.">SECTOR</button>
           <button class="toggle-btn" id="options-btn" onclick="toggleOptionsOverlay()" data-tip="Options Chain|Shows max pain level, top call/put open interest strikes on the chart.|Max pain = price where option buyers lose the most money. Price often gravitates toward it near expiry.">OPT</button>
+          <button class="toggle-btn" id="adx-btn" data-toggle="adx" data-tip="ADX / DMI|Average Directional Index — measures trend strength (0–100). DI+ green = bullish force, DI- red = bearish. ADX above 25 = strong trend, below 20 = choppy range.|Use ADX to confirm Elliott Wave momentum: a rising ADX during Wave 3 validates the impulse.">ADX</button>
+          <button class="toggle-btn" id="stochrsi-btn" data-toggle="stochrsi" data-tip="Stochastic RSI|RSI smoothed through Stochastic formula: %K and %D lines oscillating 0–100. Below 20 = oversold, above 80 = overbought.|More sensitive than standard RSI. Crossovers near 20 or 80 are high-probability entry signals, especially at wave pivots.">STOCH</button>
+          <button class="toggle-btn" id="darkpool-btn" data-toggle="darkpool" data-tip="Dark Pool / Block Volume|Highlights candles where volume exceeds 2.5× the 20-bar average — potential institutional block trades or dark pool prints.|Large institutions often accumulate or distribute at wave pivots. Unusual volume confirms the move.">DARK</button>
         </div>
+        <div class="toolbar-sep"></div>
+        <button class="toggle-btn" onclick="openSnapshots()" data-tip="Chart Snapshots|Save named snapshots of your current chart annotations and trendlines. Recall any snapshot instantly.|Preserve your analysis at key wave pivots, earnings releases, or before major economic events.">📷 SNAP</button>
         <div class="toolbar-sep"></div>
         <button class="toggle-btn" id="fc-expand-btn" onclick="toggleForecastExpand()" data-tip="Expand Forecast|Widens the forecast zone from 18% to 35% of the chart — compresses the historical bars and gives more canvas to the projection area.|Use when you want to see wave targets, the bull/bear cone, and calendar dates at a larger scale.">⟶ FC</button>
         <div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;padding-right:4px">ADVANCED OVERLAYS</div>
@@ -2280,6 +2288,7 @@
       <button class="sb-tab" data-tab="compare">COMPARE</button>
       <button class="sb-tab" data-tab="forecast">FORECAST</button>
       <button class="sb-tab" data-tab="signals">SIGNALS</button>
+      <button class="sb-tab" data-tab="backtest">BACKTEST</button>
     </div>
     <div id="sidebar-body">
       <div id="forecast-panel" class="sb-pane">
@@ -2314,6 +2323,46 @@
       </div>
       <div id="signals-panel" class="sb-pane">
         <div class="panel-empty">CLICK SIGNALS TAB<br>TO SEE SIGNAL BOARD</div>
+      </div>
+      <div id="backtest-panel" class="sb-pane">
+        <div style="padding:12px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:10px">BACKTESTER · WAVE STRATEGY</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+            <label style="font-size:10px;color:var(--muted)">Symbol
+              <select id="bt-sym" style="width:100%;margin-top:3px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:3px;font-size:11px"></select>
+            </label>
+            <label style="font-size:10px;color:var(--muted)">Timeframe
+              <select id="bt-tf" style="width:100%;margin-top:3px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:3px;font-size:11px">
+                <option value="1M">1M</option><option value="3M">3M</option><option value="1Y" selected>1Y</option><option value="2Y">2Y</option><option value="5Y">5Y</option>
+              </select>
+            </label>
+          </div>
+          <div style="margin-bottom:8px;font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:1px">ENTRY RULE</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+            <label style="font-size:10px;color:var(--muted)">Wave entry at
+              <select id="bt-entry-wave" style="width:100%;margin-top:3px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:3px;font-size:11px">
+                <option value="w2">W2 bottom (buy dip)</option>
+                <option value="w4">W4 bottom (buy dip)</option>
+                <option value="w1break">W1 high breakout</option>
+                <option value="w3break">W3 high breakout</option>
+              </select>
+            </label>
+            <label style="font-size:10px;color:var(--muted)">Min confidence %
+              <input id="bt-conf" type="number" value="55" min="0" max="100" style="width:100%;margin-top:3px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:3px;font-size:11px">
+            </label>
+          </div>
+          <div style="margin-bottom:8px;font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:1px">EXIT RULE</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px">
+            <label style="font-size:10px;color:var(--muted)">Take profit %
+              <input id="bt-tp" type="number" value="15" min="1" max="200" style="width:100%;margin-top:3px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:3px;font-size:11px">
+            </label>
+            <label style="font-size:10px;color:var(--muted)">Stop loss %
+              <input id="bt-sl" type="number" value="7" min="1" max="50" style="width:100%;margin-top:3px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:3px;font-size:11px">
+            </label>
+          </div>
+          <button onclick="runBacktest()" style="width:100%;padding:8px;background:var(--blue);color:#fff;border:none;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">▶ RUN BACKTEST</button>
+          <div id="bt-results" style="margin-top:12px"></div>
+        </div>
       </div>
     </div>
   </aside>
@@ -2389,6 +2438,10 @@ let state = {
   showDivergence: false,  // RSI divergence scanner
   showVWAP: false,        // volume-weighted average price
   showFibClusters: false, // multi-source Fibonacci confluence zones
+  showADX:    false,     // ADX / DI+/DI- sub-indicator panel
+  showStochRSI: false,   // Stochastic RSI sub-indicator panel
+  showDarkPool: false,   // dark pool / unusual volume candle highlight
+  snapshots: [],         // named chart annotation snapshots
   folders: [{ id: 'all', name: 'ALL', tickers: [] }],
   activeFolder: 'all',
   waves: {},     // symbol -> wave analysis result
@@ -3269,6 +3322,214 @@ function calcRSISeries(bars, period = 14) {
   return out;
 }
 
+// ─── ADX / DMI ────────────────────────────────────────────────────────────────
+function calcADX(bars, period = 14) {
+  const n = bars.length;
+  const diPlus  = new Array(n).fill(null);
+  const diMinus = new Array(n).fill(null);
+  const adx     = new Array(n).fill(null);
+  if (n < period * 2 + 1) return { diPlus, diMinus, adx };
+
+  const tr = [], pDM = [], mDM = [];
+  for (let i = 1; i < n; i++) {
+    const high = bars[i].h, low = bars[i].l;
+    const prevHigh = bars[i-1].h, prevLow = bars[i-1].l, prevClose = bars[i-1].c;
+    tr.push(Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose)));
+    const upMove = high - prevHigh, downMove = prevLow - low;
+    pDM.push(upMove > downMove && upMove > 0 ? upMove : 0);
+    mDM.push(downMove > upMove && downMove > 0 ? downMove : 0);
+  }
+
+  // Wilder smoothing
+  let aTR = tr.slice(0, period).reduce((a, b) => a + b, 0);
+  let aPDM = pDM.slice(0, period).reduce((a, b) => a + b, 0);
+  let aMDM = mDM.slice(0, period).reduce((a, b) => a + b, 0);
+  const dx = [];
+  for (let i = period; i < tr.length; i++) {
+    if (i > period) {
+      aTR  = aTR  - aTR / period  + tr[i];
+      aPDM = aPDM - aPDM / period + pDM[i];
+      aMDM = aMDM - aMDM / period + mDM[i];
+    }
+    const dp = aTR > 0 ? (aPDM / aTR) * 100 : 0;
+    const dm = aTR > 0 ? (aMDM / aTR) * 100 : 0;
+    diPlus[i + 1]  = dp;
+    diMinus[i + 1] = dm;
+    const dxVal = (dp + dm) > 0 ? Math.abs(dp - dm) / (dp + dm) * 100 : 0;
+    dx.push(dxVal);
+  }
+
+  // ADX = Wilder smooth of DX
+  let adxVal = dx.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  const adxStart = period * 2 + 1;
+  adx[adxStart] = adxVal;
+  for (let i = period; i < dx.length; i++) {
+    adxVal = (adxVal * (period - 1) + dx[i]) / period;
+    adx[i + period + 2] = adxVal;
+  }
+  return { diPlus, diMinus, adx };
+}
+
+// ─── STOCHASTIC RSI ───────────────────────────────────────────────────────────
+function calcStochRSI(bars, rsiPeriod = 14, stochPeriod = 14, kSmooth = 3, dSmooth = 3) {
+  const n = bars.length;
+  const rsi = calcRSISeries(bars, rsiPeriod);
+  const k = new Array(n).fill(null);
+  const d = new Array(n).fill(null);
+
+  for (let i = stochPeriod - 1; i < n; i++) {
+    const window = rsi.slice(i - stochPeriod + 1, i + 1).filter(v => v != null);
+    if (window.length < stochPeriod) continue;
+    const minR = Math.min(...window), maxR = Math.max(...window);
+    k[i] = maxR === minR ? 50 : ((rsi[i] - minR) / (maxR - minR)) * 100;
+  }
+
+  // Smooth %K → Fast%K (kSmooth-period SMA)
+  const kSmoothed = new Array(n).fill(null);
+  for (let i = kSmooth - 1; i < n; i++) {
+    const slice = k.slice(i - kSmooth + 1, i + 1).filter(v => v != null);
+    if (slice.length === kSmooth) kSmoothed[i] = slice.reduce((a, b) => a + b, 0) / kSmooth;
+  }
+
+  // %D = SMA of smoothed %K
+  for (let i = dSmooth - 1; i < n; i++) {
+    const slice = kSmoothed.slice(i - dSmooth + 1, i + 1).filter(v => v != null);
+    if (slice.length === dSmooth) d[i] = slice.reduce((a, b) => a + b, 0) / dSmooth;
+  }
+
+  return { k: kSmoothed, d };
+}
+
+// ─── DRAW ADX SUB-PANEL ───────────────────────────────────────────────────────
+function drawADXPanel(ctx, bars, px, panelTop, panelH, chartLeft, chartRight) {
+  const { diPlus, diMinus, adx } = calcADX(bars);
+  const BG = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#0a0e17';
+  const MUTED = '#4a5e80';
+
+  // Background
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(chartLeft, panelTop, chartRight - chartLeft, panelH);
+
+  // Label
+  ctx.font = 'bold 9px JetBrains Mono, monospace';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = MUTED;
+  ctx.fillText('ADX', chartLeft + 4, panelTop + 10);
+
+  // Reference lines at 20 and 25
+  [20, 25].forEach(level => {
+    const y = panelTop + panelH - (level / 60) * panelH;
+    ctx.setLineDash([2, 3]);
+    ctx.strokeStyle = level === 25 ? 'rgba(255,215,64,0.3)' : 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(chartLeft, y); ctx.lineTo(chartRight, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = level === 25 ? 'rgba(255,215,64,0.5)' : MUTED;
+    ctx.fillText(level, chartRight + 2, y + 3);
+  });
+
+  const drawLine = (series, color) => {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < bars.length; i++) {
+      if (series[i] == null) continue;
+      const x = px(i);
+      const y = panelTop + panelH - Math.min((series[i] / 60), 1) * panelH;
+      if (!started) { ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  drawLine(diPlus,  'rgba(0,230,118,0.8)');
+  drawLine(diMinus, 'rgba(255,23,68,0.8)');
+  drawLine(adx,     'rgba(224,64,251,0.9)');
+
+  // Last value labels
+  const last = bars.length - 1;
+  ctx.font = '9px JetBrains Mono, monospace';
+  ctx.textAlign = 'left';
+  if (adx[last] != null) {
+    ctx.fillStyle = '#e040fb';
+    ctx.fillText(`ADX ${adx[last].toFixed(0)}`, chartLeft + 22, panelTop + 10);
+  }
+  if (diPlus[last] != null) {
+    ctx.fillStyle = '#00e676';
+    ctx.fillText(`+DI ${diPlus[last].toFixed(0)}`, chartLeft + 60, panelTop + 10);
+  }
+  if (diMinus[last] != null) {
+    ctx.fillStyle = '#ff1744';
+    ctx.fillText(`-DI ${diMinus[last].toFixed(0)}`, chartLeft + 95, panelTop + 10);
+  }
+}
+
+// ─── DRAW STOCHASTIC RSI SUB-PANEL ───────────────────────────────────────────
+function drawStochRSIPanel(ctx, bars, px, panelTop, panelH, chartLeft, chartRight) {
+  const { k, d } = calcStochRSI(bars);
+  const MUTED = '#4a5e80';
+
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(chartLeft, panelTop, chartRight - chartLeft, panelH);
+
+  ctx.font = 'bold 9px JetBrains Mono, monospace';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = MUTED;
+  ctx.fillText('STOCH RSI', chartLeft + 4, panelTop + 10);
+
+  // OB/OS reference lines
+  [20, 80].forEach(level => {
+    const y = panelTop + panelH - (level / 100) * panelH;
+    ctx.setLineDash([2, 3]);
+    ctx.strokeStyle = level === 80 ? 'rgba(255,23,68,0.25)' : 'rgba(0,230,118,0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(chartLeft, y); ctx.lineTo(chartRight, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = level === 80 ? 'rgba(255,82,82,0.5)' : 'rgba(0,230,118,0.5)';
+    ctx.textAlign = 'right';
+    ctx.fillText(level, chartRight + 2, y + 3);
+    ctx.textAlign = 'left';
+  });
+
+  const drawLine = (series, color, width = 1.2) => {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < bars.length; i++) {
+      if (series[i] == null) continue;
+      const x = px(i);
+      const y = panelTop + panelH - (series[i] / 100) * panelH;
+      if (!started) { ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  drawLine(k, 'rgba(64,196,255,0.9)', 1.5);
+  drawLine(d, 'rgba(255,171,64,0.7)', 1);
+
+  // Last value labels
+  const last = bars.length - 1;
+  ctx.font = '9px JetBrains Mono, monospace';
+  ctx.textAlign = 'left';
+  if (k[last] != null) {
+    ctx.fillStyle = '#40c4ff';
+    ctx.fillText(`%K ${k[last].toFixed(0)}`, chartLeft + 54, panelTop + 10);
+  }
+  if (d[last] != null) {
+    ctx.fillStyle = '#ffab40';
+    ctx.fillText(`%D ${d[last].toFixed(0)}`, chartLeft + 88, panelTop + 10);
+  }
+}
+
 // Returns { type:'bearish'|'bullish', p1, p2, r1, r2 } or null
 // p1/p2 = bar indices of the two pivots, r1/r2 = RSI values there
 function detectRSIDivergence(bars, rsiSeries, lookback = 60) {
@@ -3582,12 +3843,15 @@ function redrawChart() {
   const PAD_RIGHT = 70;
   const PAD_TOP = 20;
   const PAD_BOTTOM = 30;
-  const VOL_H = state.showVol ? Math.floor(h * 0.18) : 0;
+  const VOL_H       = state.showVol       ? Math.floor(h * 0.18) : 0;
+  const ADX_H       = state.showADX       ? Math.floor(h * 0.14) : 0;
+  const STOCHRSI_H  = state.showStochRSI  ? Math.floor(h * 0.14) : 0;
+  const SUB_PANELS_H = VOL_H + ADX_H + STOCHRSI_H;
 
   const chartLeft = PAD_LEFT;
   const chartRight = w - PAD_RIGHT;
   const chartTop = PAD_TOP;
-  const chartBottom = h - PAD_BOTTOM - VOL_H;
+  const chartBottom = h - PAD_BOTTOM - SUB_PANELS_H;
   const chartW = chartRight - chartLeft;
   const chartH = chartBottom - chartTop;
 
@@ -3885,6 +4149,18 @@ function redrawChart() {
     }
   }
 
+  // ADX sub-panel
+  if (state.showADX && ADX_H > 0) {
+    const adxTop = chartBottom + VOL_H + 4;
+    drawADXPanel(ctx, bars, px, adxTop, ADX_H - 4, chartLeft, chartRight);
+  }
+
+  // Stochastic RSI sub-panel
+  if (state.showStochRSI && STOCHRSI_H > 0) {
+    const srsiTop = chartBottom + VOL_H + ADX_H + 4;
+    drawStochRSIPanel(ctx, bars, px, srsiTop, STOCHRSI_H - 4, chartLeft, chartRight);
+  }
+
   _prom = 1;
 
   // Volume anomaly markers on price chart (thin vertical flash at anomaly bars)
@@ -3930,17 +4206,33 @@ function redrawChart() {
       const bodyBottom = py(Math.min(bar.o, bar.c));
       const bodyH = Math.max(1, bodyBottom - bodyTop);
       const cx = px(i);
+
+      // Dark pool glow — highlight block-volume candles with orange halo
+      const isDarkPool = state.showDarkPool && volAvg20[i] > 0 && bar.v >= volAvg20[i] * 2.5;
+      if (isDarkPool) {
+        ctx.save();
+        ctx.shadowColor = '#ff6d00';
+        ctx.shadowBlur  = 8;
+        ctx.strokeStyle = '#ff6d00cc';
+        ctx.lineWidth   = Math.max(candleW + 3, 3);
+        ctx.beginPath();
+        ctx.moveTo(cx, py(bar.h));
+        ctx.lineTo(cx, py(bar.l));
+        ctx.stroke();
+        ctx.restore();
+      }
+
       // Wick
       ctx.save();
-      ctx.strokeStyle = col + 'aa';
+      ctx.strokeStyle = isDarkPool ? '#ff6d00' : col + 'aa';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(cx, py(bar.h));
       ctx.lineTo(cx, py(bar.l));
       ctx.stroke();
       // Body
-      ctx.fillStyle = isUp ? col + 'cc' : col + 'aa';
-      ctx.strokeStyle = col;
+      ctx.fillStyle = isDarkPool ? '#ff6d00bb' : (isUp ? col + 'cc' : col + 'aa');
+      ctx.strokeStyle = isDarkPool ? '#ff6d00' : col;
       ctx.lineWidth = 0.5;
       ctx.fillRect(cx - candleW / 2, bodyTop, candleW, bodyH);
       ctx.strokeRect(cx - candleW / 2, bodyTop, candleW, bodyH);
@@ -6269,6 +6561,29 @@ function removeAlert(idx) {
   if (state.selected) renderAlertList(state.selected);
 }
 
+function getAlertEmail() {
+  return localStorage.getItem('wf_alert_email') || '';
+}
+function setAlertEmail(email) {
+  localStorage.setItem('wf_alert_email', email.trim());
+}
+
+async function sendEmailAlert(sym, dir, alertPrice, currentPrice) {
+  const to = getAlertEmail();
+  if (!to) return;
+  try {
+    await fetch('/api/email-alert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to,
+        subject: `⚡ WAVEFRONT Alert: ${sym} price ${dir} $${fmtPrice(alertPrice)}`,
+        message: `Your WAVEFRONT price alert has been triggered.\n\nSymbol: ${sym}\nCondition: Price ${dir} $${fmtPrice(alertPrice)}\nCurrent price: $${fmtPrice(currentPrice)}\n\nLog in to WAVEFRONT to review your position.\n\n---\nWAVEFRONT Elliott Wave Terminal`
+      })
+    });
+  } catch(e) { /* email is best-effort */ }
+}
+
 function checkAlerts() {
   if (!state.alerts.length) return;
   state.alerts.forEach(a => {
@@ -6289,6 +6604,7 @@ function checkAlerts() {
           icon: '/icons/icon-192.png',
         });
       }
+      sendEmailAlert(a.sym, a.dir, a.price, price);
       if (state.selected === a.sym) renderAlertList(a.sym);
     }
   });
@@ -7150,6 +7466,136 @@ function calcConfluence(sym) {
   return result;
 }
 
+// ─── BACKTESTER ──────────────────────────────────────────────────────────────
+function initBacktestPanel() {
+  const sel = document.getElementById('bt-sym');
+  if (!sel) return;
+  sel.innerHTML = state.tickers.map(s => `<option value="${s}"${s === state.selected ? ' selected' : ''}>${s}</option>`).join('');
+}
+
+function runBacktest() {
+  const sym       = document.getElementById('bt-sym')?.value;
+  const tf        = document.getElementById('bt-tf')?.value  || '1Y';
+  const entryRule = document.getElementById('bt-entry-wave')?.value || 'w2';
+  const minConf   = parseFloat(document.getElementById('bt-conf')?.value) || 55;
+  const tpPct     = parseFloat(document.getElementById('bt-tp')?.value)   || 15;
+  const slPct     = parseFloat(document.getElementById('bt-sl')?.value)   || 7;
+  const out       = document.getElementById('bt-results');
+  if (!sym || !state.data[sym]) {
+    out.innerHTML = '<div style="color:var(--muted);font-size:11px;padding:8px 0">No data for selected symbol.</div>';
+    return;
+  }
+
+  const bars = filterBars(state.data[sym].bars, tf);
+  if (bars.length < 30) { out.innerHTML = '<div style="color:var(--muted);font-size:11px">Not enough data.</div>'; return; }
+
+  // Slide a detection window across the bars, looking for entry signals
+  const trades = [];
+  const WIN = Math.max(20, Math.floor(bars.length * 0.12));
+
+  for (let i = WIN; i < bars.length - 1; i++) {
+    const slice = bars.slice(0, i + 1);
+    const wave  = detectWaves(slice);
+    if (!wave || wave.confidence < minConf) continue;
+
+    // Entry signal logic
+    let signal = false;
+    const pivots = wave.pivots || [];
+    const lastPivot = pivots[pivots.length - 1];
+    if (!lastPivot) continue;
+
+    const barsSinceLastPivot = i - (bars.indexOf(lastPivot) < 0
+      ? 0 : bars.findIndex(b => b === lastPivot));
+
+    if (entryRule === 'w2' && wave.currentWave === 'W2' && barsSinceLastPivot <= 3) signal = true;
+    if (entryRule === 'w4' && wave.currentWave === 'W4' && barsSinceLastPivot <= 3) signal = true;
+    if (entryRule === 'w1break' && wave.currentWave === 'W1' && bars[i].c > bars[i-1].h) signal = true;
+    if (entryRule === 'w3break' && wave.currentWave === 'W3' && bars[i].c > bars[i-1].h) signal = true;
+
+    if (!signal) continue;
+
+    // Avoid re-entering if a trade is still open
+    if (trades.length && !trades[trades.length - 1].exitIdx) continue;
+
+    const entry = bars[i + 1]?.o || bars[i].c;
+    const tp    = entry * (1 + tpPct / 100);
+    const sl    = entry * (1 - slPct / 100);
+    let exitIdx = null, exitPrice = null, result = null;
+
+    for (let j = i + 1; j < bars.length; j++) {
+      if (bars[j].h >= tp) { exitIdx = j; exitPrice = tp; result = 'win'; break; }
+      if (bars[j].l <= sl) { exitIdx = j; exitPrice = sl; result = 'loss'; break; }
+    }
+    if (!exitIdx) { exitIdx = bars.length - 1; exitPrice = bars[bars.length - 1].c; result = exitPrice >= entry ? 'win' : 'loss'; }
+
+    trades.push({ entryIdx: i + 1, exitIdx, entry, exitPrice, result,
+      pnlPct: (exitPrice - entry) / entry * 100 });
+    i = exitIdx; // skip to after this trade
+  }
+
+  if (!trades.length) {
+    out.innerHTML = '<div style="color:var(--muted);font-size:11px;padding:8px 0">No signals found. Try lowering min confidence or a different entry rule.</div>';
+    return;
+  }
+
+  const wins      = trades.filter(t => t.result === 'win').length;
+  const losses    = trades.filter(t => t.result === 'loss').length;
+  const winRate   = (wins / trades.length * 100).toFixed(0);
+  const avgWin    = trades.filter(t => t.result === 'win').reduce((s, t) => s + t.pnlPct, 0) / (wins || 1);
+  const avgLoss   = trades.filter(t => t.result === 'loss').reduce((s, t) => s + t.pnlPct, 0) / (losses || 1);
+  const expectancy = (wins / trades.length * avgWin + losses / trades.length * avgLoss).toFixed(2);
+  const totalPnl  = trades.reduce((s, t) => s + t.pnlPct, 0).toFixed(1);
+  const rrr       = losses > 0 ? (Math.abs(avgWin / avgLoss)).toFixed(2) : '∞';
+
+  const wCol = parseFloat(winRate) >= 55 ? 'var(--green)' : parseFloat(winRate) >= 45 ? 'var(--gold)' : 'var(--red)';
+  const eCol = parseFloat(expectancy) > 0 ? 'var(--green)' : 'var(--red)';
+
+  // Mini equity curve (cumulative P&L)
+  const equity = [0];
+  trades.forEach(t => equity.push(equity[equity.length - 1] + t.pnlPct));
+  const eMin = Math.min(...equity), eMax = Math.max(...equity);
+  const eRange = eMax - eMin || 1;
+  const EW = 260, EH = 50;
+  const ePoints = equity.map((v, i) => {
+    const x = (i / (equity.length - 1)) * EW;
+    const y = EH - ((v - eMin) / eRange) * EH;
+    return `${x},${y}`;
+  }).join(' ');
+  const lastEq = equity[equity.length - 1];
+  const eLineCol = lastEq >= 0 ? '#00e676' : '#ff1744';
+
+  out.innerHTML = `
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:10px 12px;font-family:'JetBrains Mono',monospace">
+      <div style="font-size:9px;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px">${sym} · ${tf} · ${entryRule.toUpperCase()} · TP${tpPct}% SL${slPct}%</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 10px;margin-bottom:10px">
+        <div><div style="font-size:9px;color:var(--muted)">TRADES</div><div style="font-size:16px;font-weight:700">${trades.length}</div></div>
+        <div><div style="font-size:9px;color:var(--muted)">WIN RATE</div><div style="font-size:16px;font-weight:700;color:${wCol}">${winRate}%</div></div>
+        <div><div style="font-size:9px;color:var(--muted)">R:R</div><div style="font-size:16px;font-weight:700">${rrr}</div></div>
+        <div><div style="font-size:9px;color:var(--muted)">EXPECTANCY</div><div style="font-size:14px;font-weight:700;color:${eCol}">${expectancy}%</div></div>
+        <div><div style="font-size:9px;color:var(--muted)">TOTAL P&L</div><div style="font-size:14px;font-weight:700;color:${parseFloat(totalPnl)>=0?'var(--green)':'var(--red)'}">${parseFloat(totalPnl)>=0?'+':''}${totalPnl}%</div></div>
+        <div><div style="font-size:9px;color:var(--muted)">AVG WIN</div><div style="font-size:14px;color:var(--green)">+${avgWin.toFixed(1)}%</div></div>
+      </div>
+      <div style="font-size:9px;color:var(--muted);margin-bottom:4px">EQUITY CURVE</div>
+      <svg width="${EW}" height="${EH}" style="display:block;background:rgba(0,0,0,0.2);border-radius:3px;overflow:visible">
+        <polyline points="${ePoints}" fill="none" stroke="${eLineCol}" stroke-width="1.5"/>
+        <line x1="0" y1="${EH - (-eMin / eRange * EH)}" x2="${EW}" y2="${EH - (-eMin / eRange * EH)}" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="3,3"/>
+      </svg>
+      <div style="font-size:9px;color:var(--muted);margin-top:10px;margin-bottom:4px">TRADE LOG</div>
+      <div style="max-height:160px;overflow-y:auto">
+        ${trades.slice(-20).reverse().map(t => {
+          const d1 = bars[t.entryIdx]?.date?.toLocaleDateString('en-US',{month:'short',day:'numeric'}) || '—';
+          const d2 = bars[t.exitIdx]?.date?.toLocaleDateString('en-US',{month:'short',day:'numeric'}) || '—';
+          const col = t.result === 'win' ? 'var(--green)' : 'var(--red)';
+          return `<div style="display:flex;justify-content:space-between;font-size:10px;border-bottom:1px dotted rgba(255,255,255,0.04);padding:3px 0">
+            <span style="color:var(--muted)">${d1}→${d2}</span>
+            <span>$${t.entry.toFixed(2)} → $${t.exitPrice.toFixed(2)}</span>
+            <span style="color:${col};font-weight:700">${t.pnlPct >= 0 ? '+' : ''}${t.pnlPct.toFixed(1)}%</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
 // ─── SIGNAL BOARD RENDER ─────────────────────────────────────────────────────
 function renderSignals() {
   const panel = document.getElementById('signals-panel');
@@ -7270,6 +7716,79 @@ function renderSignals() {
   }
 
   html += `</div>`;
+
+  // ── OPTIONS FLOW / UNUSUAL ACTIVITY SECTION ────────────────────────────────
+  const optSyms = state.tickers.filter(sym => state.optionsData?.[sym]);
+  if (optSyms.length) {
+    html += `<div style="padding:0 12px 10px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);
+        margin:12px 0 8px;border-top:1px solid var(--border);padding-top:10px">OPTIONS FLOW</div>`;
+
+    optSyms.forEach(sym => {
+      const opt = state.optionsData[sym];
+      if (!opt) return;
+      const pc    = opt.pcRatio;
+      const pcCol = pc == null ? 'var(--muted)' : pc < 0.7 ? 'var(--green)' : pc > 1.3 ? 'var(--red)' : 'var(--gold)';
+      const pcLbl = pc == null ? '—' : pc.toFixed(2);
+      const pcSig = pc == null ? '' : pc < 0.7 ? '(BULLISH)' : pc > 1.3 ? '(BEARISH)' : '(NEUTRAL)';
+
+      // Unusual OI: calls or puts with OI significantly above average
+      const allStrikes = [...(opt.topCalls || []), ...(opt.topPuts || [])];
+      const avgOI = allStrikes.length ? allStrikes.reduce((s, x) => s + (x.oi || 0), 0) / allStrikes.length : 0;
+      const unusualCalls = (opt.topCalls || []).filter(c => c.oi > avgOI * 1.5);
+      const unusualPuts  = (opt.topPuts  || []).filter(p => p.oi > avgOI * 1.5);
+
+      html += `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;
+        padding:8px 10px;margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700">${sym}</span>
+          <span style="font-size:10px;color:${pcCol};font-family:'JetBrains Mono',monospace">
+            P/C ${pcLbl} <span style="font-size:9px">${pcSig}</span>
+          </span>
+        </div>`;
+
+      if (opt.maxPain != null) {
+        const bars = state.data[sym]?.bars;
+        const cur  = bars?.[bars.length - 1]?.c;
+        const dist = cur ? ((opt.maxPain - cur) / cur * 100).toFixed(1) : null;
+        const distLbl = dist != null ? ` (${dist > 0 ? '+' : ''}${dist}% from now)` : '';
+        html += `<div style="font-size:10px;margin-bottom:4px">
+          <span style="color:var(--muted)">Max Pain: </span>
+          <span style="color:#ff9800;font-family:'JetBrains Mono',monospace;font-weight:600">$${opt.maxPain.toFixed(0)}</span>
+          <span style="color:var(--muted);font-size:9px">${distLbl}</span>
+        </div>`;
+      }
+
+      if (unusualCalls.length) {
+        html += `<div style="font-size:9px;color:var(--green);margin-bottom:2px">
+          🟢 Heavy CALL OI: ${unusualCalls.map(c => `$${c.strike}`).join(', ')}
+        </div>`;
+      }
+      if (unusualPuts.length) {
+        html += `<div style="font-size:9px;color:var(--red);margin-bottom:2px">
+          🔴 Heavy PUT OI: ${unusualPuts.map(p => `$${p.strike}`).join(', ')}
+        </div>`;
+      }
+      if (!unusualCalls.length && !unusualPuts.length) {
+        html += `<div style="font-size:9px;color:var(--muted)">No unusual OI concentrations detected.</div>`;
+      }
+
+      html += `</div>`;
+    });
+
+    html += `<div style="font-size:9px;color:var(--muted);margin-top:4px">
+      Enable OPT overlay on a ticker first to populate options data.
+    </div></div>`;
+  } else {
+    html += `<div style="padding:0 12px 12px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);
+        margin:12px 0 6px;border-top:1px solid var(--border);padding-top:10px">OPTIONS FLOW</div>
+      <div style="font-size:10px;color:var(--muted)">
+        Click <strong>OPT</strong> on the toolbar for any ticker to load options data, then return here to see unusual activity.
+      </div>
+    </div>`;
+  }
+
   panel.innerHTML = html;
 }
 
@@ -8152,6 +8671,16 @@ function renderAnalysis() {
     <div class="alert-add-row">
       <input class="alert-input" id="alert-price-input" type="number" placeholder="Alert price…" step="0.01">
       <button class="alert-add-btn" onclick="addAlert('${sym}')">+ ADD</button>
+    </div>
+    <div style="margin-top:8px;display:flex;align-items:center;gap:6px">
+      <span style="font-size:10px;color:var(--muted);white-space:nowrap">📧 Email:</span>
+      <input id="alert-email-input" type="email" placeholder="you@email.com (optional)"
+        value="${getAlertEmail()}"
+        onchange="setAlertEmail(this.value)"
+        style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 7px;border-radius:3px;font-size:10px;font-family:'JetBrains Mono',monospace">
+    </div>
+    <div style="font-size:9px;color:var(--muted);margin-top:3px;line-height:1.4">
+      Requires SMTP_HOST/USER/PASS env vars on server.
     </div>
   </div>`;
 
@@ -9180,6 +9709,7 @@ function activateTab(tab) {
   document.getElementById('compare-panel').classList.toggle('active', tab === 'compare');
   document.getElementById('forecast-panel').classList.toggle('active', tab === 'forecast');
   document.getElementById('signals-panel').classList.toggle('active', tab === 'signals');
+  document.getElementById('backtest-panel').classList.toggle('active', tab === 'backtest');
   if (tab === 'fundamentals') renderFundamentals();
   else if (tab === 'research') renderResearch();
   else if (tab === 'journal') renderJournal();
@@ -9190,6 +9720,7 @@ function activateTab(tab) {
   else if (tab === 'compare') renderCompare();
   else if (tab === 'forecast') renderForecast();
   else if (tab === 'signals') renderSignals();
+  else if (tab === 'backtest') initBacktestPanel();
   else renderAnalysis();
 }
 document.querySelectorAll('.sb-tab').forEach(btn => {
@@ -9387,6 +9918,15 @@ document.querySelectorAll('.toggle-btn').forEach(btn => {
     } else if (key === 'fibclusters') {
       state.showFibClusters = !state.showFibClusters;
       btn.classList.toggle('fibclusters-on', state.showFibClusters);
+    } else if (key === 'adx') {
+      state.showADX = !state.showADX;
+      btn.classList.toggle('adx-on', state.showADX);
+    } else if (key === 'stochrsi') {
+      state.showStochRSI = !state.showStochRSI;
+      btn.classList.toggle('stochrsi-on', state.showStochRSI);
+    } else if (key === 'darkpool') {
+      state.showDarkPool = !state.showDarkPool;
+      btn.classList.toggle('darkpool-on', state.showDarkPool);
     }
     redrawChart();
   });
@@ -9763,9 +10303,11 @@ function pixelToChart(px_coord, py_coord) {
   if (!bars?.length) return null;
   const w = canvas.clientWidth, h = canvas.clientHeight;
   const PAD_LEFT = 14, PAD_RIGHT = 70, PAD_TOP = 20, PAD_BOTTOM = 30;
-  const VOL_H = state.showVol ? Math.floor(h * 0.18) : 0;
+  const VOL_H      = state.showVol      ? Math.floor(h * 0.18) : 0;
+  const ADX_H      = state.showADX      ? Math.floor(h * 0.14) : 0;
+  const STOCHRSI_H = state.showStochRSI ? Math.floor(h * 0.14) : 0;
   const chartLeft = PAD_LEFT, chartRight = w - PAD_RIGHT;
-  const chartTop = PAD_TOP, chartBottom = h - PAD_BOTTOM - VOL_H;
+  const chartTop = PAD_TOP, chartBottom = h - PAD_BOTTOM - VOL_H - ADX_H - STOCHRSI_H;
   const chartW = chartRight - chartLeft, chartH = chartBottom - chartTop;
   const FORECAST_RATIO = state.forecastExpanded ? 0.35 : 0.18;
   const barsW = chartW - Math.floor(chartW * FORECAST_RATIO);
@@ -10373,9 +10915,11 @@ async function fetchOptionsData(sym) {
     if (!r.ok) return;
     const d = await r.json();
     if (!d.error) {
+      // Attach pcRatio directly onto the stored object for SIGNALS tab
+      d.pcRatio = (d.totalPutOI && d.totalCallOI) ? d.totalPutOI / d.totalCallOI : null;
       state.optionsData[sym] = d;
       // Show P/C ratio in a toast
-      const pcr = d.totalPutOI && d.totalCallOI ? (d.totalPutOI / d.totalCallOI).toFixed(2) : null;
+      const pcr = d.pcRatio != null ? d.pcRatio.toFixed(2) : null;
       const expDate = d.expiry ? new Date(d.expiry * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
       showToast(`${sym} options (exp ${expDate}) — Max pain $${d.maxPain?.toFixed(0) ?? '?'} · P/C ratio ${pcr ?? '?'}`);
     }
@@ -11589,6 +12133,112 @@ function calcRisk() {
       ${potProfit != null ? `<span style="color:var(--muted);font-size:9px">POTENTIAL PROFIT</span><span style="color:var(--green);font-weight:700">+$${potProfit.toFixed(0)}</span>` : ''}
     </div>`;
 }
+</script>
+
+<!-- ── CHART SNAPSHOTS MODAL ─────────────────────────────────────────────── -->
+<div id="snapshot-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:9999;background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+  padding:18px 20px;min-width:340px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.5);
+  font-family:'JetBrains Mono',monospace">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <span style="font-size:11px;letter-spacing:2px;color:var(--text);font-weight:700">📷 CHART SNAPSHOTS</span>
+    <button onclick="document.getElementById('snapshot-modal').style.display='none'"
+      style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1">✕</button>
+  </div>
+  <div style="display:flex;gap:6px;margin-bottom:12px">
+    <input id="snap-name-input" type="text" placeholder="Snapshot name…" maxlength="40"
+      style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);
+      padding:6px 10px;border-radius:3px;font-size:11px;font-family:'JetBrains Mono',monospace">
+    <button onclick="saveSnapshot()"
+      style="background:var(--blue);color:#fff;border:none;padding:6px 14px;border-radius:3px;
+      font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;cursor:pointer">SAVE</button>
+  </div>
+  <div id="snap-list" style="max-height:300px;overflow-y:auto"></div>
+</div>
+
+<script>
+function openSnapshots() {
+  renderSnapshotList();
+  const nameEl = document.getElementById('snap-name-input');
+  if (nameEl && state.selected) nameEl.value = `${state.selected} ${state.timeframe} ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'})}`;
+  document.getElementById('snapshot-modal').style.display = 'block';
+}
+
+function saveSnapshot() {
+  const nameEl = document.getElementById('snap-name-input');
+  const name = nameEl?.value.trim();
+  if (!name) { showToast('Enter a snapshot name'); return; }
+  const snap = {
+    id: Date.now(),
+    name,
+    sym: state.selected,
+    tf: state.timeframe,
+    trendlines: JSON.parse(JSON.stringify(state.trendlines)),
+    alerts: JSON.parse(JSON.stringify(state.alerts)),
+    createdAt: new Date().toISOString()
+  };
+  state.snapshots.push(snap);
+  try { localStorage.setItem('wf_snapshots', JSON.stringify(state.snapshots)); } catch(e) {}
+  showToast(`Snapshot "${name}" saved`);
+  renderSnapshotList();
+}
+
+function loadSnapshot(id) {
+  const snap = state.snapshots.find(s => s.id === id);
+  if (!snap) return;
+  state.trendlines = JSON.parse(JSON.stringify(snap.trendlines));
+  state.alerts     = JSON.parse(JSON.stringify(snap.alerts));
+  saveTrendlines();
+  saveState();
+  if (snap.sym && state.data[snap.sym]) {
+    state.selected = snap.sym;
+    state.timeframe = snap.tf || state.timeframe;
+    updateTickerLabel(snap.sym);
+    redrawChart();
+  }
+  document.getElementById('snapshot-modal').style.display = 'none';
+  showToast(`Snapshot "${snap.name}" loaded`);
+}
+
+function deleteSnapshot(id) {
+  state.snapshots = state.snapshots.filter(s => s.id !== id);
+  try { localStorage.setItem('wf_snapshots', JSON.stringify(state.snapshots)); } catch(e) {}
+  renderSnapshotList();
+}
+
+function renderSnapshotList() {
+  const el = document.getElementById('snap-list');
+  if (!el) return;
+  const snaps = state.snapshots.slice().reverse();
+  if (!snaps.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:10px;padding:8px 0">No snapshots yet. Save your current chart annotations above.</div>';
+    return;
+  }
+  el.innerHTML = snaps.map(s => {
+    const date = new Date(s.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    const lines = Object.values(s.trendlines || {}).reduce((a, v) => a + (v?.length || 0), 0);
+    const alerts = (s.alerts || []).length;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.name}</div>
+        <div style="font-size:9px;color:var(--muted);margin-top:2px">${s.sym || '—'} · ${s.tf || '—'} · ${date} · ${lines} lines · ${alerts} alerts</div>
+      </div>
+      <button onclick="loadSnapshot(${s.id})"
+        style="background:rgba(68,138,255,0.15);border:1px solid var(--blue);color:var(--blue);
+        padding:3px 10px;border-radius:3px;font-size:10px;font-family:'JetBrains Mono',monospace;cursor:pointer">LOAD</button>
+      <button onclick="deleteSnapshot(${s.id})"
+        style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:2px">×</button>
+    </div>`;
+  }).join('');
+}
+
+// Load saved snapshots on init
+(function() {
+  try {
+    const saved = localStorage.getItem('wf_snapshots');
+    if (saved) state.snapshots = JSON.parse(saved);
+  } catch(e) {}
+})();
 </script>
 </body>
 </html>

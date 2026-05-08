@@ -156,6 +156,15 @@ Fundamentals are **cached 24h server-side** (Railway memory) so API quota is not
 
 ## Changelog
 
+### Session 6 (May 2026)
+- ✅ **ADX / DMI indicator** — sub-panel below chart showing ADX trend strength (purple), DI+ (green), DI- (red) with 20/25 reference lines and live value readout; toggle via **ADX** button
+- ✅ **Stochastic RSI** — sub-panel showing %K (cyan) and %D (amber) lines with 20/80 overbought/oversold bands; toggle via **STOCH** button; panels stack under volume
+- ✅ **Dark pool / block volume detection** — **DARK** toggle highlights candles where volume ≥ 2.5× 20-bar average with an orange glow/halo; identifies potential institutional accumulation or distribution
+- ✅ **Backtesting engine** — **BACKTEST** sidebar tab; select symbol + timeframe + entry rule (W2 dip / W4 dip / W1 breakout / W3 breakout) + TP/SL % → shows trades, win rate, R:R, expectancy, total P&L, SVG equity curve, and scrollable trade log
+- ✅ **Email alerts** — alerts fire to your email when a price level is crossed; enter email in the WAVES panel alert section; requires `SMTP_HOST` / `SMTP_USER` / `SMTP_PASS` env vars on server (no external packages — raw SMTP via Node built-ins)
+- ✅ **Chart snapshots** — **📷 SNAP** toolbar button opens a modal to save/load named annotation snapshots (trendlines + alerts); snapshots persist to localStorage; restore any saved state in one click
+- ✅ **Options flow scanner in SIGNALS tab** — after enabling OPT overlay for any ticker, the SIGNALS tab shows P/C ratio (green < 0.7 bullish, red > 1.3 bearish), max pain distance from current price, and heavy call/put OI strikes flagged as unusual
+
 ### Session 5 (May 2026)
 - ✅ **FORECAST tab** — dedicated sidebar tab showing full trade plan: entry zone, stop loss, target, R:R, bull/bear scenario cards, wave price targets with calendar-estimated dates, buy/sell zones with ⚡ pulse when price is in zone, analyst target confluence, and clickable multi-TF cards
 - ✅ **Trade setup card in WAVES panel** — always-visible header card at top of WAVES panel with ENTRY / STOP / TARGET / R:R grid plus embedded position size calculator (account size + risk % → shares, dollar risk, profit potential)
@@ -210,12 +219,12 @@ Fundamentals are **cached 24h server-side** (Railway memory) so API quota is not
 
 ## Planned Features
 
-- 🔜 Dark pool detection (unusual volume)
-- 🔜 Backtesting engine (replay strategies on historical data)
-- 🔜 Custom indicators (ADX, Stochastic RSI)
-- 🔜 Email/SMS alerts
-- 🔜 Chart snapshots (save/share annotations)
-- 🔜 Options flow / unusual activity scanner
+- 🔜 SMS alerts (Twilio integration)
+- 🔜 Backtesting strategy builder (multi-indicator rules, not just wave entry)
+- 🔜 Chart snapshot sharing (export snapshot URL / image with annotations)
+- 🔜 Custom indicator builder (user-defined formulas)
+- 🔜 Portfolio correlation matrix
+- 🔜 Earnings volatility predictor
 
 ---
 

@@ -1216,6 +1216,78 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── /api/claude (AI commentary via Anthropic) ─────────────────────────────
+  // ── Email alert endpoint ─────────────────────────────────────────────────
+  if (pathname === '/api/email-alert' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { to, subject, message } = JSON.parse(body);
+        if (!to || !subject || !message) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing fields' }));
+          return;
+        }
+
+        const smtpHost = process.env.SMTP_HOST;
+        const smtpPort = parseInt(process.env.SMTP_PORT || '587');
+        const smtpUser = process.env.SMTP_USER;
+        const smtpPass = process.env.SMTP_PASS;
+
+        if (!smtpHost || !smtpUser || !smtpPass) {
+          // No SMTP configured — echo back so client can fallback to browser notification
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, reason: 'smtp_not_configured' }));
+          return;
+        }
+
+        // Use Node's built-in net/tls to send a raw SMTP message (no external deps)
+        const net = require('net');
+        const tls = require('tls');
+        const emailBody = [
+          `From: WAVEFRONT <${smtpUser}>`,
+          `To: ${to}`,
+          `Subject: ${subject}`,
+          `MIME-Version: 1.0`,
+          `Content-Type: text/plain; charset=UTF-8`,
+          ``,
+          message
+        ].join('\r\n');
+
+        const b64Creds = Buffer.from(`\0${smtpUser}\0${smtpPass}`).toString('base64');
+        const cmds = [
+          `EHLO wavefront\r\n`,
+          `AUTH PLAIN ${b64Creds}\r\n`,
+          `MAIL FROM:<${smtpUser}>\r\n`,
+          `RCPT TO:<${to}>\r\n`,
+          `DATA\r\n`,
+          `${emailBody}\r\n.\r\n`,
+          `QUIT\r\n`
+        ];
+        let cmdIdx = 0;
+        const sock = smtpPort === 465 ? tls.connect(smtpPort, smtpHost) : net.connect(smtpPort, smtpHost);
+        sock.setEncoding('utf8');
+        sock.on('data', data => {
+          if (data.startsWith('2') || data.startsWith('3')) {
+            if (cmdIdx < cmds.length) sock.write(cmds[cmdIdx++]);
+          }
+        });
+        sock.on('end', () => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true }));
+        });
+        sock.on('error', e => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, reason: e.message }));
+        });
+      } catch(e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   if (pathname === '/api/claude' && req.method === 'POST') {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
