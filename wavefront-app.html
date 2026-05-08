@@ -3928,32 +3928,52 @@ function redrawChart() {
   let minP = Math.min(...bars.map(b => b.l));
   let maxP = Math.max(...bars.map(b => b.h));
 
-  // Expand Y range so wave target lines stay on-canvas instead of being clipped.
-  // Cap at 60% of bar range to avoid excessive zoom-out for wild projections.
-  if (fcWave && !fcWave.complete) {
-    const _wd  = fcWave.waveData;
-    const _isUp = fcWave.direction === 'up';
-    const _wPrices = [];
-    if (fcWave.pattern === 'IMPULSE' && _wd) {
-      const { p3, p4, w1 } = _wd;
-      if (p3) _wPrices.push(p3.price);
-      if (p4) _wPrices.push(p4.price);
-      if (p4 && w1 != null) {
-        _wPrices.push(_isUp ? p4.price + w1       : p4.price - w1);
-        _wPrices.push(_isUp ? p4.price + w1 * 1.618 : p4.price - w1 * 1.618);
+  // Expand Y range so all forecast targets stay on-canvas.
+  // Collect every price that will be drawn in the forecast zone and grow minP/maxP to fit.
+  // Hard cap: never expand more than 3× the historical bar range to prevent absurd zoom-out
+  // on extreme projections (e.g. a 10× analyst target on a penny stock).
+  {
+    const _expand = [];
+
+    // Wave target prices from waveData
+    if (fcWave && !fcWave.complete) {
+      const _wd   = fcWave.waveData;
+      const _isUp = fcWave.direction === 'up';
+      if (fcWave.pattern === 'IMPULSE' && _wd) {
+        const { p3, p4, w1 } = _wd;
+        if (p3) _expand.push(p3.price);
+        if (p4) _expand.push(p4.price);
+        if (p4 && w1 != null) {
+          _expand.push(_isUp ? p4.price + w1         : p4.price - w1);
+          _expand.push(_isUp ? p4.price + w1 * 1.618 : p4.price - w1 * 1.618);
+        }
+      } else if (fcWave.pattern === 'CORRECTION' && fcWave.fibLevels) {
+        fcWave.fibLevels.forEach(f => _expand.push(f.price));
       }
-    } else if (fcWave.pattern === 'CORRECTION' && fcWave.fibLevels) {
-      fcWave.fibLevels
-        .filter(f => f.ratio === 1.618 || f.ratio === 2.618)
-        .forEach(f => _wPrices.push(f.price));
     }
-    const _barRange = maxP - minP;
-    const _cap = _barRange * 0.6;
-    _wPrices.forEach(p => {
-      if (isFinite(p)) {
-        if (p > maxP && p <= maxP + _cap) maxP = p;
-        else if (p < minP && p >= minP - _cap) minP = p;
-      }
+
+    // Forecast object targets (bull target, bear target, target1, stop)
+    if (forecast) {
+      [forecast.target, forecast.target1, forecast.target2,
+       forecast.bullTarget, forecast.bearTarget, forecast.stop,
+       forecast.buyLow, forecast.buyHigh, forecast.sellLow, forecast.sellHigh
+      ].forEach(p => { if (p != null && isFinite(p)) _expand.push(p); });
+    }
+
+    // Analyst price target
+    if (fcFund?.targetMeanPrice)  _expand.push(fcFund.targetMeanPrice);
+    if (fcFund?.targetHighPrice)  _expand.push(fcFund.targetHighPrice);
+
+    // Options max pain
+    const _optD = state.optionsData?.[state.selected];
+    if (_optD?.maxPain) _expand.push(_optD.maxPain);
+
+    const _barRange = maxP - minP || maxP * 0.1;
+    const _hardCap  = _barRange * 3;  // never expand more than 3× bar range
+    _expand.forEach(p => {
+      if (!isFinite(p)) return;
+      if      (p > maxP && p <= maxP + _hardCap) maxP = p;
+      else if (p < minP && p >= minP - _hardCap) minP = p;
     });
   }
 
