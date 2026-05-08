@@ -156,6 +156,11 @@ Fundamentals are **cached 24h server-side** (Railway memory) so API quota is not
 
 ## Changelog
 
+### Session 9 (May 2026)
+- ✅ **VWAP deviation bands ±1σ/±2σ** — when VWAP overlay is active, dashed purple bands show ±1σ and ±2σ from cumulative VWAP; computed from rolling variance; useful for mean-reversion entries
+- ✅ **Multi-timeframe alignment table** — WAVES panel now includes a TIMEFRAME ALIGNMENT section showing direction, wave position, RSI, and MA50/MA200 status for all 6 timeframes (1W–5Y) at a glance
+- ✅ **Watchlist CSV import/export** — ⬇ CSV / ⬆ CSV buttons in watchlist header; export saves all tickers to a one-column CSV; import reads the file and adds any new valid tickers via the normal load flow
+
 ### Session 8 (May 2026)
 - ✅ **52-week high/low lines** — **52W** toolbar toggle; gold dashed line at 52W high, red at 52W low; right-side tag shows price + distance % from current; Y-axis auto-expands to include both levels
 - ✅ **Correlation matrix** — **CORR** sidebar tab; Pearson return-correlation heatmap across all watchlist tickers for the active timeframe; green = move together, red = move opposite, near-0 = good diversification; cell size adapts to watchlist size

@@ -2188,7 +2188,13 @@
 
   <!-- LEFT SIDEBAR -->
   <aside id="sidebar-left">
-    <div class="watchlist-header">WATCHLIST</div>
+    <div class="watchlist-header" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>WATCHLIST</span>
+      <span style="display:flex;gap:4px;">
+        <button onclick="exportWatchlistCSV()" title="Export watchlist to CSV" style="font-size:9px;padding:2px 6px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;border-radius:2px;font-family:'JetBrains Mono',monospace;letter-spacing:1px;">⬇ CSV</button>
+        <label title="Import tickers from CSV" style="font-size:9px;padding:2px 6px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;border-radius:2px;font-family:'JetBrains Mono',monospace;letter-spacing:1px;">⬆ CSV<input type="file" accept=".csv,text/csv" onchange="importWatchlistCSV(this)" style="display:none;"></label>
+      </span>
+    </div>
     <div id="folder-tabs"></div>
     <div class="watchlist-sort-row">
       <button class="sort-btn" data-sort="default" onclick="setWatchlistSort('default')">DEFAULT</button>
@@ -4463,6 +4469,62 @@ function redrawChart() {
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.restore();
+
+      // VWAP deviation bands ±1σ and ±2σ
+      {
+        // Compute cumulative variance for rolling VWAP stddev
+        let cumTP = 0, cumTP2 = 0, cumVol = 0;
+        const sigma = bars.map((b, i) => {
+          const tp = (b.h + b.l + b.c) / 3;
+          const v  = b.v || 1;
+          cumTP  += tp * v;
+          cumTP2 += tp * tp * v;
+          cumVol += v;
+          const vwap = cumTP / cumVol;
+          const variance = Math.max(0, cumTP2 / cumVol - vwap * vwap);
+          return Math.sqrt(variance);
+        });
+
+        const drawBand = (mult, alpha) => {
+          ['upper', 'lower'].forEach(side => {
+            ctx.save();
+            ctx.strokeStyle = `rgba(179,136,255,${alpha})`;
+            ctx.lineWidth   = 1;
+            ctx.setLineDash([3, 5]);
+            ctx.beginPath();
+            let started = false;
+            vwapVals.forEach((v, i) => {
+              if (v == null || sigma[i] == null) return;
+              const price = side === 'upper' ? v + mult * sigma[i] : v - mult * sigma[i];
+              const x = px(i), y = py(price);
+              if (y < chartTop || y > chartBottom) { started = false; return; }
+              if (!started) { ctx.moveTo(x, y); started = true; }
+              else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+          });
+        };
+        drawBand(1, 0.35);
+        drawBand(2, 0.20);
+
+        // Right-axis labels for bands
+        const lastI = bars.length - 1;
+        const lv = vwapVals[lastI], ls = sigma[lastI];
+        if (lv != null && ls != null) {
+          ctx.font = '8px JetBrains Mono, monospace';
+          ctx.textAlign = 'left';
+          [{ mult: 2, lbl: '+2σ' }, { mult: 1, lbl: '+1σ' }, { mult: -1, lbl: '-1σ' }, { mult: -2, lbl: '-2σ' }].forEach(({ mult, lbl }) => {
+            const p = lv + mult * ls;
+            if (p >= minP && p <= maxP) {
+              ctx.fillStyle = 'rgba(179,136,255,0.6)';
+              ctx.fillText(lbl, chartRight + 4, py(p) - 2);
+            }
+          });
+        }
+      }
+
       _prom = 1;
       // Add to right-axis labels below
       const lastVWAP = vwapVals[vwapVals.length - 1];
@@ -6904,6 +6966,39 @@ function clearCompare() {
   updateCompareBanner();
 }
 
+// ─── WATCHLIST CSV IMPORT / EXPORT ───────────────────────────────────────────
+function exportWatchlistCSV() {
+  const rows = ['symbol'];
+  state.tickers.forEach(sym => rows.push(sym));
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'wavefront-watchlist.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('Watchlist exported');
+}
+
+function importWatchlistCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    const lines = e.target.result.split(/\r?\n/).map(l => l.trim().toUpperCase());
+    const syms = lines
+      .filter(l => l && l !== 'SYMBOL' && /^[A-Z]{1,5}$/.test(l))
+      .filter(s => !state.tickers.includes(s));
+    if (!syms.length) { showToast('No new tickers found'); return; }
+    showToast(`Importing ${syms.length} ticker(s)…`);
+    for (const sym of syms) {
+      try { await addTicker(sym); } catch(e) { /* skip bad tickers */ }
+    }
+    showToast(`Imported ${syms.length} ticker(s)`);
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
 // ─── WATCHLIST RENDER ────────────────────────────────────────────────────────
 function setWatchlistSort(key) {
   const s = state.watchlistSort;
@@ -8981,6 +9076,66 @@ function renderAnalysis() {
       Requires SMTP_HOST/USER/PASS env vars on server.
     </div>
   </div>`;
+
+  // ── MULTI-TIMEFRAME ALIGNMENT TABLE ───────────────────────────────────────
+  {
+    const TFS = ['1W','1M','3M','1Y','2Y','5Y'];
+    const tfRows = TFS.map(tf => {
+      const tfBars = filterBars(state.data[sym].bars, tf);
+      if (tfBars.length < 20) return null;
+      const w   = detectWaves(tfBars);
+      const rsi = calcRSI(tfBars);
+      const last = tfBars[tfBars.length - 1];
+      const prev = tfBars[tfBars.length - 2] || last;
+      const ma50  = calcSMA(tfBars, 50);
+      const ma200 = calcSMA(tfBars, 200);
+      const aboveMa50  = ma50[ma50.length - 1]  != null && last.c > ma50[ma50.length - 1];
+      const aboveMa200 = ma200[ma200.length - 1] != null && last.c > ma200[ma200.length - 1];
+      const trend = w ? (w.direction === 'up' ? '▲' : '▼') : '—';
+      const trendCol = w ? (w.direction === 'up' ? 'var(--green)' : 'var(--red)') : 'var(--muted)';
+      const rsiCol = rsi == null ? 'var(--muted)' : rsi >= 70 ? 'var(--red)' : rsi <= 30 ? 'var(--green)' : 'var(--text)';
+      const wLbl = w ? w.currentWave : '—';
+      const wCol = { 'Ⅰ':'#00e676','Ⅱ':'#ff9100','Ⅲ':'#00e676','Ⅳ':'#ffd740','Ⅴ':'#18ffff','post-Ⅴ':'#6688aa','A':'#ff5252','B':'#ff9100','C':'#ff5252' }[wLbl] || 'var(--muted)';
+      const isActive = tf === state.timeframe;
+      return { tf, trend, trendCol, rsi, rsiCol, wLbl, wCol, aboveMa50, aboveMa200, isActive };
+    }).filter(Boolean);
+
+    if (tfRows.length) {
+      html += `<div class="panel-section">
+        <div class="panel-title">TIMEFRAME ALIGNMENT</div>
+        <table style="width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:10px">
+          <thead>
+            <tr style="font-size:8px;color:var(--muted)">
+              <th style="text-align:left;padding:2px 4px;font-weight:400">TF</th>
+              <th style="text-align:center;padding:2px 4px;font-weight:400">DIR</th>
+              <th style="text-align:center;padding:2px 4px;font-weight:400">WAVE</th>
+              <th style="text-align:center;padding:2px 4px;font-weight:400">RSI</th>
+              <th style="text-align:center;padding:2px 4px;font-weight:400">50</th>
+              <th style="text-align:center;padding:2px 4px;font-weight:400">200</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tfRows.map(r => `
+              <tr style="border-top:1px solid rgba(255,255,255,0.04);${r.isActive ? 'background:rgba(68,138,255,0.06)' : ''}">
+                <td style="padding:3px 4px;color:${r.isActive ? 'var(--blue)' : 'var(--muted)'};font-weight:${r.isActive ? 700 : 400}">${r.tf}</td>
+                <td style="text-align:center;padding:3px 4px;color:${r.trendCol};font-weight:700">${r.trend}</td>
+                <td style="text-align:center;padding:3px 4px;color:${r.wCol};font-weight:600">${r.wLbl}</td>
+                <td style="text-align:center;padding:3px 4px;color:${r.rsiCol}">${r.rsi != null ? Math.round(r.rsi) : '—'}</td>
+                <td style="text-align:center;padding:3px 4px;color:${r.aboveMa50 ? 'var(--green)' : 'var(--red)'}">
+                  ${r.aboveMa50 ? '▲' : '▼'}
+                </td>
+                <td style="text-align:center;padding:3px 4px;color:${r.aboveMa200 ? 'var(--green)' : 'var(--red)'}">
+                  ${r.aboveMa200 ? '▲' : '▼'}
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+        <div style="font-size:9px;color:var(--muted);margin-top:5px;line-height:1.5">
+          Active TF highlighted blue. ▲/▼ = price above/below MA.
+        </div>
+      </div>`;
+    }
+  }
 
   // ── AI COMMENTARY ──────────────────────────────────────────────────────────
   const cachedAI = state._aiCommentary?.[sym];
