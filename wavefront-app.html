@@ -415,6 +415,7 @@
   .toggle-btn.adx-on      { color: #e040fb; border-color: #e040fb; background: rgba(224,64,251,0.12); }
   .toggle-btn.stochrsi-on { color: #40c4ff; border-color: #40c4ff; background: rgba(64,196,255,0.12); }
   .toggle-btn.darkpool-on { color: #ff6d00; border-color: #ff6d00; background: rgba(255,109,0,0.12); }
+  .toggle-btn.gaps-on     { color: #80cbc4; border-color: #80cbc4; background: rgba(128,203,196,0.12); }
   .toggle-btn.featured {
     position: relative;
     box-shadow: 0 0 8px rgba(255,215,64,0.3);
@@ -2256,6 +2257,7 @@
           <button class="toggle-btn" id="adx-btn" data-toggle="adx" data-tip="ADX / DMI|Average Directional Index — measures trend strength (0–100). DI+ green = bullish force, DI- red = bearish. ADX above 25 = strong trend, below 20 = choppy range.|Use ADX to confirm Elliott Wave momentum: a rising ADX during Wave 3 validates the impulse.">ADX</button>
           <button class="toggle-btn" id="stochrsi-btn" data-toggle="stochrsi" data-tip="Stochastic RSI|RSI smoothed through Stochastic formula: %K and %D lines oscillating 0–100. Below 20 = oversold, above 80 = overbought.|More sensitive than standard RSI. Crossovers near 20 or 80 are high-probability entry signals, especially at wave pivots.">STOCH</button>
           <button class="toggle-btn" id="darkpool-btn" data-toggle="darkpool" data-tip="Dark Pool / Block Volume|Highlights candles where volume exceeds 2.5× the 20-bar average — potential institutional block trades or dark pool prints.|Large institutions often accumulate or distribute at wave pivots. Unusual volume confirms the move.">DARK</button>
+          <button class="toggle-btn" id="gaps-btn" data-toggle="gaps" data-tip="Gap Detector|Highlights price gaps between sessions: gap-up (open above prior high) in green, gap-down (open below prior low) in red. Unfilled gaps remain shaded until price returns to close them.|Price frequently returns to fill gaps — unfilled gaps act as magnets and are high-probability targets.">GAPS</button>
         </div>
         <div class="toolbar-sep"></div>
         <button class="toggle-btn" onclick="openSnapshots()" data-tip="Chart Snapshots|Save named snapshots of your current chart annotations and trendlines. Recall any snapshot instantly.|Preserve your analysis at key wave pivots, earnings releases, or before major economic events.">📷 SNAP</button>
@@ -2441,7 +2443,9 @@ let state = {
   showADX:    false,     // ADX / DI+/DI- sub-indicator panel
   showStochRSI: false,   // Stochastic RSI sub-indicator panel
   showDarkPool: false,   // dark pool / unusual volume candle highlight
+  showGaps:    false,    // gap detector overlay
   snapshots: [],         // named chart annotation snapshots
+  _aiCommentary: {},     // sym -> { text, at }
   folders: [{ id: 'all', name: 'ALL', tickers: [] }],
   activeFolder: 'all',
   waves: {},     // symbol -> wave analysis result
@@ -3400,6 +3404,58 @@ function calcStochRSI(bars, rsiPeriod = 14, stochPeriod = 14, kSmooth = 3, dSmoo
   return { k: kSmoothed, d };
 }
 
+// ─── GAP DETECTOR ────────────────────────────────────────────────────────────
+function detectGaps(bars) {
+  const gaps = [];
+  for (let i = 1; i < bars.length; i++) {
+    const prev = bars[i - 1], cur = bars[i];
+    if (cur.o > prev.h) {
+      // Gap up: from prev.h to cur.o
+      const filled = bars.slice(i + 1).some(b => b.l <= prev.h);
+      gaps.push({ type: 'up', lo: prev.h, hi: cur.o, barIdx: i, filled });
+    } else if (cur.o < prev.l) {
+      // Gap down: from cur.o to prev.l
+      const filled = bars.slice(i + 1).some(b => b.h >= prev.l);
+      gaps.push({ type: 'down', lo: cur.o, hi: prev.l, barIdx: i, filled });
+    }
+  }
+  return gaps;
+}
+
+function drawGaps(ctx, bars, px, py, chartLeft, chartRight, chartTop, chartBottom) {
+  const gaps = detectGaps(bars);
+  ctx.save();
+  gaps.forEach(g => {
+    const yHi = py(g.hi), yLo = py(g.lo);
+    const xStart = px(g.barIdx);
+    const xEnd   = chartRight;
+    const col    = g.type === 'up' ? 'rgba(0,230,118,' : 'rgba(255,23,68,';
+    const alpha  = g.filled ? '0.04)' : '0.10)';
+    ctx.fillStyle = col + alpha.slice(0);
+    ctx.fillRect(xStart, yHi, xEnd - xStart, yLo - yHi);
+    if (!g.filled) {
+      // Border lines on gap edges
+      ctx.setLineDash([3, 4]);
+      ctx.strokeStyle = g.type === 'up' ? 'rgba(0,230,118,0.45)' : 'rgba(255,23,68,0.45)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(xStart, yHi); ctx.lineTo(xEnd, yHi);
+      ctx.moveTo(xStart, yLo); ctx.lineTo(xEnd, yLo);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Label at right edge
+      ctx.font = 'bold 8px JetBrains Mono, monospace';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = g.type === 'up' ? 'rgba(0,230,118,0.7)' : 'rgba(255,23,68,0.7)';
+      const mid = (yHi + yLo) / 2;
+      if (mid > chartTop && mid < chartBottom) {
+        ctx.fillText(g.type === 'up' ? 'GAP↑' : 'GAP↓', chartRight - 2, mid + 3);
+      }
+    }
+  });
+  ctx.restore();
+}
+
 // ─── DRAW ADX SUB-PANEL ───────────────────────────────────────────────────────
 function drawADXPanel(ctx, bars, px, panelTop, panelH, chartLeft, chartRight) {
   const { diPlus, diMinus, adx } = calcADX(bars);
@@ -4179,6 +4235,11 @@ function redrawChart() {
     ctx.stroke();
     ctx.restore();
   });
+
+  // 3b. Gap detector
+  if (state.showGaps) {
+    drawGaps(ctx, bars, px, py, chartLeft, chartRight, chartTop, chartBottom);
+  }
 
   // 4. Price area fill — stronger gradient so the filled region is clearly visible
   const grad = ctx.createLinearGradient(0, chartTop, 0, chartBottom);
@@ -8684,6 +8745,28 @@ function renderAnalysis() {
     </div>
   </div>`;
 
+  // ── AI COMMENTARY ──────────────────────────────────────────────────────────
+  const cachedAI = state._aiCommentary?.[sym];
+  html += `<div class="panel-section" id="ai-commentary-section-${sym}">
+    <div class="panel-title" style="display:flex;justify-content:space-between;align-items:center">
+      <span>🤖 AI TRADE THESIS</span>
+      <button id="ai-fetch-btn-${sym}" onclick="fetchAICommentary('${sym}')"
+        style="background:rgba(68,138,255,0.12);border:1px solid var(--blue);color:var(--blue);
+        font-family:'JetBrains Mono',monospace;font-size:9px;padding:3px 10px;border-radius:3px;cursor:pointer;letter-spacing:1px">
+        ${cachedAI ? '↻ REFRESH' : '▶ GENERATE'}
+      </button>
+    </div>
+    <div id="ai-commentary-body-${sym}">
+      ${cachedAI
+        ? `<div style="font-size:11px;line-height:1.65;color:var(--text)">${escHtml(cachedAI.text)}</div>
+           <div style="font-size:9px;color:var(--muted);margin-top:6px">${timeAgo(cachedAI.at)} · claude-haiku-4-5</div>`
+        : `<div style="font-size:10px;color:var(--muted);line-height:1.5">
+             Click <strong>▶ GENERATE</strong> to get a 3-sentence AI trade thesis that combines the current Elliott Wave position, momentum signals, and fundamental data for ${sym}.
+           </div>`
+      }
+    </div>
+  </div>`;
+
   panel.innerHTML = html;
 
   // Wire up position calculator
@@ -9927,6 +10010,9 @@ document.querySelectorAll('.toggle-btn').forEach(btn => {
     } else if (key === 'darkpool') {
       state.showDarkPool = !state.showDarkPool;
       btn.classList.toggle('darkpool-on', state.showDarkPool);
+    } else if (key === 'gaps') {
+      state.showGaps = !state.showGaps;
+      btn.classList.toggle('gaps-on', state.showGaps);
     }
     redrawChart();
   });
@@ -11023,6 +11109,68 @@ function toggleMobileMode() {
     setTimeout(resizeCanvas, 50);
   }
   setTimeout(resizeCanvas, 100);
+}
+
+// ─── AI TRADE THESIS (WAVES PANEL) ───────────────────────────────────────────
+async function fetchAICommentary(sym) {
+  if (!sym || !state.data[sym]) return;
+  const btn  = document.getElementById(`ai-fetch-btn-${sym}`);
+  const body = document.getElementById(`ai-commentary-body-${sym}`);
+  if (!btn || !body) return;
+
+  btn.disabled = true;
+  btn.textContent = 'THINKING…';
+  body.innerHTML = '<div style="color:var(--muted);font-size:10px;font-family:\'JetBrains Mono\',monospace;padding:8px 0">Generating AI trade thesis…</div>';
+
+  const bars = filterBars(state.data[sym].bars, state.timeframe);
+  const last  = bars[bars.length - 1];
+  const wave  = state.waves[sym];
+  const fund  = state.fundamentals[sym]?.data;
+
+  // Build a rich prompt with wave + fundamentals
+  const waveStr   = wave ? `Wave ${wave.currentWave} of ${wave.pattern} (${wave.direction}), confidence ${wave.confidence}%` : 'wave data unavailable';
+  const rsi       = calcRSI(bars);
+  const { adx }   = calcADX(bars);
+  const adxLast   = adx.filter(v => v != null).slice(-1)[0];
+  const { k: sk } = calcStochRSI(bars);
+  const skLast    = sk.filter(v => v != null).slice(-1)[0];
+
+  const peStr     = fund?.pe           ? `P/E ${fund.pe.toFixed(1)}`           : '';
+  const revGrow   = fund?.revenueGrowth ? `Rev growth ${(fund.revenueGrowth*100).toFixed(1)}%` : '';
+  const analTgt   = fund?.targetMeanPrice ? `Analyst target $${fund.targetMeanPrice.toFixed(0)}` : '';
+  const fundStr   = [peStr, revGrow, analTgt].filter(Boolean).join(', ') || 'fundamentals unavailable';
+
+  const prompt = `You are an expert Elliott Wave trader and fundamental analyst. Write a concise 3-sentence trade thesis for ${sym}.
+
+Data:
+- Price: $${fmtPrice(last.c)}, Timeframe: ${state.timeframe}
+- Elliott Wave: ${waveStr}
+- RSI: ${rsi ? Math.round(rsi) : '?'}, ADX: ${adxLast ? adxLast.toFixed(0) : '?'}, Stoch RSI %K: ${skLast ? skLast.toFixed(0) : '?'}
+- Fundamentals: ${fundStr}
+
+Instructions: sentence 1 — current wave position and what phase of the cycle we are in; sentence 2 — key price level to watch (entry zone or stop); sentence 3 — overall bias (bullish/bearish/neutral) and the most important risk. Be specific, no fluff.`;
+
+  try {
+    const r = await fetch(`${API_BASE}/api/claude`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await r.json();
+    if (data.error === 'No API key') {
+      body.innerHTML = '<div style="color:var(--muted);font-size:10px">Add <code>ANTHROPIC_API_KEY</code> to your server environment variables to enable AI commentary.</div>';
+    } else if (data.commentary) {
+      state._aiCommentary[sym] = { text: data.commentary, at: Date.now() };
+      body.innerHTML = `<div style="font-size:11px;line-height:1.65;color:var(--text)">${escHtml(data.commentary)}</div>
+        <div style="font-size:9px;color:var(--muted);margin-top:6px">just now · claude-haiku-4-5</div>`;
+    } else {
+      body.innerHTML = '<div style="color:var(--red);font-size:10px">No response from AI.</div>';
+    }
+  } catch(e) {
+    body.innerHTML = `<div style="color:var(--red);font-size:10px">Error: ${escHtml(e.message)}</div>`;
+  }
+  btn.disabled = false;
+  btn.textContent = '↻ REFRESH';
 }
 
 // ─── AI WAVE ANALYSIS ────────────────────────────────────────────────────────

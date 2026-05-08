@@ -156,6 +156,10 @@ Fundamentals are **cached 24h server-side** (Railway memory) so API quota is not
 
 ## Changelog
 
+### Session 7 (May 2026)
+- ✅ **Gap detector** — **GAPS** toolbar toggle; shades gap-up zones (green) and gap-down zones (red) on the chart; unfilled gaps stay bright with dashed edges and a GAP↑/↓ label — filled gaps fade; price frequently returns to fill gaps making them reliable targets
+- ✅ **AI trade thesis** — **▶ GENERATE** button at the bottom of the WAVES panel; sends wave position, RSI, ADX, Stochastic RSI, and key fundamentals (P/E, revenue growth, analyst target) to Claude; returns a 3-sentence thesis covering wave phase, key price level, and overall bias; result cached per ticker; requires `ANTHROPIC_API_KEY` env var
+
 ### Session 6 (May 2026)
 - ✅ **ADX / DMI indicator** — sub-panel below chart showing ADX trend strength (purple), DI+ (green), DI- (red) with 20/25 reference lines and live value readout; toggle via **ADX** button
 - ✅ **Stochastic RSI** — sub-panel showing %K (cyan) and %D (amber) lines with 20/80 overbought/oversold bands; toggle via **STOCH** button; panels stack under volume
