@@ -420,6 +420,7 @@
   .toggle-btn.pivots-on  { color: #ce93d8; border-color: #ce93d8; background: rgba(206,147,216,0.12); }
   .toggle-btn.bb-on          { color: #ffb74d; border-color: #ffb74d; background: rgba(255,183,77,0.12); }
   .toggle-btn.supertrend-on  { color: #69f0ae; border-color: #69f0ae; background: rgba(105,240,174,0.12); }
+  .toggle-btn.ichimoku-on    { color: #b39ddb; border-color: #b39ddb; background: rgba(179,157,219,0.12); }
   .toggle-btn.macd-on    { color: #4fc3f7; border-color: #4fc3f7; background: rgba(79,195,247,0.12); }
   .toggle-btn.obv-on     { color: #a5d6a7; border-color: #a5d6a7; background: rgba(165,214,167,0.12); }
   .toggle-btn.featured {
@@ -2273,6 +2274,7 @@
           <button class="toggle-btn" id="wk52-btn" data-toggle="wk52" data-tip="52-Week High / Low|Draws horizontal lines at the 52-week high (gold) and 52-week low (red) with distance labels.|A breakout above the 52W high on high volume is one of the strongest momentum signals. Stocks near the 52W low are either deep value or falling knives — wave count confirms which.">52W</button>
           <button class="toggle-btn" id="obv-btn" data-toggle="obv" data-tip="On-Balance Volume (OBV)|Cumulative volume indicator: adds volume on up-days, subtracts on down-days. Rising OBV = buying pressure, falling OBV = distribution. OBV often leads price.|OBV rising while price is flat = accumulation before a Wave 1 or Wave 3 breakout. OBV diverging from price at a high = smart money exiting before a Wave 5 reversal.">OBV</button>
           <button class="toggle-btn" id="macd-btn" data-toggle="macd" data-tip="MACD|Moving Average Convergence Divergence: EMA12 − EMA26 (MACD line, cyan) with EMA9 signal line (amber) and histogram bars. Histogram above zero = bullish momentum, below = bearish.|Bullish crossover (MACD crossing above signal) near a Wave 2 or Wave 4 low is a strong entry signal. Divergence between MACD and price at Wave 5 warns of exhaustion.">MACD</button>
+          <button class="toggle-btn" id="ichimoku-btn" data-toggle="ichimoku" data-tip="Ichimoku Cloud|Full Ichimoku system: Kumo cloud (green = bullish, red = bearish), Tenkan-sen (conversion, blue), Kijun-sen (base, red), Chikou Span (lagging, grey). Price above cloud = uptrend.|Price entering the cloud = transition / consolidation. A Wave 3 breaking above a red cloud flipping green is one of the strongest momentum signals in technical analysis.">ICHI</button>
           <button class="toggle-btn" id="supertrend-btn" data-toggle="supertrend" data-tip="Supertrend|ATR-based trend line that flips green (bullish) or red (bearish) on closes above/below the band. ▲ marks bullish crossovers, ▼ bearish. Default: ATR period 10, multiplier 3.|A Supertrend flip to green at a Wave 2 or Wave 4 low is a high-conviction entry signal. Riding the green line as support confirms Wave 3 momentum.">ST</button>
           <button class="toggle-btn" id="bb-btn" data-toggle="bb" data-tip="Bollinger Bands|SMA20 ± 2 standard deviations. Upper band = overbought zone, lower band = oversold zone. Band squeeze (narrow width) signals low volatility before a breakout.|Price walking the upper band during Wave 3 confirms strong momentum. A close outside the bands followed by a return inside is a classic reversal signal at Wave 5 or C.">BB</button>
           <button class="toggle-btn" id="pivots-btn" data-toggle="pivots" data-tip="Pivot Points|Classic floor-trader pivot levels calculated from the prior period's High/Low/Close: PP (pivot), R1/R2 (resistance), S1/S2 (support).|Price often pauses, reverses, or accelerates at pivot levels. Combine with wave counts: a Wave 3 breakout through R1 signals strong momentum; a Wave 4 holding above S1 confirms corrective support.">PVTS</button>
@@ -2470,6 +2472,7 @@ let state = {
   showPivots:  false,    // pivot points S1/S2/PP/R1/R2
   showBB:          false,    // Bollinger Bands SMA20 ±2σ
   showSupertrend:  false,    // Supertrend overlay
+  showIchimoku:    false,    // Ichimoku Cloud
   showMACD:    false,    // MACD sub-panel
   showOBV:     false,    // On-Balance Volume sub-panel
   snapshots: [],         // named chart annotation snapshots
@@ -3589,6 +3592,91 @@ function drawMACDPanel(ctx, bars, px, panelTop, panelH, chartLeft, chartRight) {
   ctx.restore();
 }
 
+// ─── ICHIMOKU CLOUD ──────────────────────────────────────────────────────────
+function drawIchimoku(ctx, bars, px, py, chartTop, chartBottom) {
+  const n = bars.length;
+  const midHL = (a, b) => bars.slice(a, b + 1).reduce((acc, bar) => {
+    acc.h = Math.max(acc.h, bar.h); acc.l = Math.min(acc.l, bar.l); return acc;
+  }, { h: -Infinity, l: Infinity });
+
+  // Tenkan-sen: (9-period high + low) / 2
+  const tenkan = bars.map((_, i) => {
+    if (i < 8) return null;
+    const r = midHL(i - 8, i);
+    return (r.h + r.l) / 2;
+  });
+
+  // Kijun-sen: (26-period high + low) / 2
+  const kijun = bars.map((_, i) => {
+    if (i < 25) return null;
+    const r = midHL(i - 25, i);
+    return (r.h + r.l) / 2;
+  });
+
+  // Senkou Span A: (Tenkan + Kijun) / 2 plotted 26 bars ahead
+  // Senkou Span B: (52-period high + low) / 2 plotted 26 bars ahead
+  // We store them at the display index (i + 26) but cap at n - 1
+  const spanA = new Array(n).fill(null);
+  const spanB = new Array(n).fill(null);
+  for (let i = 0; i < n; i++) {
+    const di = i + 26;
+    if (di >= n) continue;
+    if (tenkan[i] != null && kijun[i] != null)
+      spanA[di] = (tenkan[i] + kijun[i]) / 2;
+    if (i >= 51) {
+      const r = midHL(i - 51, i);
+      spanB[di] = (r.h + r.l) / 2;
+    }
+  }
+
+  // Chikou Span: close plotted 26 bars back
+  const chikou = new Array(n).fill(null);
+  for (let i = 26; i < n; i++) chikou[i - 26] = bars[i].c;
+
+  ctx.save();
+
+  // ── Kumo (cloud) ──
+  // Find contiguous segments where both spanA and spanB are defined
+  let i = 0;
+  while (i < n) {
+    if (spanA[i] == null || spanB[i] == null) { i++; continue; }
+    let j = i;
+    while (j < n && spanA[j] != null && spanB[j] != null) j++;
+    // Draw cloud for [i, j-1]
+    ctx.beginPath();
+    for (let k = i; k < j; k++) ctx[k === i ? 'moveTo' : 'lineTo'](px(k), py(spanA[k]));
+    for (let k = j - 1; k >= i; k--) ctx.lineTo(px(k), py(spanB[k]));
+    ctx.closePath();
+    // Colour by last bar: green if SpanA >= SpanB, red otherwise
+    const bullCloud = spanA[j - 1] >= spanB[j - 1];
+    ctx.fillStyle = bullCloud ? 'rgba(38,166,154,0.15)' : 'rgba(239,83,80,0.15)';
+    ctx.fill();
+    i = j;
+  }
+
+  // ── Span A line ──
+  const drawLine = (arr, color, dash = []) => {
+    ctx.strokeStyle = color; ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.8; ctx.setLineDash(dash);
+    ctx.beginPath(); let started = false;
+    for (let k = 0; k < n; k++) {
+      if (arr[k] == null) { started = false; continue; }
+      const y = py(arr[k]);
+      if (y < chartTop - 20 || y > chartBottom + 20) { started = false; continue; }
+      if (!started) { ctx.moveTo(px(k), y); started = true; } else ctx.lineTo(px(k), y);
+    }
+    ctx.stroke();
+  };
+
+  drawLine(spanA,  'rgba(38,166,154,0.6)');
+  drawLine(spanB,  'rgba(239,83,80,0.6)');
+  drawLine(tenkan, '#4fc3f7', []);          // Tenkan-sen — blue
+  drawLine(kijun,  '#ef5350', [4, 3]);      // Kijun-sen  — red dashed
+  drawLine(chikou, 'rgba(200,200,200,0.4)', [2, 3]); // Chikou — grey dotted
+
+  ctx.restore();
+}
+
 // ─── SUPERTREND ───────────────────────────────────────────────────────────────
 function calcSupertrend(bars, period = 10, mult = 3) {
   const n = bars.length;
@@ -4685,7 +4773,12 @@ function redrawChart() {
     drawBollingerBands(ctx, bars, px, py, chartTop, chartBottom);
   }
 
-  // 3b3. Supertrend
+  // 3b3. Ichimoku Cloud
+  if (state.showIchimoku) {
+    drawIchimoku(ctx, bars, px, py, chartTop, chartBottom);
+  }
+
+  // 3b4. Supertrend
   if (state.showSupertrend) {
     drawSupertrend(ctx, bars, px, py);
   }
@@ -10788,6 +10881,9 @@ document.querySelectorAll('.toggle-btn').forEach(btn => {
     } else if (key === 'macd') {
       state.showMACD = !state.showMACD;
       btn.classList.toggle('macd-on', state.showMACD);
+    } else if (key === 'ichimoku') {
+      state.showIchimoku = !state.showIchimoku;
+      btn.classList.toggle('ichimoku-on', state.showIchimoku);
     } else if (key === 'supertrend') {
       state.showSupertrend = !state.showSupertrend;
       btn.classList.toggle('supertrend-on', state.showSupertrend);
