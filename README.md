@@ -15,79 +15,86 @@
 
 ## Features
 
-### Chart Analysis
-- ✅ **Elliott Wave detection** — Automatic wave counting with confidence %
-- ✅ **Fibonacci levels** — Retracement & extension targets
-- ✅ **Support & Resistance** — Auto-detected key price zones
-- ✅ **Buy/sell zones** — Color-coded entry/exit areas
-- ✅ **Volume profile** — Horizontal histogram of volume at each price level
-- ✅ **Candlestick patterns** — 14 classic patterns labeled on chart
-- ✅ **Economic calendar** — FOMC, CPI, NFP events marked
-- ✅ **Measured Move (MM)** — AB=CD projections
-- ✅ **Regression channel** — Trend strength & volatility
-- ✅ **Fibonacci time zones** — Vertical confluence lines at fib intervals
-- ✅ **RSI divergence** — Bullish/bearish momentum divergences
-- ✅ **WMA200** — 200-day Weighted Moving Average (cyan, dashed)
-- ✅ **VWAP + ±1σ/±2σ bands** — Cumulative VWAP with dashed deviation bands; mean-reversion entries at ±1σ, extremes at ±2σ
-- ✅ **Bollinger Bands (BB)** — SMA20 ± 2σ amber envelope; band squeeze signals pre-breakout compression
-- ✅ **Supertrend (ST)** — ATR-based trend line; green below price = bullish, red above = bearish; ▲/▼ markers at crossovers
-- ✅ **MACD** — EMA12−EMA26 line + EMA9 signal + histogram in sub-panel; live values shown
-- ✅ **ADX / DMI** — Trend-strength sub-panel (ADX purple, DI+ green, DI- red)
-- ✅ **Stochastic RSI** — %K/%D sub-panel with 20/80 bands
-- ✅ **Pivot Points (PVTS)** — Classic floor-trader PP/R1/R2/S1/S2 dashed levels with right-side labels
-- ✅ **52-Week High/Low (52W)** — Gold/red dashed lines with distance-% tags; Y-axis expands to show both
-- ✅ **Gap detector (GAPS)** — Gap-up (green) and gap-down (red) shaded zones; unfilled gaps stay bright
-- ✅ **Dark pool / block volume (DARK)** — Highlights candles with volume ≥ 2.5× average
-- ✅ **Earnings expected-move cone** — ±N% shaded cone from current price to earnings date; derived from historical EPS surprise
+### Chart Overlays (toolbar toggles)
 
-### Sub-panel Indicators
-All sub-panels stack below the price chart and can be combined freely:
+| Button | Feature | Description |
+|--------|---------|-------------|
+| **W** | Elliott Waves | Automatic wave count with confidence %; W1–W5 impulse + A/B/C correction |
+| **F** | Fibonacci | Retracement & extension levels from last detected pivot |
+| **R** | Support/Resistance | Auto-detected key price zones (green = support, red = resistance) |
+| **Z** | Buy/Sell Zones | Color-coded entry/exit bands; green = Wave 2/4 entry, red = overextension |
+| **VP** | Volume Profile | Horizontal histogram at each price level; gold Point of Control line |
+| **CNDL** | Candlestick Patterns | 14 classic patterns labeled directly on chart |
+| **ECON** | Economic Calendar | FOMC, CPI, NFP event lines |
+| **MM** | Measured Move | AB=CD projection targets |
+| **CHAN** | Regression Channel | Trend strength & volatility envelope |
+| **FIBT** | Fibonacci Time Zones | Vertical confluence lines at fib intervals |
+| **DIVG** | RSI Divergence | Bullish/bearish momentum divergences labeled |
+| **WMA200** | WMA 200 | 200-day Weighted Moving Average (cyan dashed) |
+| **VWAP** | VWAP ± σ bands | Cumulative VWAP + ±1σ/±2σ dashed deviation bands |
+| **BB** | Bollinger Bands | SMA20 ± 2σ amber envelope; squeeze = breakout warning |
+| **ICHI** | Ichimoku Cloud | Full system: green/red Kumo cloud, Tenkan, Kijun, Chikou |
+| **ST** | Supertrend | ATR trend line; green = bullish, red = bearish; ▲/▼ at crossovers |
+| **PVTS** | Pivot Points | PP / R1 / R2 / S1 / S2 dashed levels from prior bar H/L/C |
+| **52W** | 52-Week Hi/Lo | Gold high + red low dashed lines with distance-% tags |
+| **GAPS** | Gap Detector | Gap-up (green) / gap-down (red) zones; unfilled gaps stay bright |
+| **DARK** | Dark Pool | Highlights candles with volume ≥ 2.5× 20-bar average |
+| **OPT** | Options Overlay | Max pain line, top call/put OI strikes, P/C ratio toast |
+| **⟶ FC** | Forecast Expand | Widens forecast zone from 18% to 35% of chart width |
+| **📷 SNAP** | Chart Snapshots | Save/restore named annotation snapshots |
+| **⚖ RISK** | Risk Calculator | Floating position-size + R:R calculator |
 
-| Button | Indicator | Notes |
-|--------|-----------|-------|
-| **ADX** | ADX / DMI | Trend strength + directional force |
-| **STOCH** | Stochastic RSI | %K/%D oscillator |
-| **MACD** | MACD | Momentum crossover + histogram |
-| **OBV** | On-Balance Volume | Cumulative volume momentum + EMA signal |
+### Sub-panel Indicators (stack below chart)
+
+| Button | Indicator | Key signal |
+|--------|-----------|------------|
+| **ADX** | ADX / DMI | ADX > 25 = strong trend; DI crossover = direction change |
+| **STOCH** | Stochastic RSI | %K/%D; oversold <20 / overbought >80 |
+| **MACD** | MACD | EMA12−EMA26 + signal + histogram; crossover = momentum shift |
+| **OBV** | On-Balance Volume | Rising OBV during flat price = accumulation before breakout |
 
 ### Screener & Scanning
-- ✅ **Wave pattern screener** — Score all watchlist tickers by setup quality
+- ✅ **Wave pattern screener** — Score all watchlist tickers by setup quality (0–100)
 - ✅ **Keyboard screener** — Press `S` for floating, searchable result list
-- ✅ **Relative strength ranking** — Compare momentum vs SPY (1M/3M)
-- ✅ **Sector heatmap** — Color-coded grid of all 11 SPDR sector ETFs
-- ✅ **COMPARE tab** — Side-by-side fundamental comparison of all watchlist tickers (sortable, 16 metrics)
-- ✅ **Correlation matrix (CORR)** — Pearson return-correlation heatmap across all watchlist tickers; green = correlated, red = inverse
-- ✅ **Multi-timeframe alignment table** — WAVES panel shows DIR/WAVE/RSI/MA status for all 6 timeframes at a glance
-- ✅ **Backtesting engine (BACKTEST)** — Select symbol + timeframe + entry rule + TP/SL → win rate, R:R, equity curve
+- ✅ **Relative strength ranking (RS RANK)** — Compare momentum vs SPY (1M/3M)
+- ✅ **Sector heatmap (HEAT)** — Color-coded grid of all 11 SPDR sector ETFs
+- ✅ **COMPARE tab** — Sortable 16-metric fundamental comparison for all watchlist tickers
+- ✅ **Correlation matrix (CORR)** — Pearson return-correlation heatmap; green = correlated, red = inverse
+- ✅ **Multi-timeframe alignment table** — WAVES panel: DIR/WAVE/RSI/MA status for all 6 timeframes at a glance
+- ✅ **Backtesting engine (BACKTEST)** — Entry rule + TP/SL % → win rate, R:R, expectancy, equity curve, trade log
+- ✅ **Options flow scanner (SIGNALS tab)** — P/C ratio, max pain distance, unusual call/put OI strikes
 
 ### Trading Tools
-- ✅ **Position tracker** — Log trades with entry wave, shares, price
-- ✅ **Trendline drawing** — Click-to-draw support/resistance lines
-- ✅ **Price alerts** — Set notifications at any price level (email support via SMTP env vars)
+- ✅ **FORECAST tab** — Full trade plan: entry zone, stop, target, R:R, bull/bear cards, wave price targets with dates
+- ✅ **Position tracker (PORTFOLIO)** — Log trades with entry wave, shares, price; live P&L
+- ✅ **Trendline drawing** — Click-to-draw support/resistance lines on chart
+- ✅ **Price alerts** — Set notifications at any price level; email delivery via SMTP env vars
 - ✅ **Watchlist folders** — Organize tickers by sector/strategy
-- ✅ **Watchlist CSV import/export** — ⬇ CSV / ⬆ CSV buttons in watchlist header; bulk-import tickers from any CSV
+- ✅ **Watchlist CSV import/export** — ⬇ CSV / ⬆ CSV buttons in watchlist header
 - ✅ **Chart snapshots (SNAP)** — Save/restore named annotation snapshots (trendlines + alerts)
-- ✅ **Position size calculator** — Embedded in trade setup card; account size + risk % → shares, dollar risk, profit potential
-- ✅ **Risk calculator (RISK)** — Floating calculator for position size, max dollar loss, and R:R
+- ✅ **Position size calculator** — Embedded in WAVES panel; account size + risk % → shares, dollar risk
+- ✅ **Risk calculator (RISK)** — Floating calculator for position size, max loss, and R:R
+- ✅ **AI trade thesis** — ▶ GENERATE in WAVES panel; 3-sentence thesis from Claude (requires `ANTHROPIC_API_KEY`)
+- ✅ **Journal CSV export** — ⬇ EXPORT CSV in JOURNAL tab; all trades with full P&L data
 
 ### Fundamentals (FUND tab)
-- ✅ **Valuation metrics** — Market Cap, P/E (TTM), Forward P/E, **PEG Ratio**, P/B, EPS, Beta, 52W High/Low, Dividend Yield
+- ✅ **Valuation** — Market Cap, P/E (TTM), Forward P/E, PEG Ratio, P/B, EPS, Beta, 52W Hi/Lo, Dividend Yield
 - ✅ **Profitability** — Revenue, Revenue Growth, Earnings Growth, Gross/Operating/Net Margins, ROA, ROE, Debt/Equity
 - ✅ **Analyst targets** — Mean/High/Low price targets, recommendation, implied upside, analyst count
-- ✅ **Hover tooltips on every metric** — 600ms hover shows plain-English explanation + trading context
-- ✅ **Earnings history** — Actual vs estimate vs surprise for last 6 quarters
+- ✅ **Hover tooltips** — 600ms hover on any metric label shows plain-English explanation + trading context
+- ✅ **Earnings history** — Actual vs estimate vs surprise for last 6 quarters; expected-move cone on chart
 - ✅ **Revenue history** — Annual revenue & net income table
 - ✅ **Insider transactions** — Recent buy/sell activity
 - ✅ **News** — Latest headlines with publisher and age
 
 ### User Experience
-- ✅ **Dark / Light theme toggle** — ☀ LIGHT / 🌙 DARK button in header, preference saved
+- ✅ **Dark / Light theme** — ☀ LIGHT / 🌙 DARK toggle in header, preference saved to localStorage
 - ✅ **Responsive design** — Works on desktop, tablet, mobile
-- ✅ **Keyboard shortcuts** — Fast navigation without mouse
-- ✅ **Multi-timeframe** — Same analysis across 1W / 1M / 3M / 1Y / 2Y / 5Y
-- ✅ **Interactive tutorial** — 21-step walkthrough of all features
-- ✅ **Comprehensive manual** — Full documentation with strategy tips
-- ✅ **Right-click featured overlays** — Right-click any toggle to make it 2.2× more prominent on the chart
+- ✅ **Keyboard shortcuts** — Fast navigation without mouse (press `?` to see all)
+- ✅ **Multi-timeframe** — 1W / 1M / 3M / 1Y / 2Y / 5Y; all overlays update per timeframe
+- ✅ **Interactive tutorial** — 29-step walkthrough covering all features (📖 HELP button)
+- ✅ **Right-click featured overlays** — Right-click any toolbar toggle to make it 2.2× more prominent
+- ✅ **Live price polling** — All watchlist tickers refresh every 60s; 🟢 LIVE badge in header
 
 ---
 
@@ -139,6 +146,7 @@ Click the **COMPARE** tab in the right sidebar to rank all watchlist tickers sid
 | 1 | WAVES · FUND. · RESEARCH |
 | 2 | JOURNAL · SCREENER · RS RANK |
 | 3 | HEAT · PORTFOLIO · COMPARE |
+| 4 | BACKTEST · CORR · SIGNALS |
 | — | FORECAST (dedicated trade plan tab) |
 
 ---
@@ -157,20 +165,22 @@ Fundamentals are **cached 24h server-side** (Railway memory) so API quota is not
 
 **Environment variables required on Railway:**
 - `FINNHUB_KEY` — Finnhub API key (free at finnhub.io)
+- `ANTHROPIC_API_KEY` — Claude API key for AI trade thesis (optional)
+- `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` — Email alerts via raw SMTP (optional)
 
 ---
 
 ## Documentation
 
 - **📖 [MANUAL.md](./MANUAL.md)** — Complete feature guide, strategies, and FAQ
-- **Interactive Tutorial** — Click the **📖 HELP** button in-app for a 21-step walkthrough
+- **Interactive Tutorial** — Click the **📖 HELP** button in-app for a 29-step walkthrough
 - **Keyboard Reference** — Press **?** in-app to see all shortcuts
 
 ---
 
 ## Tech Stack
 
-- Single-file HTML5 app (no build required, `wavefront-app.html` ~420KB)
+- Single-file HTML5 app (no build required, `wavefront-app.html` ~550KB)
 - Vanilla JavaScript, Canvas 2D for charting
 - Node.js backend (`server.js`) — proxies all API calls, handles CORS
 - Local Storage for client-side persistence
