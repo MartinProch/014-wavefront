@@ -157,6 +157,7 @@ Fundamentals are **cached 24h server-side** (Railway memory) so API quota is not
 ## Changelog
 
 ### Session 9 (May 2026)
+- ✅ **MACD** — **MACD** toolbar toggle; EMA12−EMA26 line (cyan), EMA9 signal line (amber), and histogram (green/red bars) in a sub-panel below the chart; live MACD and signal values shown top-right of panel
 - ✅ **Bollinger Bands** — **BB** toolbar toggle; SMA20 ± 2σ envelope with a lightly filled band; upper/lower bands dashed amber, midline solid; band squeeze signals low-volatility breakout setups
 - ✅ **Pivot points** — **PVTS** toolbar toggle; draws classic floor-trader PP, R1, R2 (resistance, red) and S1, S2 (support, teal) as dashed horizontal lines with right-side labels; computed from prior bar's High/Low/Close
 

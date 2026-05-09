@@ -419,6 +419,7 @@
   .toggle-btn.wk52-on    { color: #ffd740; border-color: #ffd740; background: rgba(255,215,64,0.12); }
   .toggle-btn.pivots-on  { color: #ce93d8; border-color: #ce93d8; background: rgba(206,147,216,0.12); }
   .toggle-btn.bb-on      { color: #ffb74d; border-color: #ffb74d; background: rgba(255,183,77,0.12); }
+  .toggle-btn.macd-on    { color: #4fc3f7; border-color: #4fc3f7; background: rgba(79,195,247,0.12); }
   .toggle-btn.featured {
     position: relative;
     box-shadow: 0 0 8px rgba(255,215,64,0.3);
@@ -2268,6 +2269,7 @@
           <button class="toggle-btn" id="darkpool-btn" data-toggle="darkpool" data-tip="Dark Pool / Block Volume|Highlights candles where volume exceeds 2.5× the 20-bar average — potential institutional block trades or dark pool prints.|Large institutions often accumulate or distribute at wave pivots. Unusual volume confirms the move.">DARK</button>
           <button class="toggle-btn" id="gaps-btn" data-toggle="gaps" data-tip="Gap Detector|Highlights price gaps between sessions: gap-up (open above prior high) in green, gap-down (open below prior low) in red. Unfilled gaps remain shaded until price returns to close them.|Price frequently returns to fill gaps — unfilled gaps act as magnets and are high-probability targets.">GAPS</button>
           <button class="toggle-btn" id="wk52-btn" data-toggle="wk52" data-tip="52-Week High / Low|Draws horizontal lines at the 52-week high (gold) and 52-week low (red) with distance labels.|A breakout above the 52W high on high volume is one of the strongest momentum signals. Stocks near the 52W low are either deep value or falling knives — wave count confirms which.">52W</button>
+          <button class="toggle-btn" id="macd-btn" data-toggle="macd" data-tip="MACD|Moving Average Convergence Divergence: EMA12 − EMA26 (MACD line, cyan) with EMA9 signal line (amber) and histogram bars. Histogram above zero = bullish momentum, below = bearish.|Bullish crossover (MACD crossing above signal) near a Wave 2 or Wave 4 low is a strong entry signal. Divergence between MACD and price at Wave 5 warns of exhaustion.">MACD</button>
           <button class="toggle-btn" id="bb-btn" data-toggle="bb" data-tip="Bollinger Bands|SMA20 ± 2 standard deviations. Upper band = overbought zone, lower band = oversold zone. Band squeeze (narrow width) signals low volatility before a breakout.|Price walking the upper band during Wave 3 confirms strong momentum. A close outside the bands followed by a return inside is a classic reversal signal at Wave 5 or C.">BB</button>
           <button class="toggle-btn" id="pivots-btn" data-toggle="pivots" data-tip="Pivot Points|Classic floor-trader pivot levels calculated from the prior period's High/Low/Close: PP (pivot), R1/R2 (resistance), S1/S2 (support).|Price often pauses, reverses, or accelerates at pivot levels. Combine with wave counts: a Wave 3 breakout through R1 signals strong momentum; a Wave 4 holding above S1 confirms corrective support.">PVTS</button>
         </div>
@@ -2463,6 +2465,7 @@ let state = {
   show52W:     false,    // 52-week high/low lines
   showPivots:  false,    // pivot points S1/S2/PP/R1/R2
   showBB:      false,    // Bollinger Bands SMA20 ±2σ
+  showMACD:    false,    // MACD sub-panel
   snapshots: [],         // named chart annotation snapshots
   _aiCommentary: {},     // sym -> { text, at }
   folders: [{ id: 'all', name: 'ALL', tickers: [] }],
@@ -3423,6 +3426,96 @@ function calcStochRSI(bars, rsiPeriod = 14, stochPeriod = 14, kSmooth = 3, dSmoo
   return { k: kSmoothed, d };
 }
 
+// ─── MACD ─────────────────────────────────────────────────────────────────────
+function calcEMA(bars, period) {
+  const k = 2 / (period + 1);
+  const out = new Array(bars.length).fill(null);
+  let ema = null;
+  for (let i = 0; i < bars.length; i++) {
+    if (ema === null) { ema = bars[i].c; out[i] = ema; continue; }
+    ema = bars[i].c * k + ema * (1 - k);
+    out[i] = ema;
+  }
+  return out;
+}
+
+function drawMACDPanel(ctx, bars, px, panelTop, panelH, chartLeft, chartRight) {
+  const ema12 = calcEMA(bars, 12);
+  const ema26 = calcEMA(bars, 26);
+  const macd  = ema12.map((v, i) => (v != null && ema26[i] != null) ? v - ema26[i] : null);
+
+  // Signal: EMA9 of MACD
+  const k9 = 2 / 10;
+  const signal = new Array(bars.length).fill(null);
+  let sig = null;
+  for (let i = 0; i < bars.length; i++) {
+    if (macd[i] == null) continue;
+    sig = sig === null ? macd[i] : macd[i] * k9 + sig * (1 - k9);
+    signal[i] = sig;
+  }
+  const hist = macd.map((v, i) => (v != null && signal[i] != null) ? v - signal[i] : null);
+
+  const vals = [...macd, ...signal, ...hist].filter(v => v != null);
+  if (!vals.length) return;
+  const maxV = Math.max(...vals.map(Math.abs)) || 1;
+
+  const midY = panelTop + panelH / 2;
+  const scaleY = v => midY - (v / maxV) * (panelH / 2) * 0.9;
+
+  ctx.save();
+
+  // Zero line
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(chartLeft, midY); ctx.lineTo(chartRight, midY); ctx.stroke();
+
+  // Label
+  ctx.fillStyle = 'rgba(79,195,247,0.6)';
+  ctx.font = '9px JetBrains Mono, monospace';
+  ctx.fillText('MACD', chartLeft + 4, panelTop + 10);
+
+  // Histogram
+  const bw = Math.max(1, (chartRight - chartLeft) / bars.length - 1);
+  for (let i = 0; i < bars.length; i++) {
+    if (hist[i] == null) continue;
+    const x = px(i); const y0 = midY; const y1 = scaleY(hist[i]);
+    ctx.fillStyle = hist[i] >= 0 ? 'rgba(38,166,154,0.6)' : 'rgba(239,83,80,0.6)';
+    ctx.fillRect(x - bw / 2, Math.min(y0, y1), bw, Math.abs(y1 - y0));
+  }
+
+  // MACD line
+  ctx.beginPath(); let started = false;
+  for (let i = 0; i < bars.length; i++) {
+    if (macd[i] == null) continue;
+    const x = px(i), y = scaleY(macd[i]);
+    if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = '#4fc3f7'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Signal line
+  ctx.beginPath(); started = false;
+  for (let i = 0; i < bars.length; i++) {
+    if (signal[i] == null) continue;
+    const x = px(i), y = scaleY(signal[i]);
+    if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = '#ffb74d'; ctx.lineWidth = 1; ctx.stroke();
+
+  // Live values
+  const last = bars.length - 1;
+  if (macd[last] != null) {
+    ctx.font = '9px JetBrains Mono, monospace';
+    ctx.fillStyle = '#4fc3f7';
+    ctx.fillText(macd[last].toFixed(2), chartRight - 60, panelTop + 10);
+    if (signal[last] != null) {
+      ctx.fillStyle = '#ffb74d';
+      ctx.fillText(signal[last].toFixed(2), chartRight - 60, panelTop + 20);
+    }
+  }
+
+  ctx.restore();
+}
+
 // ─── BOLLINGER BANDS ─────────────────────────────────────────────────────────
 function calcBB(bars, period = 20, mult = 2) {
   const upper = [], lower = [], mid = [];
@@ -4080,7 +4173,8 @@ function redrawChart() {
   const VOL_H       = state.showVol       ? Math.floor(h * 0.18) : 0;
   const ADX_H       = state.showADX       ? Math.floor(h * 0.14) : 0;
   const STOCHRSI_H  = state.showStochRSI  ? Math.floor(h * 0.14) : 0;
-  const SUB_PANELS_H = VOL_H + ADX_H + STOCHRSI_H;
+  const MACD_H      = state.showMACD      ? Math.floor(h * 0.14) : 0;
+  const SUB_PANELS_H = VOL_H + ADX_H + STOCHRSI_H + MACD_H;
 
   const chartLeft = PAD_LEFT;
   const chartRight = w - PAD_RIGHT;
@@ -4413,6 +4507,12 @@ function redrawChart() {
   if (state.showStochRSI && STOCHRSI_H > 0) {
     const srsiTop = chartBottom + VOL_H + ADX_H + 4;
     drawStochRSIPanel(ctx, bars, px, srsiTop, STOCHRSI_H - 4, chartLeft, chartRight);
+  }
+
+  // MACD sub-panel
+  if (state.showMACD && MACD_H > 0) {
+    const macdTop = chartBottom + VOL_H + ADX_H + STOCHRSI_H + 4;
+    drawMACDPanel(ctx, bars, px, macdTop, MACD_H - 4, chartLeft, chartRight);
   }
 
   _prom = 1;
@@ -10536,6 +10636,9 @@ document.querySelectorAll('.toggle-btn').forEach(btn => {
     } else if (key === 'wk52') {
       state.show52W = !state.show52W;
       btn.classList.toggle('wk52-on', state.show52W);
+    } else if (key === 'macd') {
+      state.showMACD = !state.showMACD;
+      btn.classList.toggle('macd-on', state.showMACD);
     } else if (key === 'bb') {
       state.showBB = !state.showBB;
       btn.classList.toggle('bb-on', state.showBB);
@@ -10921,8 +11024,9 @@ function pixelToChart(px_coord, py_coord) {
   const VOL_H      = state.showVol      ? Math.floor(h * 0.18) : 0;
   const ADX_H      = state.showADX      ? Math.floor(h * 0.14) : 0;
   const STOCHRSI_H = state.showStochRSI ? Math.floor(h * 0.14) : 0;
+  const MACD_H     = state.showMACD     ? Math.floor(h * 0.14) : 0;
   const chartLeft = PAD_LEFT, chartRight = w - PAD_RIGHT;
-  const chartTop = PAD_TOP, chartBottom = h - PAD_BOTTOM - VOL_H - ADX_H - STOCHRSI_H;
+  const chartTop = PAD_TOP, chartBottom = h - PAD_BOTTOM - VOL_H - ADX_H - STOCHRSI_H - MACD_H;
   const chartW = chartRight - chartLeft, chartH = chartBottom - chartTop;
   const FORECAST_RATIO = state.forecastExpanded ? 0.35 : 0.18;
   const barsW = chartW - Math.floor(chartW * FORECAST_RATIO);
