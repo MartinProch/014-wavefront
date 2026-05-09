@@ -11487,8 +11487,40 @@ const TUTORIAL_STEPS = [
     content: `Toggle <strong>CNDL</strong> (14 classic patterns), <strong>ECON</strong> (FOMC/CPI/NFP dates), <strong>MM</strong> (measured move projections), <strong>CHAN</strong> (regression channel), <strong>FIBT</strong> (Fibonacci time zones), <strong>DIVG</strong> (RSI divergences).`,
   },
   {
+    title: 'Trend Indicators — Supertrend & Bollinger Bands',
+    content: `<strong>ST</strong> button: ATR-based Supertrend line — green below price = bullish, red above = bearish. <strong>▲/▼</strong> markers appear at every crossover flip. <strong>BB</strong> button: SMA20 ± 2σ Bollinger Bands amber envelope — a <em>squeeze</em> (narrow band) signals a breakout is near.`,
+  },
+  {
+    title: 'Momentum Indicators — MACD, ADX, Stoch RSI',
+    content: `Three sub-panels stack below the chart: <strong>MACD</strong> (EMA12−EMA26 cyan line + signal + histogram), <strong>ADX</strong> (trend strength — purple above 25 = strong trend), <strong>STOCH</strong> (Stochastic RSI %K/%D, overbought >80 / oversold <20). Toggle each independently.`,
+  },
+  {
+    title: 'Price Levels — Pivot Points, 52W, VWAP',
+    content: `<strong>PVTS</strong>: classic floor-trader PP/R1/R2/S1/S2 dashed levels. <strong>52W</strong>: 52-week high (gold) and low (red) lines with distance %. <strong>VWAP</strong>: volume-weighted average price with dashed <strong>±1σ / ±2σ</strong> deviation bands — price near ±2σ = mean-reversion opportunity.`,
+  },
+  {
+    title: 'Gaps, Dark Pool & Earnings Cone',
+    content: `<strong>GAPS</strong>: shades unfilled price gaps — green (gap-up), red (gap-down); price frequently returns to fill them. <strong>DARK</strong>: highlights candles with unusually high volume (≥2.5× avg) suggesting institutional activity. The <strong>earnings date line</strong> includes a ±N% shaded cone showing the expected move range.`,
+  },
+  {
+    title: 'Correlation Matrix & Multi-TF Alignment',
+    content: `<strong>CORR</strong> sidebar tab: Pearson correlation heatmap across all watchlist tickers — green = move together, red = move opposite. The <strong>WAVES panel</strong> includes a <em>Timeframe Alignment</em> table showing direction, wave, RSI, and MA status for all 6 timeframes at a glance.`,
+  },
+  {
+    title: 'Watchlist CSV Import / Export',
+    content: `Two small buttons at the top of the watchlist: <strong>⬇ CSV</strong> exports all tickers to a file; <strong>⬆ CSV</strong> imports from any CSV (one ticker per line). Great for sharing setups or syncing between devices.`,
+  },
+  {
+    title: 'Chart Snapshots & Risk Calculator',
+    content: `<strong>📷 SNAP</strong> toolbar button: save and restore named annotation snapshots (trendlines + alerts). <strong>⚖ RISK</strong> toolbar button: floating position-size calculator — auto-fills entry/stop/target from the current wave forecast.`,
+  },
+  {
+    title: 'AI Trade Thesis & Backtesting',
+    content: `In the <strong>WAVES panel</strong> scroll to <strong>▶ GENERATE</strong> to get a 3-sentence AI trade thesis using wave position, RSI, ADX, and fundamentals (requires <kbd>ANTHROPIC_API_KEY</kbd>). The <strong>BACKTEST</strong> tab lets you test entry rules (W2 dip, W4 dip, W1/W3 breakout) with custom TP/SL.`,
+  },
+  {
     title: 'Finding High-Probability Entries',
-    content: `Look for <strong>Wave 2 or Wave 4</strong> completions in the <strong>green buy zone</strong>. Combine with Fibonacci levels + S/R zones + RSI divergence (DIVG) for confluence. Risk 1–2% per trade.`,
+    content: `Look for <strong>Wave 2 or Wave 4</strong> completions in the <strong>green buy zone</strong>. Combine: Fibonacci + S/R + Supertrend flip + MACD crossover + RSI divergence for multi-indicator confluence. Risk 1–2% per trade.`,
   },
   {
     title: 'Read the Manual',

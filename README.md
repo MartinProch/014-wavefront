@@ -28,6 +28,26 @@
 - ✅ **Fibonacci time zones** — Vertical confluence lines at fib intervals
 - ✅ **RSI divergence** — Bullish/bearish momentum divergences
 - ✅ **WMA200** — 200-day Weighted Moving Average (cyan, dashed)
+- ✅ **VWAP + ±1σ/±2σ bands** — Cumulative VWAP with dashed deviation bands; mean-reversion entries at ±1σ, extremes at ±2σ
+- ✅ **Bollinger Bands (BB)** — SMA20 ± 2σ amber envelope; band squeeze signals pre-breakout compression
+- ✅ **Supertrend (ST)** — ATR-based trend line; green below price = bullish, red above = bearish; ▲/▼ markers at crossovers
+- ✅ **MACD** — EMA12−EMA26 line + EMA9 signal + histogram in sub-panel; live values shown
+- ✅ **ADX / DMI** — Trend-strength sub-panel (ADX purple, DI+ green, DI- red)
+- ✅ **Stochastic RSI** — %K/%D sub-panel with 20/80 bands
+- ✅ **Pivot Points (PVTS)** — Classic floor-trader PP/R1/R2/S1/S2 dashed levels with right-side labels
+- ✅ **52-Week High/Low (52W)** — Gold/red dashed lines with distance-% tags; Y-axis expands to show both
+- ✅ **Gap detector (GAPS)** — Gap-up (green) and gap-down (red) shaded zones; unfilled gaps stay bright
+- ✅ **Dark pool / block volume (DARK)** — Highlights candles with volume ≥ 2.5× average
+- ✅ **Earnings expected-move cone** — ±N% shaded cone from current price to earnings date; derived from historical EPS surprise
+
+### Sub-panel Indicators
+All sub-panels stack below the price chart and can be combined freely:
+
+| Button | Indicator | Notes |
+|--------|-----------|-------|
+| **ADX** | ADX / DMI | Trend strength + directional force |
+| **STOCH** | Stochastic RSI | %K/%D oscillator |
+| **MACD** | MACD | Momentum crossover + histogram |
 
 ### Screener & Scanning
 - ✅ **Wave pattern screener** — Score all watchlist tickers by setup quality
@@ -35,12 +55,19 @@
 - ✅ **Relative strength ranking** — Compare momentum vs SPY (1M/3M)
 - ✅ **Sector heatmap** — Color-coded grid of all 11 SPDR sector ETFs
 - ✅ **COMPARE tab** — Side-by-side fundamental comparison of all watchlist tickers (sortable, 16 metrics)
+- ✅ **Correlation matrix (CORR)** — Pearson return-correlation heatmap across all watchlist tickers; green = correlated, red = inverse
+- ✅ **Multi-timeframe alignment table** — WAVES panel shows DIR/WAVE/RSI/MA status for all 6 timeframes at a glance
+- ✅ **Backtesting engine (BACKTEST)** — Select symbol + timeframe + entry rule + TP/SL → win rate, R:R, equity curve
 
 ### Trading Tools
 - ✅ **Position tracker** — Log trades with entry wave, shares, price
 - ✅ **Trendline drawing** — Click-to-draw support/resistance lines
-- ✅ **Price alerts** — Set notifications at any price level
+- ✅ **Price alerts** — Set notifications at any price level (email support via SMTP env vars)
 - ✅ **Watchlist folders** — Organize tickers by sector/strategy
+- ✅ **Watchlist CSV import/export** — ⬇ CSV / ⬆ CSV buttons in watchlist header; bulk-import tickers from any CSV
+- ✅ **Chart snapshots (SNAP)** — Save/restore named annotation snapshots (trendlines + alerts)
+- ✅ **Position size calculator** — Embedded in trade setup card; account size + risk % → shares, dollar risk, profit potential
+- ✅ **Risk calculator (RISK)** — Floating calculator for position size, max dollar loss, and R:R
 
 ### Fundamentals (FUND tab)
 - ✅ **Valuation metrics** — Market Cap, P/E (TTM), Forward P/E, **PEG Ratio**, P/B, EPS, Beta, 52W High/Low, Dividend Yield
