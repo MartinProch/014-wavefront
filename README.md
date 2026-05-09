@@ -48,6 +48,7 @@ All sub-panels stack below the price chart and can be combined freely:
 | **ADX** | ADX / DMI | Trend strength + directional force |
 | **STOCH** | Stochastic RSI | %K/%D oscillator |
 | **MACD** | MACD | Momentum crossover + histogram |
+| **OBV** | On-Balance Volume | Cumulative volume momentum + EMA signal |
 
 ### Screener & Scanning
 - ✅ **Wave pattern screener** — Score all watchlist tickers by setup quality
@@ -184,6 +185,7 @@ Fundamentals are **cached 24h server-side** (Railway memory) so API quota is not
 ## Changelog
 
 ### Session 9 (May 2026)
+- ✅ **On-Balance Volume (OBV)** — **OBV** toolbar toggle; cumulative volume sub-panel with green/red colour-coded line (slope direction) and a dashed EMA20 signal line; live value shown top-right; OBV leading price = accumulation signal
 - ✅ **Supertrend** — **ST** toolbar toggle; ATR-based trend line drawn on the price chart, green when bullish (below price) and red when bearish (above price); ▲/▼ markers at every crossover flip; ATR period 10, multiplier 3
 - ✅ **MACD** — **MACD** toolbar toggle; EMA12−EMA26 line (cyan), EMA9 signal line (amber), and histogram (green/red bars) in a sub-panel below the chart; live MACD and signal values shown top-right of panel
 - ✅ **Bollinger Bands** — **BB** toolbar toggle; SMA20 ± 2σ envelope with a lightly filled band; upper/lower bands dashed amber, midline solid; band squeeze signals low-volatility breakout setups

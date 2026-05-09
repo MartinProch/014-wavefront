@@ -421,6 +421,7 @@
   .toggle-btn.bb-on          { color: #ffb74d; border-color: #ffb74d; background: rgba(255,183,77,0.12); }
   .toggle-btn.supertrend-on  { color: #69f0ae; border-color: #69f0ae; background: rgba(105,240,174,0.12); }
   .toggle-btn.macd-on    { color: #4fc3f7; border-color: #4fc3f7; background: rgba(79,195,247,0.12); }
+  .toggle-btn.obv-on     { color: #a5d6a7; border-color: #a5d6a7; background: rgba(165,214,167,0.12); }
   .toggle-btn.featured {
     position: relative;
     box-shadow: 0 0 8px rgba(255,215,64,0.3);
@@ -2270,6 +2271,7 @@
           <button class="toggle-btn" id="darkpool-btn" data-toggle="darkpool" data-tip="Dark Pool / Block Volume|Highlights candles where volume exceeds 2.5× the 20-bar average — potential institutional block trades or dark pool prints.|Large institutions often accumulate or distribute at wave pivots. Unusual volume confirms the move.">DARK</button>
           <button class="toggle-btn" id="gaps-btn" data-toggle="gaps" data-tip="Gap Detector|Highlights price gaps between sessions: gap-up (open above prior high) in green, gap-down (open below prior low) in red. Unfilled gaps remain shaded until price returns to close them.|Price frequently returns to fill gaps — unfilled gaps act as magnets and are high-probability targets.">GAPS</button>
           <button class="toggle-btn" id="wk52-btn" data-toggle="wk52" data-tip="52-Week High / Low|Draws horizontal lines at the 52-week high (gold) and 52-week low (red) with distance labels.|A breakout above the 52W high on high volume is one of the strongest momentum signals. Stocks near the 52W low are either deep value or falling knives — wave count confirms which.">52W</button>
+          <button class="toggle-btn" id="obv-btn" data-toggle="obv" data-tip="On-Balance Volume (OBV)|Cumulative volume indicator: adds volume on up-days, subtracts on down-days. Rising OBV = buying pressure, falling OBV = distribution. OBV often leads price.|OBV rising while price is flat = accumulation before a Wave 1 or Wave 3 breakout. OBV diverging from price at a high = smart money exiting before a Wave 5 reversal.">OBV</button>
           <button class="toggle-btn" id="macd-btn" data-toggle="macd" data-tip="MACD|Moving Average Convergence Divergence: EMA12 − EMA26 (MACD line, cyan) with EMA9 signal line (amber) and histogram bars. Histogram above zero = bullish momentum, below = bearish.|Bullish crossover (MACD crossing above signal) near a Wave 2 or Wave 4 low is a strong entry signal. Divergence between MACD and price at Wave 5 warns of exhaustion.">MACD</button>
           <button class="toggle-btn" id="supertrend-btn" data-toggle="supertrend" data-tip="Supertrend|ATR-based trend line that flips green (bullish) or red (bearish) on closes above/below the band. ▲ marks bullish crossovers, ▼ bearish. Default: ATR period 10, multiplier 3.|A Supertrend flip to green at a Wave 2 or Wave 4 low is a high-conviction entry signal. Riding the green line as support confirms Wave 3 momentum.">ST</button>
           <button class="toggle-btn" id="bb-btn" data-toggle="bb" data-tip="Bollinger Bands|SMA20 ± 2 standard deviations. Upper band = overbought zone, lower band = oversold zone. Band squeeze (narrow width) signals low volatility before a breakout.|Price walking the upper band during Wave 3 confirms strong momentum. A close outside the bands followed by a return inside is a classic reversal signal at Wave 5 or C.">BB</button>
@@ -2469,6 +2471,7 @@ let state = {
   showBB:          false,    // Bollinger Bands SMA20 ±2σ
   showSupertrend:  false,    // Supertrend overlay
   showMACD:    false,    // MACD sub-panel
+  showOBV:     false,    // On-Balance Volume sub-panel
   snapshots: [],         // named chart annotation snapshots
   _aiCommentary: {},     // sym -> { text, at }
   folders: [{ id: 'all', name: 'ALL', tickers: [] }],
@@ -3429,6 +3432,73 @@ function calcStochRSI(bars, rsiPeriod = 14, stochPeriod = 14, kSmooth = 3, dSmoo
   return { k: kSmoothed, d };
 }
 
+// ─── ON-BALANCE VOLUME ───────────────────────────────────────────────────────
+function drawOBVPanel(ctx, bars, px, panelTop, panelH, chartLeft, chartRight) {
+  const obv = new Array(bars.length).fill(0);
+  for (let i = 1; i < bars.length; i++) {
+    obv[i] = obv[i-1] + (bars[i].c > bars[i-1].c ? bars[i].v : bars[i].c < bars[i-1].c ? -bars[i].v : 0);
+  }
+  const vals = obv.filter(v => isFinite(v));
+  if (!vals.length) return;
+  const minV = Math.min(...vals), maxV = Math.max(...vals);
+  const range = maxV - minV || 1;
+  const scaleY = v => panelTop + panelH - ((v - minV) / range) * panelH * 0.9 - panelH * 0.05;
+
+  // EMA20 of OBV as signal
+  const k = 2 / 21;
+  const sig = new Array(bars.length).fill(null);
+  let ema = null;
+  for (let i = 0; i < bars.length; i++) {
+    ema = ema === null ? obv[i] : obv[i] * k + ema * (1 - k);
+    sig[i] = ema;
+  }
+
+  ctx.save();
+
+  // Zero baseline
+  const zeroY = scaleY(0);
+  if (zeroY >= panelTop && zeroY <= panelTop + panelH) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(chartLeft, zeroY); ctx.lineTo(chartRight, zeroY); ctx.stroke();
+  }
+
+  // Label
+  ctx.fillStyle = 'rgba(165,214,167,0.7)';
+  ctx.font = '9px JetBrains Mono, monospace';
+  ctx.fillText('OBV', chartLeft + 4, panelTop + 10);
+
+  // OBV line — colour by slope
+  for (let i = 1; i < bars.length; i++) {
+    const x0 = px(i-1), y0 = scaleY(obv[i-1]);
+    const x1 = px(i),   y1 = scaleY(obv[i]);
+    ctx.strokeStyle = obv[i] >= obv[i-1] ? '#a5d6a7' : '#ef9a9a';
+    ctx.lineWidth = 1.5; ctx.globalAlpha = 0.85;
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  }
+
+  // Signal EMA line
+  ctx.strokeStyle = '#fff176'; ctx.lineWidth = 1; ctx.globalAlpha = 0.6;
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath(); let started = false;
+  for (let i = 0; i < bars.length; i++) {
+    if (sig[i] == null) continue;
+    const x = px(i), y = scaleY(sig[i]);
+    if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Live value
+  const last = bars.length - 1;
+  const fmt = v => v >= 1e9 ? (v/1e9).toFixed(1)+'B' : v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v.toFixed(0);
+  ctx.setLineDash([]); ctx.globalAlpha = 1;
+  ctx.fillStyle = obv[last] >= 0 ? '#a5d6a7' : '#ef9a9a';
+  ctx.fillText(fmt(obv[last]), chartRight - 52, panelTop + 10);
+
+  ctx.restore();
+}
+
 // ─── MACD ─────────────────────────────────────────────────────────────────────
 function calcEMA(bars, period) {
   const k = 2 / (period + 1);
@@ -4238,7 +4308,8 @@ function redrawChart() {
   const ADX_H       = state.showADX       ? Math.floor(h * 0.14) : 0;
   const STOCHRSI_H  = state.showStochRSI  ? Math.floor(h * 0.14) : 0;
   const MACD_H      = state.showMACD      ? Math.floor(h * 0.14) : 0;
-  const SUB_PANELS_H = VOL_H + ADX_H + STOCHRSI_H + MACD_H;
+  const OBV_H       = state.showOBV       ? Math.floor(h * 0.14) : 0;
+  const SUB_PANELS_H = VOL_H + ADX_H + STOCHRSI_H + MACD_H + OBV_H;
 
   const chartLeft = PAD_LEFT;
   const chartRight = w - PAD_RIGHT;
@@ -4577,6 +4648,12 @@ function redrawChart() {
   if (state.showMACD && MACD_H > 0) {
     const macdTop = chartBottom + VOL_H + ADX_H + STOCHRSI_H + 4;
     drawMACDPanel(ctx, bars, px, macdTop, MACD_H - 4, chartLeft, chartRight);
+  }
+
+  // OBV sub-panel
+  if (state.showOBV && OBV_H > 0) {
+    const obvTop = chartBottom + VOL_H + ADX_H + STOCHRSI_H + MACD_H + 4;
+    drawOBVPanel(ctx, bars, px, obvTop, OBV_H - 4, chartLeft, chartRight);
   }
 
   _prom = 1;
@@ -10705,6 +10782,9 @@ document.querySelectorAll('.toggle-btn').forEach(btn => {
     } else if (key === 'wk52') {
       state.show52W = !state.show52W;
       btn.classList.toggle('wk52-on', state.show52W);
+    } else if (key === 'obv') {
+      state.showOBV = !state.showOBV;
+      btn.classList.toggle('obv-on', state.showOBV);
     } else if (key === 'macd') {
       state.showMACD = !state.showMACD;
       btn.classList.toggle('macd-on', state.showMACD);
@@ -11097,8 +11177,9 @@ function pixelToChart(px_coord, py_coord) {
   const ADX_H      = state.showADX      ? Math.floor(h * 0.14) : 0;
   const STOCHRSI_H = state.showStochRSI ? Math.floor(h * 0.14) : 0;
   const MACD_H     = state.showMACD     ? Math.floor(h * 0.14) : 0;
+  const OBV_H      = state.showOBV      ? Math.floor(h * 0.14) : 0;
   const chartLeft = PAD_LEFT, chartRight = w - PAD_RIGHT;
-  const chartTop = PAD_TOP, chartBottom = h - PAD_BOTTOM - VOL_H - ADX_H - STOCHRSI_H - MACD_H;
+  const chartTop = PAD_TOP, chartBottom = h - PAD_BOTTOM - VOL_H - ADX_H - STOCHRSI_H - MACD_H - OBV_H;
   const chartW = chartRight - chartLeft, chartH = chartBottom - chartTop;
   const FORECAST_RATIO = state.forecastExpanded ? 0.35 : 0.18;
   const barsW = chartW - Math.floor(chartW * FORECAST_RATIO);
