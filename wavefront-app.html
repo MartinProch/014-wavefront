@@ -418,7 +418,8 @@
   .toggle-btn.gaps-on     { color: #80cbc4; border-color: #80cbc4; background: rgba(128,203,196,0.12); }
   .toggle-btn.wk52-on    { color: #ffd740; border-color: #ffd740; background: rgba(255,215,64,0.12); }
   .toggle-btn.pivots-on  { color: #ce93d8; border-color: #ce93d8; background: rgba(206,147,216,0.12); }
-  .toggle-btn.bb-on      { color: #ffb74d; border-color: #ffb74d; background: rgba(255,183,77,0.12); }
+  .toggle-btn.bb-on          { color: #ffb74d; border-color: #ffb74d; background: rgba(255,183,77,0.12); }
+  .toggle-btn.supertrend-on  { color: #69f0ae; border-color: #69f0ae; background: rgba(105,240,174,0.12); }
   .toggle-btn.macd-on    { color: #4fc3f7; border-color: #4fc3f7; background: rgba(79,195,247,0.12); }
   .toggle-btn.featured {
     position: relative;
@@ -2270,6 +2271,7 @@
           <button class="toggle-btn" id="gaps-btn" data-toggle="gaps" data-tip="Gap Detector|Highlights price gaps between sessions: gap-up (open above prior high) in green, gap-down (open below prior low) in red. Unfilled gaps remain shaded until price returns to close them.|Price frequently returns to fill gaps — unfilled gaps act as magnets and are high-probability targets.">GAPS</button>
           <button class="toggle-btn" id="wk52-btn" data-toggle="wk52" data-tip="52-Week High / Low|Draws horizontal lines at the 52-week high (gold) and 52-week low (red) with distance labels.|A breakout above the 52W high on high volume is one of the strongest momentum signals. Stocks near the 52W low are either deep value or falling knives — wave count confirms which.">52W</button>
           <button class="toggle-btn" id="macd-btn" data-toggle="macd" data-tip="MACD|Moving Average Convergence Divergence: EMA12 − EMA26 (MACD line, cyan) with EMA9 signal line (amber) and histogram bars. Histogram above zero = bullish momentum, below = bearish.|Bullish crossover (MACD crossing above signal) near a Wave 2 or Wave 4 low is a strong entry signal. Divergence between MACD and price at Wave 5 warns of exhaustion.">MACD</button>
+          <button class="toggle-btn" id="supertrend-btn" data-toggle="supertrend" data-tip="Supertrend|ATR-based trend line that flips green (bullish) or red (bearish) on closes above/below the band. ▲ marks bullish crossovers, ▼ bearish. Default: ATR period 10, multiplier 3.|A Supertrend flip to green at a Wave 2 or Wave 4 low is a high-conviction entry signal. Riding the green line as support confirms Wave 3 momentum.">ST</button>
           <button class="toggle-btn" id="bb-btn" data-toggle="bb" data-tip="Bollinger Bands|SMA20 ± 2 standard deviations. Upper band = overbought zone, lower band = oversold zone. Band squeeze (narrow width) signals low volatility before a breakout.|Price walking the upper band during Wave 3 confirms strong momentum. A close outside the bands followed by a return inside is a classic reversal signal at Wave 5 or C.">BB</button>
           <button class="toggle-btn" id="pivots-btn" data-toggle="pivots" data-tip="Pivot Points|Classic floor-trader pivot levels calculated from the prior period's High/Low/Close: PP (pivot), R1/R2 (resistance), S1/S2 (support).|Price often pauses, reverses, or accelerates at pivot levels. Combine with wave counts: a Wave 3 breakout through R1 signals strong momentum; a Wave 4 holding above S1 confirms corrective support.">PVTS</button>
         </div>
@@ -2464,7 +2466,8 @@ let state = {
   showGaps:    false,    // gap detector overlay
   show52W:     false,    // 52-week high/low lines
   showPivots:  false,    // pivot points S1/S2/PP/R1/R2
-  showBB:      false,    // Bollinger Bands SMA20 ±2σ
+  showBB:          false,    // Bollinger Bands SMA20 ±2σ
+  showSupertrend:  false,    // Supertrend overlay
   showMACD:    false,    // MACD sub-panel
   snapshots: [],         // named chart annotation snapshots
   _aiCommentary: {},     // sym -> { text, at }
@@ -3516,6 +3519,67 @@ function drawMACDPanel(ctx, bars, px, panelTop, panelH, chartLeft, chartRight) {
   ctx.restore();
 }
 
+// ─── SUPERTREND ───────────────────────────────────────────────────────────────
+function calcSupertrend(bars, period = 10, mult = 3) {
+  const n = bars.length;
+  const atr = new Array(n).fill(0);
+  // Wilder ATR
+  for (let i = 1; i < n; i++) {
+    const tr = Math.max(bars[i].h - bars[i].l, Math.abs(bars[i].h - bars[i-1].c), Math.abs(bars[i].l - bars[i-1].c));
+    atr[i] = i < period ? tr : (atr[i-1] * (period - 1) + tr) / period;
+  }
+  const upperBand = new Array(n).fill(0);
+  const lowerBand = new Array(n).fill(0);
+  const supertrend = new Array(n).fill(0);
+  const direction  = new Array(n).fill(1); // 1 = bearish (above price), -1 = bullish (below price)
+
+  for (let i = period; i < n; i++) {
+    const hl2 = (bars[i].h + bars[i].l) / 2;
+    const basicUpper = hl2 + mult * atr[i];
+    const basicLower = hl2 - mult * atr[i];
+
+    upperBand[i] = basicUpper < upperBand[i-1] || bars[i-1].c > upperBand[i-1] ? basicUpper : upperBand[i-1];
+    lowerBand[i] = basicLower > lowerBand[i-1] || bars[i-1].c < lowerBand[i-1] ? basicLower : lowerBand[i-1];
+
+    if (bars[i].c > upperBand[i-1])      direction[i] = -1;
+    else if (bars[i].c < lowerBand[i-1]) direction[i] =  1;
+    else                                  direction[i] = direction[i-1];
+
+    supertrend[i] = direction[i] === -1 ? lowerBand[i] : upperBand[i];
+  }
+  return { supertrend, direction, period };
+}
+
+function drawSupertrend(ctx, bars, px, py) {
+  const { supertrend, direction, period } = calcSupertrend(bars);
+  ctx.save();
+  let prevDir = null;
+  for (let i = period + 1; i < bars.length; i++) {
+    if (!supertrend[i] || !supertrend[i-1]) continue;
+    const x0 = px(i-1), y0 = py(supertrend[i-1]);
+    const x1 = px(i),   y1 = py(supertrend[i]);
+    const bull = direction[i] === -1;
+    ctx.strokeStyle = bull ? '#69f0ae' : '#ef5350';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+
+    // Signal markers at crossover bars
+    const flipped = prevDir !== null && direction[i] !== prevDir;
+    if (flipped) {
+      const markerY = py(bars[i].c);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = bull ? '#69f0ae' : '#ef5350';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(bull ? '▲' : '▼', x1, bull ? markerY + 14 : markerY - 6);
+    }
+    prevDir = direction[i];
+  }
+  ctx.restore();
+}
+
 // ─── BOLLINGER BANDS ─────────────────────────────────────────────────────────
 function calcBB(bars, period = 20, mult = 2) {
   const upper = [], lower = [], mid = [];
@@ -4542,6 +4606,11 @@ function redrawChart() {
   // 3b2. Bollinger Bands
   if (state.showBB) {
     drawBollingerBands(ctx, bars, px, py, chartTop, chartBottom);
+  }
+
+  // 3b3. Supertrend
+  if (state.showSupertrend) {
+    drawSupertrend(ctx, bars, px, py);
   }
 
   // 3c. Pivot points
@@ -10639,6 +10708,9 @@ document.querySelectorAll('.toggle-btn').forEach(btn => {
     } else if (key === 'macd') {
       state.showMACD = !state.showMACD;
       btn.classList.toggle('macd-on', state.showMACD);
+    } else if (key === 'supertrend') {
+      state.showSupertrend = !state.showSupertrend;
+      btn.classList.toggle('supertrend-on', state.showSupertrend);
     } else if (key === 'bb') {
       state.showBB = !state.showBB;
       btn.classList.toggle('bb-on', state.showBB);
