@@ -418,6 +418,7 @@
   .toggle-btn.gaps-on     { color: #80cbc4; border-color: #80cbc4; background: rgba(128,203,196,0.12); }
   .toggle-btn.wk52-on    { color: #ffd740; border-color: #ffd740; background: rgba(255,215,64,0.12); }
   .toggle-btn.pivots-on  { color: #ce93d8; border-color: #ce93d8; background: rgba(206,147,216,0.12); }
+  .toggle-btn.bb-on      { color: #ffb74d; border-color: #ffb74d; background: rgba(255,183,77,0.12); }
   .toggle-btn.featured {
     position: relative;
     box-shadow: 0 0 8px rgba(255,215,64,0.3);
@@ -2267,6 +2268,7 @@
           <button class="toggle-btn" id="darkpool-btn" data-toggle="darkpool" data-tip="Dark Pool / Block Volume|Highlights candles where volume exceeds 2.5× the 20-bar average — potential institutional block trades or dark pool prints.|Large institutions often accumulate or distribute at wave pivots. Unusual volume confirms the move.">DARK</button>
           <button class="toggle-btn" id="gaps-btn" data-toggle="gaps" data-tip="Gap Detector|Highlights price gaps between sessions: gap-up (open above prior high) in green, gap-down (open below prior low) in red. Unfilled gaps remain shaded until price returns to close them.|Price frequently returns to fill gaps — unfilled gaps act as magnets and are high-probability targets.">GAPS</button>
           <button class="toggle-btn" id="wk52-btn" data-toggle="wk52" data-tip="52-Week High / Low|Draws horizontal lines at the 52-week high (gold) and 52-week low (red) with distance labels.|A breakout above the 52W high on high volume is one of the strongest momentum signals. Stocks near the 52W low are either deep value or falling knives — wave count confirms which.">52W</button>
+          <button class="toggle-btn" id="bb-btn" data-toggle="bb" data-tip="Bollinger Bands|SMA20 ± 2 standard deviations. Upper band = overbought zone, lower band = oversold zone. Band squeeze (narrow width) signals low volatility before a breakout.|Price walking the upper band during Wave 3 confirms strong momentum. A close outside the bands followed by a return inside is a classic reversal signal at Wave 5 or C.">BB</button>
           <button class="toggle-btn" id="pivots-btn" data-toggle="pivots" data-tip="Pivot Points|Classic floor-trader pivot levels calculated from the prior period's High/Low/Close: PP (pivot), R1/R2 (resistance), S1/S2 (support).|Price often pauses, reverses, or accelerates at pivot levels. Combine with wave counts: a Wave 3 breakout through R1 signals strong momentum; a Wave 4 holding above S1 confirms corrective support.">PVTS</button>
         </div>
         <div class="toolbar-sep"></div>
@@ -2460,6 +2462,7 @@ let state = {
   showGaps:    false,    // gap detector overlay
   show52W:     false,    // 52-week high/low lines
   showPivots:  false,    // pivot points S1/S2/PP/R1/R2
+  showBB:      false,    // Bollinger Bands SMA20 ±2σ
   snapshots: [],         // named chart annotation snapshots
   _aiCommentary: {},     // sym -> { text, at }
   folders: [{ id: 'all', name: 'ALL', tickers: [] }],
@@ -3420,6 +3423,75 @@ function calcStochRSI(bars, rsiPeriod = 14, stochPeriod = 14, kSmooth = 3, dSmoo
   return { k: kSmoothed, d };
 }
 
+// ─── BOLLINGER BANDS ─────────────────────────────────────────────────────────
+function calcBB(bars, period = 20, mult = 2) {
+  const upper = [], lower = [], mid = [];
+  for (let i = 0; i < bars.length; i++) {
+    if (i < period - 1) { upper.push(null); lower.push(null); mid.push(null); continue; }
+    const slice = bars.slice(i - period + 1, i + 1).map(b => b.c);
+    const sma = slice.reduce((a, b) => a + b, 0) / period;
+    const variance = slice.reduce((a, b) => a + (b - sma) ** 2, 0) / period;
+    const sd = Math.sqrt(variance);
+    mid.push(sma);
+    upper.push(sma + mult * sd);
+    lower.push(sma - mult * sd);
+  }
+  return { upper, lower, mid };
+}
+
+function drawBollingerBands(ctx, bars, px, py, chartTop, chartBottom) {
+  const { upper, lower, mid } = calcBB(bars);
+  const color = '#ffb74d';
+
+  // Filled band
+  ctx.save();
+  ctx.beginPath();
+  let started = false;
+  for (let i = 0; i < bars.length; i++) {
+    if (upper[i] == null) continue;
+    const x = px(i), y = py(upper[i]);
+    if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+  }
+  for (let i = bars.length - 1; i >= 0; i--) {
+    if (lower[i] == null) continue;
+    ctx.lineTo(px(i), py(lower[i]));
+  }
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,183,77,0.07)';
+  ctx.fill();
+
+  // Upper band
+  ctx.beginPath(); started = false;
+  for (let i = 0; i < bars.length; i++) {
+    if (upper[i] == null) continue;
+    const x = px(i), y = py(upper[i]);
+    if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.globalAlpha = 0.7;
+  ctx.setLineDash([3, 3]); ctx.stroke();
+
+  // Lower band
+  ctx.beginPath(); started = false;
+  for (let i = 0; i < bars.length; i++) {
+    if (lower[i] == null) continue;
+    const x = px(i), y = py(lower[i]);
+    if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Middle SMA
+  ctx.beginPath(); started = false;
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 0.5;
+  for (let i = 0; i < bars.length; i++) {
+    if (mid[i] == null) continue;
+    const x = px(i), y = py(mid[i]);
+    if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
+  ctx.restore();
+}
+
 // ─── PIVOT POINTS ────────────────────────────────────────────────────────────
 function drawPivotPoints(ctx, bars, px, py, chartLeft, chartRight, chartTop, chartBottom) {
   if (bars.length < 2) return;
@@ -4365,6 +4437,11 @@ function redrawChart() {
   // 3b. Gap detector
   if (state.showGaps) {
     drawGaps(ctx, bars, px, py, chartLeft, chartRight, chartTop, chartBottom);
+  }
+
+  // 3b2. Bollinger Bands
+  if (state.showBB) {
+    drawBollingerBands(ctx, bars, px, py, chartTop, chartBottom);
   }
 
   // 3c. Pivot points
@@ -10459,6 +10536,9 @@ document.querySelectorAll('.toggle-btn').forEach(btn => {
     } else if (key === 'wk52') {
       state.show52W = !state.show52W;
       btn.classList.toggle('wk52-on', state.show52W);
+    } else if (key === 'bb') {
+      state.showBB = !state.showBB;
+      btn.classList.toggle('bb-on', state.showBB);
     } else if (key === 'pivots') {
       state.showPivots = !state.showPivots;
       btn.classList.toggle('pivots-on', state.showPivots);
