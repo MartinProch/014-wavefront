@@ -1311,6 +1311,7 @@ strong { font-weight: 600; }
         <button class="ov-btn"       data-key="div"    data-color="green">DIV</button>
         <button class="ov-btn"       data-key="smc"    data-color="gold">SMC</button>
         <button class="ov-btn"       data-key="pivot"  data-color="cyan" id="pivot-ov-btn">PIVOT</button>
+        <button class="ov-btn"       data-key="buyzone" data-color="green">🎯 ZONE</button>
         <span id="pivot-period-toggle" style="display:none;align-items:center;gap:0;border:1px solid rgba(6,182,212,0.4);border-radius:6px;overflow:hidden;flex-shrink:0">
           <button id="pp-D" onclick="setPivotPeriod('D')" style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;padding:4px 7px;border:none;background:rgba(6,182,212,0.25);color:#06b6d4;cursor:pointer">D</button>
           <button id="pp-W" onclick="setPivotPeriod('W')" style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;padding:4px 7px;border:none;background:transparent;color:var(--muted);cursor:pointer">W</button>
@@ -1396,6 +1397,7 @@ strong { font-weight: 600; }
         <button class="subtab" id="ast-momentum" onclick="switchWavesSubtab('momentum')">MOMENTUM</button>
         <button class="subtab" id="ast-bench" onclick="switchWavesSubtab('bench')">BENCH</button>
         <button class="subtab" id="ast-recession" onclick="switchWavesSubtab('recession')">RECESSION</button>
+        <button class="subtab" id="ast-rotation" onclick="switchWavesSubtab('rotation')">ROTATION</button>
       </div>
       <div id="waves-analysis-view" class="subtab-view" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="analysis-content">
@@ -1446,6 +1448,9 @@ strong { font-weight: 600; }
       </div>
       <div id="waves-recession-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="recession-content"><div class="empty-state"><div class="empty-icon">📉</div><div class="empty-text">SELECT A TICKER<br>TO SEE RECESSION ANALYSIS</div></div></div>
+      </div>
+      <div id="waves-rotation-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+        <div id="rotation-content"><div class="empty-state"><div class="empty-icon">🔄</div><div class="empty-text">SECTOR ROTATION<br>LOADING…</div></div></div>
       </div>
     </div>
 
@@ -1702,7 +1707,7 @@ let state = {
   wavesMTF: {},
   fundamentals: {},
   fundLoading: {},
-  overlays: { waves:true, fibs:true, sr:true, zones:true, vol:true, ma50:true, ma200:true, ema20:true, wma50:false, wma200:false, bb:false, macd:false, econ:false, chan:false, vp:false, subwaves:false, vwap:false, smc:false, pivot:false },
+  overlays: { waves:true, fibs:true, sr:true, zones:true, vol:true, ma50:true, ma200:true, ema20:true, wma50:false, wma200:false, bb:false, macd:false, econ:false, chan:false, vp:false, subwaves:false, vwap:false, smc:false, pivot:false, buyzone:false },
   showCandlePatterns: true,
   forecastView: false,
   econEvents: [],
@@ -3243,6 +3248,227 @@ function _drawRecessionMiniChart(idx,s){
   ctx.fillStyle='#64748b';ctx.fillText('obnova',P.l+113,P.t+10);
 }
 
+// ─── SECTOR ROTATION (ROTATION TAB) ──────────────────────────────────────────
+
+const ROTATION_SECTORS = [
+  { name: "Technology",    etf: "XLK",  icon: "💻" },
+  { name: "Healthcare",    etf: "XLV",  icon: "🏥" },
+  { name: "Financials",    etf: "XLF",  icon: "🏦" },
+  { name: "Energy",        etf: "XLE",  icon: "⚡" },
+  { name: "Consumer Disc", etf: "XLY",  icon: "🛍" },
+  { name: "Industrials",   etf: "XLI",  icon: "🏭" },
+  { name: "Materials",     etf: "XLB",  icon: "⛏" },
+  { name: "Real Estate",   etf: "XLRE", icon: "🏠" },
+  { name: "Utilities",     etf: "XLU",  icon: "💡" },
+  { name: "Staples",       etf: "XLP",  icon: "🛒" },
+  { name: "Comm Services", etf: "XLC",  icon: "📡" },
+];
+
+const ROTATION_TICKER_SECTOR = {
+  AAPL:'XLK',MSFT:'XLK',NVDA:'XLK',AVGO:'XLK',TSM:'XLK',ORCL:'XLK',AMD:'XLK',INTC:'XLK',QCOM:'XLK',
+  JNJ:'XLV',UNH:'XLV',LLY:'XLV',ABBV:'XLV',MRK:'XLV',TMO:'XLV',ABT:'XLV',DHR:'XLV',BMY:'XLV',AMGN:'XLV',PFE:'XLV',GILD:'XLV',
+  JPM:'XLF',BAC:'XLF',WFC:'XLF',GS:'XLF',MS:'XLF',BLK:'XLF',C:'XLF',AXP:'XLF',V:'XLF',MA:'XLF',
+  XOM:'XLE',CVX:'XLE',COP:'XLE',SLB:'XLE',EOG:'XLE',MPC:'XLE',VLO:'XLE',PSX:'XLE',
+  AMZN:'XLY',TSLA:'XLY',HD:'XLY',MCD:'XLY',NKE:'XLY',SBUX:'XLY',LOW:'XLY',TGT:'XLY',BKNG:'XLY',
+  HON:'XLI',UNP:'XLI',RTX:'XLI',CAT:'XLI',DE:'XLI',LMT:'XLI',GE:'XLI',MMM:'XLI',BA:'XLI',UPS:'XLI',
+  LIN:'XLB',APD:'XLB',SHW:'XLB',FCX:'XLB',NEM:'XLB',NUE:'XLB',
+  AMT:'XLRE',PLD:'XLRE',CCI:'XLRE',EQIX:'XLRE',PSA:'XLRE',DLR:'XLRE',O:'XLRE',
+  NEE:'XLU',DUK:'XLU',SO:'XLU',AEP:'XLU',EXC:'XLU',SRE:'XLU',
+  PG:'XLP',KO:'XLP',PEP:'XLP',COST:'XLP',WMT:'XLP',PM:'XLP',MO:'XLP',CL:'XLP',
+  NFLX:'XLC',DIS:'XLC',T:'XLC',VZ:'XLC',CMCSA:'XLC',
+};
+
+let _rotationCache = {};
+let _rotationPeriod = '1M';
+
+function _rotationDateFrom(period) {
+  const days = period === '1Y' ? 365 : period === '3M' ? 90 : 30;
+  return new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+}
+
+async function _fetchRotationData() {
+  if (_rotationCache.raw) return _rotationCache.raw;
+  const from = _rotationDateFrom('1Y');
+  const allEtfs = [...ROTATION_SECTORS.map(s => s.etf), 'SPY'];
+  const results = await Promise.all(allEtfs.map(etf =>
+    fetch(`https://financialmodelingprep.com/api/v3/historical-price-full/${etf}?from=${from}&apikey=${FMP_KEY}`)
+      .then(r => r.json())
+      .then(j => ({ etf, hist: (j.historical || []).sort((a, b) => a.date < b.date ? -1 : 1) }))
+      .catch(() => ({ etf, hist: [] }))
+  ));
+  const raw = {};
+  results.forEach(r => { raw[r.etf] = r.hist; });
+  _rotationCache.raw = raw;
+  return raw;
+}
+
+function _rotationReturn(hist, fromDate) {
+  if (!hist || hist.length < 2) return null;
+  const start = hist.find(d => d.date >= fromDate);
+  const end   = hist[hist.length - 1];
+  if (!start || !end || start.date === end.date) return null;
+  return (end.close - start.close) / start.close * 100;
+}
+
+function _rotationCardBg(ret) {
+  if (ret === null) return '#16213e';
+  const t = Math.min(Math.abs(ret), 20) / 20;
+  if (ret >= 0) return `rgba(34,197,94,${(0.10 + t * 0.28).toFixed(2)})`;
+  return `rgba(239,68,68,${(0.10 + t * 0.28).toFixed(2)})`;
+}
+
+function _rotationRankBadge(rank, total) {
+  if (rank === 1)     return '<span style="background:#f59e0b;color:#1a1a2e;border-radius:4px;padding:1px 5px;font-size:9px;font-weight:800">🥇1</span>';
+  if (rank === 2)     return '<span style="background:#94a3b8;color:#1a1a2e;border-radius:4px;padding:1px 5px;font-size:9px;font-weight:800">🥈2</span>';
+  if (rank === 3)     return '<span style="background:#cd7f32;color:#1a1a2e;border-radius:4px;padding:1px 5px;font-size:9px;font-weight:800">🥉3</span>';
+  if (rank === total) return '<span style="background:#ef4444;color:#fff;border-radius:4px;padding:1px 5px;font-size:9px;font-weight:800">↓'+rank+'</span>';
+  return '<span style="color:#64748b;font-size:9px">#'+rank+'</span>';
+}
+
+function _rotationInterpretation(ranked) {
+  if (!ranked.length) return '↔ Smíšené signály';
+  const top3 = ranked.slice(0, 3).map(r => r.etf);
+  if (top3.includes('XLK') && top3.includes('XLY')) return '📈 Risk-on: trh očekává růst';
+  if ((top3.includes('XLU') || top3.includes('XLP')) && top3.includes('XLV')) return '🛡 Defenzivní rotace: opatrnost';
+  if (top3.includes('XLE') && top3.includes('XLB')) return '🔥 Komoditní cyklus';
+  if (top3.includes('XLF')) return '🏦 Reflace: rostoucí úroky';
+  const bot2 = ranked.slice(-2).map(r => r.etf);
+  if (bot2.includes('XLK') && (top3.includes('XLU') || top3.includes('XLP'))) return '🛡 Defenzivní rotace: opatrnost';
+  return '↔ Smíšené signály';
+}
+
+function _drawRotationBarChart(canvasId, ranked, spyRet) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth || 320;
+  const H = 220;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx2 = canvas.getContext('2d');
+  ctx2.scale(dpr, dpr);
+  const n      = ranked.length;
+  const barH   = Math.floor((H - 20) / n) - 3;
+  const labelW = 82;
+  const valueW = 40;
+  const chartW = W - labelW - valueW - 8;
+  const maxAbs = Math.max(...ranked.map(r => Math.abs(r.ret || 0)), 1);
+  ctx2.fillStyle = '#0d1b2a';
+  ctx2.fillRect(0, 0, W, H);
+  ranked.forEach((r, i) => {
+    const y   = 10 + i * (barH + 3);
+    const ret = r.ret || 0;
+    const col = ret >= 0 ? '#22c55e' : '#ef4444';
+    const barLen = Math.abs(ret) / maxAbs * chartW;
+    ctx2.fillStyle = '#94a3b8';
+    ctx2.font = 'bold ' + Math.min(barH - 1, 10) + 'px sans-serif';
+    ctx2.textAlign = 'right';
+    ctx2.fillText(r.name.slice(0, 13), labelW - 4, y + barH - 2);
+    ctx2.fillStyle = col + '88';
+    ctx2.fillRect(labelW, y, barLen, barH);
+    ctx2.fillStyle = col;
+    ctx2.fillRect(labelW, y, Math.min(barLen, 3), barH);
+    ctx2.fillStyle = col;
+    ctx2.font = 'bold ' + Math.min(barH - 1, 10) + 'px sans-serif';
+    ctx2.textAlign = 'left';
+    ctx2.fillText((ret >= 0 ? '+' : '') + ret.toFixed(1) + '%', labelW + chartW + 4, y + barH - 2);
+  });
+  if (spyRet !== null) {
+    const spyX = labelW + Math.abs(spyRet) / maxAbs * chartW * (spyRet >= 0 ? 1 : 0);
+    ctx2.strokeStyle = '#4fc3f7';
+    ctx2.lineWidth = 1.5;
+    ctx2.setLineDash([4, 3]);
+    ctx2.beginPath();
+    ctx2.moveTo(spyX, 6);
+    ctx2.lineTo(spyX, H - 6);
+    ctx2.stroke();
+    ctx2.setLineDash([]);
+    ctx2.fillStyle = '#4fc3f7';
+    ctx2.font = '8px sans-serif';
+    ctx2.textAlign = 'center';
+    ctx2.fillText('SPY', spyX, 6);
+  }
+}
+
+async function setRotationPeriod(p) {
+  _rotationPeriod = p;
+  document.querySelectorAll('.rot-period-btn').forEach(b => {
+    b.style.background = b.dataset.p === p ? '#4fc3f7' : 'transparent';
+    b.style.color      = b.dataset.p === p ? '#1a1a2e' : '#94a3b8';
+  });
+  await _renderRotationContent();
+}
+
+async function _renderRotationContent() {
+  const body = document.getElementById('rot-body');
+  if (!body) return;
+  body.innerHTML = '<div style="color:#9ca3af;padding:24px;text-align:center;font-size:13px">Načítám sektory…</div>';
+  let raw;
+  try { raw = await _fetchRotationData(); }
+  catch(e) { body.innerHTML = '<div style="color:#ef4444;padding:20px;text-align:center">Chyba: ' + e.message + '</div>'; return; }
+  const fromDate = _rotationDateFrom(_rotationPeriod);
+  const validRanked = ROTATION_SECTORS
+    .map(s => ({ ...s, ret: _rotationReturn(raw[s.etf], fromDate) }))
+    .filter(s => s.ret !== null)
+    .sort((a, b) => b.ret - a.ret);
+  const allCards = [...validRanked];
+  ROTATION_SECTORS.forEach(s => { if (!allCards.find(r => r.etf === s.etf)) allCards.push({ ...s, ret: null }); });
+  const spyRet = _rotationReturn(raw['SPY'], fromDate);
+  const sym    = state.selected;
+  const symEtf = sym ? ROTATION_TICKER_SECTOR[sym.toUpperCase()] : null;
+  const symSec = symEtf ? ROTATION_SECTORS.find(s => s.etf === symEtf) : null;
+  const symRank = symEtf ? validRanked.findIndex(r => r.etf === symEtf) + 1 : 0;
+  const cardHTML = (s, rank) => {
+    const ret = s.ret;
+    const col = ret === null ? '#64748b' : ret >= 0 ? '#22c55e' : '#ef4444';
+    const bg  = _rotationCardBg(ret);
+    const isCur = s.etf === symEtf;
+    return '<div style="background:' + bg + ';border:1px solid ' + (isCur ? '#4fc3f7' : 'rgba(255,255,255,0.06)') + ';border-radius:10px;padding:8px 4px;text-align:center">'
+      + '<div style="margin-bottom:2px">' + (rank ? _rotationRankBadge(rank, validRanked.length) : '<span style="font-size:9px;color:#4fc3f7">REF</span>') + '</div>'
+      + '<div style="font-size:15px;margin:2px 0">' + s.icon + '</div>'
+      + '<div style="font-size:8px;color:#94a3b8;line-height:1.2;margin-bottom:3px">' + s.name + '</div>'
+      + '<div style="font-size:14px;font-weight:800;color:' + col + '">' + (ret === null ? '—' : (ret >= 0 ? '+' : '') + ret.toFixed(1) + '%') + '</div>'
+      + '</div>';
+  };
+  const heatmap = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;padding:0 12px 12px">'
+    + allCards.map((s, i) => cardHTML(s, i < validRanked.length ? i + 1 : 0)).join('')
+    + cardHTML({ name:'S&P 500', etf:'SPY', icon:'📊', ret: spyRet }, 0)
+    + '</div>';
+  const interp = _rotationInterpretation(validRanked);
+  const tickerCtx = symSec && symRank
+    ? '<div style="background:#16213e;border-radius:10px;padding:12px 14px;margin:0 12px 12px;border-left:3px solid #4fc3f7">'
+      + '<div style="font-size:10px;color:#4fc3f7;font-weight:700;letter-spacing:1px;margin-bottom:4px">VÁŠ TICKER</div>'
+      + '<div style="font-size:12px;color:#e2e8f0">' + sym + ' je v <strong>' + symSec.name + '</strong> — aktuálně <strong>#' + symRank + ' sektor</strong> ('
+      + (validRanked[symRank-1] && validRanked[symRank-1].ret != null ? (validRanked[symRank-1].ret >= 0 ? '+' : '') + validRanked[symRank-1].ret.toFixed(1) + '%' : '—') + ')</div>'
+      + '</div>'
+    : (sym ? '<div style="background:#16213e;border-radius:10px;padding:12px 14px;margin:0 12px 12px;border-left:3px solid #64748b"><div style="font-size:11px;color:#64748b">' + sym + ' není v mapování sektorů</div></div>' : '');
+  body.innerHTML = heatmap
+    + '<div style="font-size:9px;color:#64748b;letter-spacing:2px;padding:4px 16px 6px;font-family:monospace">RANKING — VÝKONNOST</div>'
+    + '<canvas id="rot-bar-canvas" style="width:100%;height:220px;display:block;margin:0 0 10px"></canvas>'
+    + '<div style="background:#16213e;border-radius:10px;padding:12px 14px;margin:0 12px 10px;border-left:3px solid #f59e0b">'
+    + '<div style="font-size:10px;color:#f59e0b;font-weight:700;letter-spacing:1px;margin-bottom:4px">CYKLICKÁ INTERPRETACE</div>'
+    + '<div style="font-size:13px;color:#e2e8f0;font-weight:600">' + interp + '</div>'
+    + '</div>'
+    + tickerCtx;
+  setTimeout(() => _drawRotationBarChart('rot-bar-canvas', validRanked, spyRet), 0);
+}
+
+async function renderRotation() {
+  const el = document.getElementById('rotation-content');
+  if (!el) return;
+  if (!el.querySelector('#rot-body')) {
+    el.innerHTML = '<div style="padding:12px 12px 6px;display:flex;align-items:center;justify-content:space-between">'
+      + '<div style="font-size:9px;color:#64748b;letter-spacing:2px;font-weight:700;font-family:monospace">SECTOR ROTATION</div>'
+      + '<div style="display:flex;gap:4px;background:#16213e;border-radius:20px;padding:3px">'
+      + ['1M','3M','1Y'].map(p => '<button class="rot-period-btn" data-p="' + p + '" onclick="setRotationPeriod(\'' + p + '\')" style="border:none;border-radius:16px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;background:' + (p === _rotationPeriod ? '#4fc3f7' : 'transparent') + ';color:' + (p === _rotationPeriod ? '#1a1a2e' : '#94a3b8') + '">' + p + '</button>').join('')
+      + '</div></div>'
+      + '<div id="rot-body"></div>';
+  }
+  await _renderRotationContent();
+}
+
 // ─── FORMAT HELPERS ───────────────────────────────────────────────────────────
 const fmtPrice = p => { if(p==null||isNaN(p))return '--'; return p>=1000?p.toFixed(2):p>=10?p.toFixed(2):p.toFixed(3); };
 const fmtPct   = (n,d=2) => { if(n==null||isNaN(n))return '—'; return (n*100).toFixed(d)+'%'; };
@@ -4132,6 +4358,46 @@ function redrawChart() {
     });
   }
 
+  // ── Buy Zone overlay ───────────────────────────────────────────────────────
+  if (state.overlays.buyzone && bars.length >= 10) {
+    const srLevels = detectSupportResistance(bars);
+    const supports = srLevels.filter(l => l.role === 'support').sort((a,b) => b.price - a.price);
+    if (supports.length >= 2) {
+      const s1 = supports[0].price, s2 = supports[1].price;
+      const y1 = py(Math.max(s1, s2)), y2 = py(Math.min(s1, s2));
+      ctx.save();
+      ctx.fillStyle = 'rgba(34,197,94,0.12)';
+      ctx.fillRect(cL, y1, cR - cL, y2 - y1);
+      ctx.strokeStyle = 'rgba(34,197,94,0.4)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(cL, y1); ctx.lineTo(cR, y1); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cL, y2); ctx.lineTo(cR, y2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = 'bold 9px JetBrains Mono';
+      ctx.fillStyle = 'rgba(34,197,94,0.85)';
+      ctx.textAlign = 'right';
+      ctx.fillText('Buy Zone', cR - 4, y1 - 3);
+      ctx.restore();
+    } else if (supports.length === 1) {
+      const s1 = supports[0].price;
+      const y1 = py(s1 * 1.02), y2 = py(s1 * 0.98);
+      ctx.save();
+      ctx.fillStyle = 'rgba(34,197,94,0.12)';
+      ctx.fillRect(cL, y1, cR - cL, y2 - y1);
+      ctx.strokeStyle = 'rgba(34,197,94,0.4)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(cL, y1); ctx.lineTo(cR, y1); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = 'bold 9px JetBrains Mono';
+      ctx.fillStyle = 'rgba(34,197,94,0.85)';
+      ctx.textAlign = 'right';
+      ctx.fillText('Buy Zone', cR - 4, y1 - 3);
+      ctx.restore();
+    }
+  }
+
   // ── SMC overlay ────────────────────────────────────────────────────────────
   if (state.overlays && state.overlays.smc) {
     const visibleBars = bars.slice(state.viewStart, state.viewEnd);
@@ -4627,6 +4893,10 @@ function renderWatchlist() {
         }
       }
     } catch(e) {}
+    const bzCache = _buyZoneCache[sym];
+    const bzBadge = (bzCache && bzCache.score >= 4)
+      ? `<span title="Buy Zone: ${bzCache.score}/5" style="font-size:12px;cursor:default">🎯</span>`
+      : '';
     const tag = getTag(sym);
     const stripeHtml = tag
       ? `<div class="wl-tag-stripe" style="background:${tag.color}"></div>`
@@ -4637,7 +4907,7 @@ function renderWatchlist() {
       : `<button class="wl-remove-btn" style="color:var(--border);font-size:14px" onclick="openTagModal('${sym}')">🏷</button>`;
     return `<div class="wl-item ${sel}" id="wl-row-${sym}" data-sym="${sym}">
       ${stripeHtml}
-      <div class="wl-sym" onclick="selectTicker('${sym}')">${sym}${hasThesis(sym)?'<span style="font-size:8px;vertical-align:super;margin-left:2px;" title="Thesis saved">📝</span>':''}</div>
+      <div class="wl-sym" onclick="selectTicker('${sym}')">${sym}${hasThesis(sym)?'<span style="font-size:8px;vertical-align:super;margin-left:2px;" title="Thesis saved">📝</span>':''}${bzBadge}</div>
       <div class="wl-spark" onclick="selectTicker('${sym}')"><canvas id="spark-${sym}"></canvas></div>
       <div class="wl-info" onclick="selectTicker('${sym}')">
         <div class="wl-price">${price}</div>
@@ -5126,6 +5396,141 @@ function buildInterpretation(wave, currentPrice, sym) {
   return null;
 }
 
+// ─── BUY ZONE ────────────────────────────────────────────────────────────────
+const _buyZoneCache = {};
+
+async function computeBuyZone(ticker) {
+  if (_buyZoneCache[ticker]) return _buyZoneCache[ticker];
+
+  const bars = state.data[ticker]?.bars || [];
+  const conditions = [];
+
+  // 1. Valuace — P/E < 5Y historical average
+  try {
+    const kmData = await fetch(`https://financialmodelingprep.com/api/v3/key-metrics/${ticker}?limit=5&apikey=${FMP_KEY}`).then(r=>r.json());
+    const km = Array.isArray(kmData) ? kmData : [];
+    const peValues = km.map(k => k.peRatio).filter(v => v != null && v > 0 && v < 500);
+    const peCurrent = peValues[0] ?? null;
+    const peAvg = peValues.length >= 2 ? peValues.slice(1).reduce((s,v)=>s+v,0)/(peValues.length-1) : null;
+    const ok = (peCurrent != null && peAvg != null) ? peCurrent < peAvg : null;
+    conditions.push({ label: 'Valuace', detail: peCurrent != null ? `P/E ${peCurrent.toFixed(1)} vs avg ${peAvg?.toFixed(1)??'—'}` : 'Data N/A', ok });
+  } catch(e) {
+    conditions.push({ label: 'Valuace', detail: 'Data N/A', ok: null });
+  }
+
+  // 2. Momentum — RSI(14) < 45
+  {
+    const rsi = bars.length >= 15 ? calcRSI(bars, 14) : null;
+    const ok = rsi != null ? rsi < 45 : null;
+    conditions.push({ label: 'Momentum', detail: rsi != null ? `RSI ${rsi.toFixed(0)}` : 'Málo dat', ok });
+  }
+
+  // 3. Technická podpora — cena do 5% od nejbližší support úrovně
+  {
+    const curPrice = bars.length ? bars[bars.length-1].c : null;
+    if (bars.length >= 10 && curPrice) {
+      const srLevels = detectSupportResistance(bars);
+      const supports = srLevels.filter(l => l.role === 'support').sort((a,b) => Math.abs(a.price-curPrice) - Math.abs(b.price-curPrice));
+      const nearest = supports[0] ?? null;
+      const dist = nearest ? Math.abs(curPrice - nearest.price) / curPrice : null;
+      const ok = dist != null ? dist <= 0.05 : null;
+      conditions.push({ label: 'Technická podpora', detail: nearest ? `$${fmtPrice(nearest.price)} (${(dist*100).toFixed(1)}% od ceny)` : 'Žádné S/R', ok });
+    } else {
+      conditions.push({ label: 'Technická podpora', detail: 'Málo dat', ok: null });
+    }
+  }
+
+  // 4. Sentiment — cena není blízko 52W high (< 95% max)
+  {
+    const last252 = bars.slice(-252);
+    const high52w = last252.length ? Math.max(...last252.map(b=>b.h)) : null;
+    const curPrice = bars.length ? bars[bars.length-1].c : null;
+    const ok = (high52w && curPrice) ? curPrice < high52w * 0.95 : null;
+    const dist = (high52w && curPrice) ? ((high52w - curPrice)/high52w*100) : null;
+    conditions.push({ label: 'Sentiment', detail: dist != null ? `${dist.toFixed(1)}% pod 52W high` : 'Data N/A', ok });
+  }
+
+  // 5. Kvalita — Piotroski F-Score >= 6
+  try {
+    const [pioKm, pioCf, pioIs] = await Promise.all([
+      fetch(`https://financialmodelingprep.com/api/v3/key-metrics/${ticker}?limit=2&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/api/v3/cash-flow-statement/${ticker}?limit=2&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/api/v3/income-statement/${ticker}?limit=2&apikey=${FMP_KEY}`).then(r=>r.json()),
+    ]);
+    const km = Array.isArray(pioKm) ? pioKm : [];
+    const cf = Array.isArray(pioCf) ? pioCf : [];
+    const is_ = Array.isArray(pioIs) ? pioIs : [];
+    const k0=km[0]||{}, k1=km[1]||{}, cf0=cf[0]||{}, is0=is_[0]||{}, is1=is_[1]||{};
+    const ta0 = (k0.roaRatio && is0.netIncome) ? is0.netIncome/k0.roaRatio : null;
+    const criteria = [
+      k0.roaRatio!=null ? (k0.roaRatio>0?1:0) : null,
+      cf0.operatingCashFlow!=null ? (cf0.operatingCashFlow>0?1:0) : null,
+      (k0.roaRatio!=null&&k1.roaRatio!=null) ? (k0.roaRatio>k1.roaRatio?1:0) : null,
+      (cf0.operatingCashFlow!=null&&ta0!=null&&k0.roaRatio!=null&&ta0!==0) ? ((cf0.operatingCashFlow/ta0)>k0.roaRatio?1:0) : null,
+      (k0.debtToEquity!=null&&k1.debtToEquity!=null) ? (k0.debtToEquity<k1.debtToEquity?1:0) : null,
+      (k0.currentRatio!=null&&k1.currentRatio!=null) ? (k0.currentRatio>k1.currentRatio?1:0) : null,
+      (is0.weightedAverageShsOut!=null&&is1.weightedAverageShsOut!=null) ? (is0.weightedAverageShsOut<=is1.weightedAverageShsOut*1.02?1:0) : null,
+      (k0.grossProfitMargin!=null&&k1.grossProfitMargin!=null) ? (k0.grossProfitMargin>k1.grossProfitMargin?1:0) : null,
+      (k0.assetTurnover!=null&&k1.assetTurnover!=null) ? (k0.assetTurnover>k1.assetTurnover?1:0) : null,
+    ];
+    const defined = criteria.filter(c=>c!==null);
+    const fscore = defined.reduce((s,v)=>s+v,0);
+    const ok = defined.length >= 5 ? fscore >= 6 : null;
+    conditions.push({ label: 'Kvalita (F-Score)', detail: defined.length ? `F-Score ${fscore}/${defined.length}` : 'Data N/A', ok });
+  } catch(e) {
+    conditions.push({ label: 'Kvalita (F-Score)', detail: 'Data N/A', ok: null });
+  }
+
+  const score = conditions.filter(c=>c.ok===true).length;
+  const result = { score, conditions };
+  _buyZoneCache[ticker] = result;
+  return result;
+}
+
+function renderBuyZoneCard(containerEl, ticker) {
+  const cardId = 'buy-zone-card-' + ticker;
+  // Remove old card if present
+  const old = containerEl.querySelector('#' + cardId);
+  if (old) old.remove();
+
+  const wrapper = document.createElement('div');
+  wrapper.id = cardId;
+  wrapper.innerHTML = `<div class="section-header">KDY NAKOUPIT — ${ticker}</div>
+    <div class="card" style="padding:14px 16px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#64748b;text-align:center;padding:8px 0;">Načítám…</div>
+    </div>`;
+  containerEl.appendChild(wrapper);
+
+  computeBuyZone(ticker).then(({ score, conditions }) => {
+    // Refresh watchlist badge if score qualifies
+    if (score >= 4) renderWatchlist();
+    const color = score >= 4 ? '#22c55e' : score === 3 ? '#f59e0b' : '#ef4444';
+    const label = score >= 4 ? '✓ Valuačně zajímavé' : score === 3 ? '~ Sledovat' : '✗ Počkat';
+    const rows = conditions.map(c => {
+      const icon = c.ok === true ? '✓' : c.ok === false ? '✗' : '–';
+      const col  = c.ok === true ? '#22c55e' : c.ok === false ? '#ef4444' : '#64748b';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #1e3a5f;">
+        <span style="font-size:13px;font-weight:700;color:${col};width:16px;flex-shrink:0">${icon}</span>
+        <div style="flex:1;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#cbd5e1;">${c.label}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#475569;margin-top:1px">${c.detail}</div>
+        </div>
+      </div>`;
+    }).join('');
+    wrapper.innerHTML = `<div class="section-header">KDY NAKOUPIT — ${ticker}</div>
+      <div class="card" style="padding:14px 16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:${color}">${score}/5</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:${color};text-align:right">${label}</div>
+        </div>
+        ${rows}
+      </div>`;
+  }).catch(() => {
+    wrapper.innerHTML = `<div class="section-header">KDY NAKOUPIT — ${ticker}</div>
+      <div class="card" style="padding:14px 16px;"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#ef4444;">Chyba při načítání</div></div>`;
+  });
+}
+
 // ─── FUNDAMENTALS ─────────────────────────────────────────────────────────────
 async function loadAndRenderFund(sym) {
   const el = document.getElementById('fund-content');
@@ -5250,6 +5655,9 @@ function renderFund(sym, data) {
 
   html += `<div style="height:8px"></div>`;
   el.innerHTML = html;
+
+  // Append Buy Zone card after the main HTML is set
+  renderBuyZoneCard(el, sym);
 }
 
 // ─── COMPARE ─────────────────────────────────────────────────────────────────
@@ -5632,7 +6040,7 @@ function switchWatchSubtab(sub) {
 function switchWavesSubtab(sub) {
   document.querySelectorAll('#waves-subtab-bar .subtab').forEach(b => b.classList.remove('active'));
   document.getElementById('ast-' + sub).classList.add('active');
-  ['analysis','forecast','signals','sector','patterns','backtest','earnhist','season','correl','options','candles','diverg','momentum','bench','recession'].forEach(s => {
+  ['analysis','forecast','signals','sector','patterns','backtest','earnhist','season','correl','options','candles','diverg','momentum','bench','recession','rotation'].forEach(s => {
     const v = document.getElementById('waves-' + s + '-view');
     if (v) v.style.display = s === sub ? '' : 'none';
   });
@@ -5651,6 +6059,7 @@ function switchWavesSubtab(sub) {
   if (sub === 'momentum') renderMomentumScore();
   if (sub === 'bench') renderBenchmark();
   if (sub === 'recession') renderRecession();
+  if (sub === 'rotation') renderRotation();
 }
 
 function switchToolsSubtab(sub) {
