@@ -1,6 +1,6 @@
 # WAVEFRONT — Elliott Wave Terminal
 
-**Real-time Elliott Wave analysis for traders. Detect wave patterns, scan the market, and manage positions in one terminal.**
+**Long-term investing terminal with Elliott Wave analysis. Detect wave patterns, analyze fundamentals, screen the market, and manage positions in one terminal.**
 
 ---
 
@@ -35,12 +35,46 @@
 - ✅ **Relative strength ranking** — Compare momentum vs SPY (1M/3M)
 - ✅ **Sector heatmap** — Color-coded grid of all 11 SPDR sector ETFs
 - ✅ **COMPARE tab** — Side-by-side fundamental comparison of all watchlist tickers (sortable, 16 metrics)
+- ✅ **F-Score ≥ 7 filter** — SCREEN tab filter button; shows only tickers with Piotroski F-Score ≥ 7; F-Score badge on each result row
+- ✅ **⚡ MAGIC FORMULA** — Ranks entire watchlist by Greenblatt Magic Formula (Earnings Yield rank + ROIC rank); top 3 get gold/silver/bronze; tap row to navigate to ticker
 
 ### Trading Tools
 - ✅ **Position tracker** — Log trades with entry wave, shares, price
 - ✅ **Trendline drawing** — Click-to-draw support/resistance lines
 - ✅ **Price alerts** — Set notifications at any price level
 - ✅ **Watchlist folders** — Organize tickers by sector/strategy
+
+### Journal & Portfolio (JOURNAL tab)
+- ✅ **ALLOC sub-tab** — Portfolio Allocation: pie chart by position size (% and $ value), horizontal sector bar chart with ⚠ warning if any sector > 30%, Concentration Risk traffic light (top 3 positions)
+- ✅ **DCA sub-tab** — Dollar Cost Averaging simulator: enter ticker + monthly amount + start date → computes total invested, current value, total return, avg cost per share, shares accumulated; canvas chart (blue = invested, green = portfolio value over time)
+- ✅ **PERF sub-tab** — Portfolio performance vs SPY: Alpha, per-position table sorted by Alpha, timeline chart (portfolio cyan vs SPY green)
+- ✅ **WATCH PERF sub-tab** — Watchlist performance since added: ranked table, best/worst/avg return, vs SPY comparison
+- ✅ **Rebalancing alerts** — target allocation per ticker, drift warnings, ⚠ banner when >5% off target
+- ✅ **Watchlist performance badge** — each row shows return since added (+24.3% / 142d)
+
+### Valuation Tools (FUND tab — new sub-tabs)
+- ✅ **VAL HIST sub-tab** — P/E, P/S, P/FCF ratio history charts (5 years), dashed 5Y average line, green = cheaper than historical avg
+- ✅ **MOAT sub-tab** — Economic Moat checklist (6 sources), score 0–6, 🏰 badge in OVERVIEW
+- ✅ **INST sub-tab** — Institutional Ownership: total %, top 10 holders with QoQ change (▲/▼), net activity signal
+- ✅ **SWAN sub-tab** — "Sleeping Well at Night" score 0–100: semicircle gauge, 5 components
+- ✅ **CHECKLIST sub-tab** — 10-question pre-buy checklist, auto-fill from fundamentals (🤖), ANO/NE/? toggles, score badge in OVERVIEW
+- ✅ **REV DCF sub-tab** — Reverse DCF: implied growth rate baked into current price, 3×3 sensitivity table, interpretation
+- ✅ **EPV sub-tab** — Earnings Power Value (Greenwald): firm value at zero growth, EPV vs price, growth premium, WACC detail
+- ✅ **REL VAL sub-tab** — Relative Valuation vs 3 peers: P/E, P/S, EV/EBITDA, P/FCF, P/B table, premium/discount %, bubble chart, verdict
+
+### Analysis (ANALYSIS tab — new sub-tabs)
+- ✅ **RECESSION sub-tab** — Resilience vs COVID Crash 2020 and Bear Market 2022: max drawdown vs SPY, recovery time, Resilience Score 0–100
+- ✅ **ROTATION sub-tab** — Sector Rotation map: 11 SPDR sectors heatmap (1M/3M/1Y), horizontal bar chart, cycle interpretation
+
+### Chart Tools
+- ✅ **Pivot Points overlay** — PIVOT button in toolbar, D/W/M periods, 7 levels (PP, R1–R3, S1–S3)
+- ✅ **Buy Zone indicator** — "KDY NAKOUPIT" card in FUND OVERVIEW (5 auto-conditions), 🎯 ZONE overlay, 🎯 badge in watchlist
+
+### Investment Thesis
+- ✅ **📝 THESIS button** — per-ticker thesis: 4 fields (why / catalyst / risks / target price), 📝 badge in watchlist, preview in FUND OVERVIEW
+
+### Dividends (FUND → DIVID tab)
+- ✅ **Dividend Growth Streak** — consecutive years of growth, King/Aristocrat/Achiever badges, mini bar chart
 
 ### Fundamentals (FUND tab)
 - ✅ **Valuation metrics** — Market Cap, P/E (TTM), Forward P/E, **PEG Ratio**, P/B, EPS, Beta, 52W High/Low, Dividend Yield
@@ -51,6 +85,16 @@
 - ✅ **Revenue history** — Annual revenue & net income table
 - ✅ **Insider transactions** — Recent buy/sell activity
 - ✅ **News** — Latest headlines with publisher and age
+
+### Quality Analysis (FUND → QUALITY sub-tab)
+- ✅ **PEG Ratio** — P/E ÷ EPS Growth Rate, color-coded: green < 1 (Undervalued), yellow 1–2 (Fair), red > 2 (Expensive)
+- ✅ **ROIC Trend** — 6-year bar chart; green highlight when ROIC > 10% (economic moat label); WACC comparison line
+- ✅ **Share Buyback Trend** — 5-year line chart of shares outstanding; green = buybacks (▼%), red = dilution (▲%)
+- ✅ **Growth Quality** — Revenue / EPS / Free Cash Flow CAGR for 3Y and 5Y in table; Growth Score badge (Excellent / Good / Weak)
+- ✅ **Piotroski F-Score** — 9 criteria across Profitability / Leverage / Efficiency; ✓/✗ per criterion; score 0–9 colored green ≥7 / yellow 3–6 / red ≤2
+- ✅ **Net Debt / EBITDA trend** — 6-year chart, green <1.5 / yellow <3.0 / red >3.0
+- ✅ **ROE / ROA trend** — dual-line 6-year chart, 15% excellence threshold
+- ✅ **Capital Allocation Score** — composite 0–10 (Buybacks / Dividends / Reinvestment sub-scores)
 
 ### User Experience
 - ✅ **Dark / Light theme toggle** — ☀ LIGHT / 🌙 DARK button in header, preference saved
@@ -156,6 +200,39 @@ Fundamentals are **cached 24h server-side** (Railway memory) so API quota is not
 
 ## Changelog
 
+### Session 7 (May 2026)
+- ✅ **FUND → VAL HIST sub-tab** — P/E, P/S, P/FCF ratio history charts (5 years) with dashed 5Y average line; green = cheaper than historical average
+- ✅ **FUND → MOAT sub-tab** — Economic Moat checklist: 6 sources (Pricing Power, Switching Costs, Network Effects, Cost Advantage, Intangibles, Efficient Scale), score 0–6, 🏰 badge in OVERVIEW
+- ✅ **FUND → INST sub-tab** — Institutional Ownership: total % owned by institutions, top 10 holders table with QoQ change (▲ buying / ▼ selling), net activity signal
+- ✅ **FUND → SWAN sub-tab** — "Sleeping Well at Night" score 0–100: semicircle gauge, 5 components (Balance Sheet, Dividend Stability, Earnings Consistency, Beta, Business Quality)
+- ✅ **FUND → CHECKLIST sub-tab** — 10-question pre-buy checklist with auto-fill from fundamentals (🤖), ANO/NE/? toggles, score badge in OVERVIEW
+- ✅ **FUND → REV DCF sub-tab** — Reverse DCF: implied growth rate baked into current price, sensitivity table (3×3), interpretation (market too optimistic/pessimistic/fair)
+- ✅ **FUND → EPV sub-tab** — Earnings Power Value (Greenwald): firm value assuming zero growth, EPV vs current price, growth premium breakdown, WACC detail
+- ✅ **FUND → REL VAL sub-tab** — Relative Valuation vs 3 peers: P/E, P/S, EV/EBITDA, P/FCF, P/B table, premium/discount %, bubble chart, verdict
+- ✅ **FUND → QUALITY enhancements** — Net Debt/EBITDA trend (6 years, color-coded), ROE/ROA dual-line chart (15% excellence threshold), Capital Allocation Score 0–10
+- ✅ **ANALYSIS → RECESSION sub-tab** — Resilience vs COVID Crash 2020 and Bear Market 2022: max drawdown vs SPY, recovery time, mini charts, Resilience Score 0–100
+- ✅ **ANALYSIS → ROTATION sub-tab** — Sector Rotation map: 11 SPDR sectors heatmap (1M/3M/1Y), horizontal bar chart, cycle interpretation (Risk-on / Defensive / Commodity / Reflation)
+- ✅ **JOURNAL → PERF sub-tab** — Portfolio performance vs SPY: Alpha, per-position table sorted by Alpha, timeline chart (portfolio cyan vs SPY green)
+- ✅ **JOURNAL → WATCH PERF sub-tab** — Watchlist performance since added: ranked table, best/worst/avg return, vs SPY comparison
+- ✅ **Watchlist performance badge** — each watchlist row shows return since added (+24.3% / 142d)
+- ✅ **📝 THESIS button** — Investment Thesis per ticker: 4 fields (why / catalyst / risks / target price), 📝 badge in watchlist, preview in FUND OVERVIEW
+- ✅ **Pivot Points overlay** — PIVOT button in toolbar, D/W/M periods, 7 levels (PP, R1–R3, S1–S3)
+- ✅ **Rebalancing alerts in ALLOC tab** — target allocation per ticker, drift warnings, ⚠ banner when >5% off target
+- ✅ **Buy Zone indicator** — "KDY NAKOUPIT" card in FUND OVERVIEW (5 auto-conditions), 🎯 ZONE chart overlay, 🎯 badge in watchlist
+- ✅ **Dividend Growth Streak** — consecutive years of growth card in DIVID tab, King/Aristocrat/Achiever badges, mini bar chart
+
+### Session 6 (May 2026)
+- ✅ **FUND → QUALITY sub-tab** — completely new quality analysis section with 5 panels:
+  - **PEG Ratio** — P/E ÷ EPS Growth Rate, color-coded green < 1 / yellow 1–2 / red > 2
+  - **ROIC Trend** — 6-year bar chart with economic moat label (ROIC > 10%) and WACC comparison
+  - **Share Buyback Trend** — 5-year line chart of shares outstanding; green = buybacks, red = dilution
+  - **Growth Quality** — Revenue / EPS / Free Cash Flow CAGR table (3Y and 5Y); Growth Score badge (Excellent / Good / Weak)
+  - **Piotroski F-Score** — 9 criteria (Profitability / Leverage / Efficiency) with ✓/✗ per criterion; score colored green ≥7 / yellow 3–6 / red ≤2
+- ✅ **F-Score ≥ 7 filter in SCREEN tab** — filter button shows only tickers with Piotroski F-Score ≥ 7; F-Score badge displayed on each result row
+- ✅ **⚡ MAGIC FORMULA button** — ranks entire watchlist by Greenblatt Magic Formula (Earnings Yield rank + ROIC rank); top 3 highlighted gold/silver/bronze; tap row navigates to ticker
+- ✅ **JOURNAL → ALLOC sub-tab** — Portfolio Allocation view: pie chart by position size (% and $ value), horizontal sector bar chart with ⚠ warning if sector > 30%, Concentration Risk traffic light (top 3 positions)
+- ✅ **JOURNAL → DCA sub-tab** — Dollar Cost Averaging simulator: enter ticker + monthly amount + start date → computes total invested, current value, total return, avg cost per share, shares accumulated; canvas chart (blue = invested, green = portfolio value over time)
+
 ### Session 5 (May 2026)
 - ✅ **FORECAST tab** — dedicated sidebar tab showing full trade plan: entry zone, stop loss, target, R:R, bull/bear scenario cards, wave price targets with calendar-estimated dates, buy/sell zones with ⚡ pulse when price is in zone, analyst target confluence, and clickable multi-TF cards
 - ✅ **Trade setup card in WAVES panel** — always-visible header card at top of WAVES panel with ENTRY / STOP / TARGET / R:R grid plus embedded position size calculator (account size + risk % → shares, dollar risk, profit potential)
@@ -210,12 +287,9 @@ Fundamentals are **cached 24h server-side** (Railway memory) so API quota is not
 
 ## Planned Features
 
-- 🔜 Dark pool detection (unusual volume)
-- 🔜 Backtesting engine (replay strategies on historical data)
-- 🔜 Custom indicators (ADX, Stochastic RSI)
-- 🔜 Email/SMS alerts
-- 🔜 Chart snapshots (save/share annotations)
-- 🔜 Options flow / unusual activity scanner
+- 🔜 Revolut CSV import (trades + dividends)
+- 🔜 Earnings & Revenue trend chart (8 quarters bar chart)
+- 🔜 Benchmark comparison (vs SPY/QQQ normalized, 1Y/3Y/5Y)
 
 ---
 
