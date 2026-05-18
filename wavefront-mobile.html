@@ -1476,6 +1476,7 @@ strong { font-weight: 600; }
         <button class="fund-subtab subtab" id="fst-moat" onclick="switchFundSubtab('moat')">MOAT</button>
         <button class="fund-subtab subtab" id="fst-inst" onclick="switchFundSubtab('inst')">INST</button>
         <button class="fund-subtab subtab" id="fst-swan" onclick="switchFundSubtab('swan')">SWAN</button>
+        <button class="fund-subtab subtab" id="fst-checklist" onclick="switchFundSubtab('checklist')">CHECKLIST</button>
       </div>
       <!-- Single ticker view -->
       <div id="fund-single-view" class="subtab-view" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
@@ -1558,6 +1559,10 @@ strong { font-weight: 600; }
       <!-- SWAN view -->
       <div id="fund-swan-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
         <div id="swan-content"><div class="empty-state"><div class="empty-icon">😴</div><div class="empty-text">SELECT A TICKER<br>TO SEE SWAN SCORE</div></div></div>
+      </div>
+      <!-- CHECKLIST view -->
+      <div id="fund-checklist-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
+        <div id="checklist-content"><div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">SELECT A TICKER<br>TO SEE CHECKLIST</div></div></div>
       </div>
     </div>
 
@@ -5607,9 +5612,11 @@ function renderFund(sym, data) {
   const moatScore = getMoatScore(sym);
   const moatColor = moatScore == null ? '#64748b' : moatScore <= 2 ? '#ef4444' : moatScore <= 4 ? '#f59e0b' : '#22c55e';
   const moatText  = moatScore != null ? `🏰 ${moatScore}/6` : '🏰 —/6';
-  html += `<div style="margin:0 12px 8px;display:flex;align-items:center;gap:8px;">
+  const checklistBadge = getChecklistBadge(sym);
+  html += `<div style="margin:0 12px 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
     <span id="moat-badge" onclick="switchFundSubtab('moat')" style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${moatColor};border:1px solid ${moatColor};border-radius:6px;padding:4px 10px;cursor:pointer;letter-spacing:1px;">${moatText}</span>
     <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#334155;">Economic Moat</span>
+    ${checklistBadge}
   </div>`;
   html += `<div class="section-header">VALUATION — ${sym}</div>`;
 
@@ -5683,7 +5690,7 @@ let compareState = { sortKey: 'pe', sortDir: 'asc', activeMetrics: ['pe','fwdPe'
 function switchFundSubtab(sub) {
   document.querySelectorAll('.fund-subtab').forEach(b => b.classList.remove('active'));
   document.getElementById('fst-' + sub).classList.add('active');
-  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earntrend','valhist','moat','inst','swan'].forEach(s => {
+  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earntrend','valhist','moat','inst','swan','checklist'].forEach(s => {
     const v = document.getElementById('fund-' + s + '-view');
     if (v) v.style.display = s === sub ? '' : 'none';
   });
@@ -5704,6 +5711,7 @@ function switchFundSubtab(sub) {
   if (sub === 'moat') renderMoat();
   if (sub === 'inst') renderInstitutional();
   if (sub === 'swan') renderSwan();
+  if (sub === 'checklist') renderChecklist();
 }
 
 // ─── ECONOMIC MOAT ───────────────────────────────────────────────────────────
@@ -9642,6 +9650,243 @@ async function renderSwan() {
   } catch(e) {
     el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}</div>`;
   }
+}
+
+// ─── PRE-BUY CHECKLIST ────────────────────────────────────────────────────────
+const CHECKLIST_QUESTIONS = [
+  // BUSINESS QUALITY
+  { cat: 'BUSINESS QUALITY', text: 'Rozumím byznysu a dokážu vysvětlit jak vydělává peníze?', autoKey: null },
+  { cat: 'BUSINESS QUALITY', text: 'Má firma prokazatelný ekonomický příkop (ROIC > 10% konzistentně)?', autoKey: 'roic' },
+  { cat: 'BUSINESS QUALITY', text: 'Je management kapitálově disciplinovaný (buybacky nebo dividendy)?', autoKey: null },
+  { cat: 'BUSINESS QUALITY', text: 'Roste firma konzistentně (Revenue CAGR > 8% za 5 let)?', autoKey: 'revCagr' },
+  // FINANČNÍ ZDRAVÍ
+  { cat: 'FINANČNÍ ZDRAVÍ', text: 'Je bilance silná? (Net Debt/EBITDA < 2)', autoKey: 'ndEbitda' },
+  { cat: 'FINANČNÍ ZDRAVÍ', text: 'Generuje firma silný Free Cash Flow (FCF margin > 10%)?', autoKey: 'fcfMargin' },
+  { cat: 'FINANČNÍ ZDRAVÍ', text: 'Je Piotroski F-Score ≥ 7?', autoKey: 'fScore' },
+  // VALUACE & NAČASOVÁNÍ
+  { cat: 'VALUACE & NAČASOVÁNÍ', text: 'Je akcie pod historickým průměrem P/E nebo P/FCF?', autoKey: 'peVsAvg' },
+  { cat: 'VALUACE & NAČASOVÁNÍ', text: 'Mám jasně definovaný investiční horizont (min. 3 roky)?', autoKey: null },
+  { cat: 'VALUACE & NAČASOVÁNÍ', text: 'Jsem připraven držet i při -30% poklesu?', autoKey: null },
+];
+
+let _clAnswers = [2,2,2,2,2,2,2,2,2,2]; // 0=NO,1=YES,2=UNSURE
+let _clAuto    = {};                       // autoKey -> {val:1|0, label:'Ano'|'Ne'}
+let _clTicker  = null;
+
+function getChecklistBadge(sym) {
+  try {
+    const raw = localStorage.getItem('wf_checklist_' + sym);
+    if (!raw) return '';
+    const d = JSON.parse(raw);
+    const answers = d.answers || [];
+    const score = answers.filter(a => a === 1).length;
+    const color = score >= 8 ? '#22c55e' : score >= 5 ? '#f59e0b' : '#ef4444';
+    const icon  = score >= 8 ? '✅' : score >= 5 ? '⚠' : '🚫';
+    return `<span onclick="switchFundSubtab('checklist')" style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${color};border:1px solid ${color};border-radius:6px;padding:4px 10px;cursor:pointer;letter-spacing:1px;">${icon} ${score}/10</span>`;
+  } catch(e) { return ''; }
+}
+
+function _clScore() {
+  return _clAnswers.filter(a => a === 1).length;
+}
+
+function setChecklistAnswer(idx, val) {
+  _clAnswers[idx] = val;
+  // re-render score and buttons only
+  const scoreEl = document.getElementById('cl-score-display');
+  if (scoreEl) scoreEl.outerHTML = _clScoreHTML();
+  // update button styles for this question
+  for (let v = 0; v <= 2; v++) {
+    const btn = document.getElementById(`cl-btn-${idx}-${v}`);
+    if (btn) {
+      const active = _clAnswers[idx] === v;
+      btn.style.background = active ? (v===1?'rgba(34,197,94,0.25)':v===0?'rgba(239,68,68,0.2)':'rgba(79,195,247,0.15)') : 'transparent';
+      btn.style.color = active ? (v===1?'#22c55e':v===0?'#ef4444':'#4fc3f7') : '#64748b';
+      btn.style.borderColor = active ? (v===1?'#22c55e':v===0?'#ef4444':'#4fc3f7') : '#334155';
+    }
+  }
+  // re-render score div
+  const sd = document.getElementById('cl-score-div');
+  if (sd) sd.innerHTML = _clScoreHTML();
+}
+
+function _clScoreHTML() {
+  const score = _clScore();
+  const [color, icon, label] = score >= 8
+    ? ['#22c55e', '✅', 'Připraven k nákupu']
+    : score >= 5
+    ? ['#f59e0b', '⚠', 'Zkontroluj oranžové body']
+    : ['#ef4444', '🚫', 'Nenakupovat'];
+  return `<div id="cl-score-display" style="background:#16213e;border:2px solid ${color};border-radius:12px;padding:16px;text-align:center;margin-bottom:16px;">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:900;color:${color};">${score} / 10 ✓</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:${color};margin-top:4px;">${icon} ${label}</div>
+  </div>`;
+}
+
+function saveChecklist() {
+  if (!_clTicker) return;
+  const data = { answers: _clAnswers, date: new Date().toISOString().slice(0,10) };
+  localStorage.setItem('wf_checklist_' + _clTicker, JSON.stringify(data));
+  const btn = document.getElementById('cl-save-btn');
+  if (btn) { btn.textContent = '✓ ULOŽENO'; btn.style.background = 'rgba(34,197,94,0.2)'; btn.style.borderColor = '#22c55e'; btn.style.color = '#22c55e'; setTimeout(()=>{ btn.textContent = 'ULOŽIT CHECKLIST'; btn.style.background='rgba(79,195,247,0.1)'; btn.style.borderColor='#4fc3f7'; btn.style.color='#4fc3f7'; },1500); }
+}
+
+function resetChecklist() {
+  if (!_clTicker) return;
+  localStorage.removeItem('wf_checklist_' + _clTicker);
+  renderChecklist();
+}
+
+async function renderChecklist() {
+  const el = document.getElementById('checklist-content');
+  if (!el) return;
+  const sym = state.ticker || state.selected;
+  if (!sym) {
+    el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">SELECT A TICKER FIRST</div>';
+    return;
+  }
+  _clTicker = sym;
+  el.innerHTML = `<div style="color:#4fc3f7;padding:20px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;">Načítám data pro ${sym}…</div>`;
+
+  // Load saved answers
+  try {
+    const raw = localStorage.getItem('wf_checklist_' + sym);
+    if (raw) {
+      const d = JSON.parse(raw);
+      _clAnswers = (d.answers && d.answers.length === 10) ? d.answers : [2,2,2,2,2,2,2,2,2,2];
+    } else {
+      _clAnswers = [2,2,2,2,2,2,2,2,2,2];
+    }
+  } catch(e) { _clAnswers = [2,2,2,2,2,2,2,2,2,2]; }
+
+  // Fetch data for auto-detect
+  _clAuto = {};
+  try {
+    const [kmArr, incArr] = await Promise.all([
+      fetch(`https://financialmodelingprep.com/api/v3/key-metrics/${sym}?limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/api/v3/income-statement/${sym}?limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
+    ]);
+    const kms = Array.isArray(kmArr) ? kmArr : [];
+    const incs = Array.isArray(incArr) ? incArr : [];
+    const km0 = kms[0] || {};
+
+    // Q2: ROIC > 10%
+    if (km0.roic != null) {
+      const v = km0.roic > 0.10 ? 1 : 0;
+      _clAuto['roic'] = { val: v, label: v ? 'Ano' : 'Ne', detail: `ROIC ${(km0.roic*100).toFixed(1)}%` };
+    }
+
+    // Q4: Revenue CAGR > 8% (5 years)
+    if (incs.length >= 5) {
+      const newest = incs[0].revenue || 0;
+      const oldest = incs[Math.min(4, incs.length-1)].revenue || 0;
+      if (oldest > 0) {
+        const cagr = Math.pow(newest/oldest, 1/4) - 1;
+        const v = cagr > 0.08 ? 1 : 0;
+        _clAuto['revCagr'] = { val: v, label: v ? 'Ano' : 'Ne', detail: `CAGR ${(cagr*100).toFixed(1)}%` };
+      }
+    }
+
+    // Q5: Net Debt/EBITDA < 2
+    if (km0.netDebtToEBITDA != null) {
+      const v = km0.netDebtToEBITDA < 2 ? 1 : 0;
+      _clAuto['ndEbitda'] = { val: v, label: v ? 'Ano' : 'Ne', detail: `ND/EBITDA ${km0.netDebtToEBITDA.toFixed(1)}x` };
+    }
+
+    // Q6: FCF margin > 10%
+    if (incs.length > 0) {
+      const inc0 = incs[0];
+      const fcf = (inc0.operatingCashFlow || 0) - (inc0.capitalExpenditure || 0);
+      const rev = inc0.revenue || 0;
+      if (rev > 0) {
+        const margin = fcf / rev;
+        const v = margin > 0.10 ? 1 : 0;
+        _clAuto['fcfMargin'] = { val: v, label: v ? 'Ano' : 'Ne', detail: `FCF margin ${(margin*100).toFixed(1)}%` };
+      }
+    }
+
+    // Q7: simplified F-Score (ROA>0, OCF>0, improving ROA)
+    if (incs.length >= 2) {
+      const inc0 = incs[0], inc1 = incs[1];
+      let fs = 0;
+      const assets0 = inc0.totalAssets || inc0.totalEquity || 1;
+      const assets1 = inc1.totalAssets || inc1.totalEquity || 1;
+      const roa0 = (inc0.netIncome||0) / assets0;
+      const roa1 = (inc1.netIncome||0) / assets1;
+      const ocf0 = inc0.operatingCashFlow || 0;
+      if (roa0 > 0) fs++;
+      if (ocf0 > 0) fs++;
+      if (roa0 > roa1) fs++;
+      // scale to 9: multiply by 3
+      const fScore9 = fs * 3;
+      const v = fScore9 >= 7 ? 1 : 0;
+      _clAuto['fScore'] = { val: v, label: v ? 'Ano' : 'Ne', detail: `F-Score ~${fScore9}/9` };
+    }
+
+    // Q8: current P/E vs 5Y avg
+    if (kms.length >= 3 && km0.peRatio != null) {
+      const pes = kms.map(k => k.peRatio).filter(p => p != null && p > 0 && p < 200);
+      if (pes.length >= 2) {
+        const avg = pes.reduce((a,b)=>a+b,0) / pes.length;
+        const v = km0.peRatio < avg ? 1 : 0;
+        _clAuto['peVsAvg'] = { val: v, label: v ? 'Ano' : 'Ne', detail: `P/E ${km0.peRatio.toFixed(1)} vs avg ${avg.toFixed(1)}` };
+      }
+    }
+
+    // Apply auto to unanswered questions
+    CHECKLIST_QUESTIONS.forEach((q, i) => {
+      if (q.autoKey && _clAuto[q.autoKey] !== undefined && _clAnswers[i] === 2) {
+        _clAnswers[i] = _clAuto[q.autoKey].val;
+      }
+    });
+
+  } catch(e) { /* auto-detect failed, use saved/default answers */ }
+
+  // Render
+  let cats = [];
+  let lastCat = null;
+  let html = '';
+
+  html += `<div id="cl-score-div">${_clScoreHTML()}</div>`;
+
+  CHECKLIST_QUESTIONS.forEach((q, i) => {
+    if (q.cat !== lastCat) {
+      if (lastCat !== null) html += '</div>';
+      html += `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:#64748b;letter-spacing:2px;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid #1e3a5f;">${q.cat}</div>`;
+      html += '<div>';
+      lastCat = q.cat;
+    }
+
+    const auto = q.autoKey ? _clAuto[q.autoKey] : null;
+    const autoBadge = auto
+      ? `<span style="font-size:10px;color:#64748b;background:#0f172a;border:1px solid #334155;border-radius:4px;padding:2px 6px;margin-left:4px;white-space:nowrap;">🤖 ${auto.label}${auto.detail ? ' · '+auto.detail : ''}</span>`
+      : '';
+
+    const btnLabels = ['NE','ANO','?'];
+    const btnColors = ['#ef4444','#22c55e','#4fc3f7'];
+    let btns = '';
+    for (let v = 0; v <= 2; v++) {
+      const active = _clAnswers[i] === v;
+      // map: 0=NO,1=YES,2=UNSURE but display order is YES,NO,?
+      // keep loop order: v=0→NE, v=1→ANO, v=2→?
+      btns += `<button id="cl-btn-${i}-${v}" onclick="setChecklistAnswer(${i},${v})"
+        style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:5px 10px;border-radius:6px;border:1px solid ${active?btnColors[v]:'#334155'};background:${active?`rgba(${v===1?'34,197,94':v===0?'239,68,68':'79,195,247'},0.2)`:'transparent'};color:${active?btnColors[v]:'#64748b'};cursor:pointer;transition:all 0.15s;">${btnLabels[v]}</button>`;
+    }
+
+    html += `<div style="background:#16213e;border:1px solid #1e3a5f;border-radius:10px;padding:12px;margin-bottom:8px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#e2e8f0;margin-bottom:8px;line-height:1.5;">${i+1}. ${q.text}${autoBadge}</div>
+      <div style="display:flex;gap:6px;">${btns}</div>
+    </div>`;
+  });
+  if (lastCat !== null) html += '</div>';
+
+  // Buttons row
+  html += `<div style="display:flex;gap:10px;margin-top:16px;margin-bottom:24px;">
+    <button id="cl-save-btn" onclick="saveChecklist()" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;padding:12px;border-radius:8px;border:1px solid #4fc3f7;background:rgba(79,195,247,0.1);color:#4fc3f7;cursor:pointer;letter-spacing:1px;">ULOŽIT CHECKLIST</button>
+    <button onclick="resetChecklist()" style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;padding:12px 16px;border-radius:8px;border:1px solid #334155;background:transparent;color:#64748b;cursor:pointer;">RESET</button>
+  </div>`;
+
+  el.innerHTML = html;
 }
 
 // ─── SECTOR ROTATION ──────────────────────────────────────────────────────────
