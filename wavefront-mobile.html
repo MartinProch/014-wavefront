@@ -3812,6 +3812,10 @@ function redrawChart() {
   // ── Moving averages ───────────────────────────────────────────────────────
   const allBars = state.data[state.selected].bars;
 
+  // Build index map once — O(n) instead of O(n²) findIndex per bar
+  const _allBarsIdxMap = new Map();
+  allBars.forEach((ab, i) => { if (ab.date) _allBarsIdxMap.set(ab.date.getTime(), i); });
+
   function drawMA(fullVals, color, dash=[], hlKey=null) {
     const hl = hlKey && hlKey === _hlKey;
     ctx.save();
@@ -3822,7 +3826,7 @@ function redrawChart() {
     if (hl) { ctx.shadowColor = color; ctx.shadowBlur = 14; }
     let started=false;
     bars.forEach((b,vi) => {
-      const fi = allBars.findIndex(ab=>ab.date.getTime()===b.date.getTime());
+      const fi = b.date ? (_allBarsIdxMap.get(b.date.getTime()) ?? -1) : -1;
       const val = fi>=0?fullVals[fi]:null;
       if (val==null) return;
       const x=px(vi), y=py(val);
