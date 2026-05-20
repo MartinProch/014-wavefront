@@ -3565,6 +3565,13 @@ function resetZoom() {
 
 function redrawChart() {
   const w = canvas.clientWidth, h = canvas.clientHeight;
+  // Reset canvas state fully — prevents corrupted ctx from failed overlay draws
+  ctx.setTransform(_dpr, 0, 0, _dpr, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = 'transparent';
+  ctx.setLineDash([]);
   ctx.clearRect(0, 0, w, h);
   ctx.fillStyle = cssVar('--bg');
   ctx.fillRect(0, 0, w, h);
@@ -3692,54 +3699,58 @@ function redrawChart() {
   }
 
   // ── S/R levels ────────────────────────────────────────────────────────────
-  if (state.overlays.sr) {
-    const hlSR = _hlKey === 'sr';
-    const levels = detectSupportResistance(bars);
-    levels.forEach(lv => {
-      const y = py(lv.price);
-      const supColor = lv.role==='support' ? 'rgba(34,197,94,' : 'rgba(239,68,68,';
-      ctx.save();
-      ctx.setLineDash(hlSR ? [] : [4,4]);
-      ctx.strokeStyle = supColor + (hlSR ? '0.9)' : '0.4)');
-      ctx.lineWidth = hlSR ? 2.5 : 1;
-      if (hlSR) { ctx.shadowColor = supColor + '1)'; ctx.shadowBlur = 10; }
-      ctx.beginPath(); ctx.moveTo(cL,y); ctx.lineTo(cR,y); ctx.stroke();
-      ctx.restore();
-      ctx.fillStyle = lv.role==='support' ? cssVar('--green') : cssVar('--red');
-      ctx.font = (hlSR ? 'bold ' : '') + '9px JetBrains Mono'; ctx.textAlign='right';
-      ctx.globalAlpha = hlSR ? 1 : 0.7;
-      ctx.fillText('$'+fmtPrice(lv.price), cR-2, y-2);
-      ctx.globalAlpha=1;
-    });
-  }
+  try {
+    if (state.overlays.sr) {
+      const hlSR = _hlKey === 'sr';
+      const levels = detectSupportResistance(bars);
+      levels.forEach(lv => {
+        const y = py(lv.price);
+        const supColor = lv.role==='support' ? 'rgba(34,197,94,' : 'rgba(239,68,68,';
+        ctx.save();
+        ctx.setLineDash(hlSR ? [] : [4,4]);
+        ctx.strokeStyle = supColor + (hlSR ? '0.9)' : '0.4)');
+        ctx.lineWidth = hlSR ? 2.5 : 1;
+        if (hlSR) { ctx.shadowColor = supColor + '1)'; ctx.shadowBlur = 10; }
+        ctx.beginPath(); ctx.moveTo(cL,y); ctx.lineTo(cR,y); ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle = lv.role==='support' ? cssVar('--green') : cssVar('--red');
+        ctx.font = (hlSR ? 'bold ' : '') + '9px JetBrains Mono'; ctx.textAlign='right';
+        ctx.globalAlpha = hlSR ? 1 : 0.7;
+        ctx.fillText('$'+fmtPrice(lv.price), cR-2, y-2);
+        ctx.globalAlpha=1;
+      });
+    }
+  } catch(e) { ctx.restore(); }
 
   // ── Buy/sell zones ────────────────────────────────────────────────────────
-  if (state.overlays.zones && state.waves[state.selected]) {
-    const hlZ = _hlKey === 'zones';
-    const wave = state.waves[state.selected]?.primary || state.waves[state.selected];
-    if (!wave.complete && wave.waveData) {
-      const isUp = wave.direction === 'up';
-      const { p0, p1, p2, p3, p4 } = wave.waveData;
-      if (p4) {
-        const w3range = Math.abs((p3||{}).price - (p2||{}).price) || 1;
-        const buyZ1 = isUp ? (p3||p4).price - w3range*0.382 : (p3||p4).price + w3range*0.382;
-        const buyZ2 = isUp ? (p3||p4).price - w3range*0.618 : (p3||p4).price + w3range*0.618;
-        const zTop = py(Math.max(buyZ1, buyZ2));
-        const zBot = py(Math.min(buyZ1, buyZ2));
-        const zCol = isUp ? '34,197,94' : '239,68,68';
-        ctx.fillStyle = `rgba(${zCol},${hlZ ? 0.18 : 0.06})`;
-        ctx.fillRect(cL, zTop, cW, zBot-zTop);
-        ctx.save();
-        ctx.strokeStyle = `rgba(${zCol},${hlZ ? 0.8 : 0.25})`;
-        ctx.lineWidth = hlZ ? 2 : 1;
-        ctx.setLineDash(hlZ ? [] : [3,3]);
-        if (hlZ) { ctx.shadowColor = `rgba(${zCol},1)`; ctx.shadowBlur = 10; }
-        ctx.beginPath(); ctx.moveTo(cL,zTop); ctx.lineTo(cR,zTop); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(cL,zBot); ctx.lineTo(cR,zBot); ctx.stroke();
-        ctx.restore();
+  try {
+    if (state.overlays.zones && state.waves[state.selected]) {
+      const hlZ = _hlKey === 'zones';
+      const wave = state.waves[state.selected]?.primary || state.waves[state.selected];
+      if (!wave.complete && wave.waveData) {
+        const isUp = wave.direction === 'up';
+        const { p0, p1, p2, p3, p4 } = wave.waveData;
+        if (p4) {
+          const w3range = Math.abs((p3||{}).price - (p2||{}).price) || 1;
+          const buyZ1 = isUp ? (p3||p4).price - w3range*0.382 : (p3||p4).price + w3range*0.382;
+          const buyZ2 = isUp ? (p3||p4).price - w3range*0.618 : (p3||p4).price + w3range*0.618;
+          const zTop = py(Math.max(buyZ1, buyZ2));
+          const zBot = py(Math.min(buyZ1, buyZ2));
+          const zCol = isUp ? '34,197,94' : '239,68,68';
+          ctx.fillStyle = `rgba(${zCol},${hlZ ? 0.18 : 0.06})`;
+          ctx.fillRect(cL, zTop, cW, zBot-zTop);
+          ctx.save();
+          ctx.strokeStyle = `rgba(${zCol},${hlZ ? 0.8 : 0.25})`;
+          ctx.lineWidth = hlZ ? 2 : 1;
+          ctx.setLineDash(hlZ ? [] : [3,3]);
+          if (hlZ) { ctx.shadowColor = `rgba(${zCol},1)`; ctx.shadowBlur = 10; }
+          ctx.beginPath(); ctx.moveTo(cL,zTop); ctx.lineTo(cR,zTop); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(cL,zBot); ctx.lineTo(cR,zBot); ctx.stroke();
+          ctx.restore();
+        }
       }
     }
-  }
+  } catch(e) { ctx.restore(); }
 
   // ── Candles / Line / Area ─────────────────────────────────────────────────
   const barW2 = Math.max(1, (histW / bars.length) * 0.6);
@@ -3862,13 +3873,16 @@ function redrawChart() {
     ctx.restore();
   }
 
-  if (state.overlays.ma50)   drawMA(calcSMA(allBars,50),   'rgba(234,179,8,0.9)',   [],     'ma50');
-  if (state.overlays.ma200)  drawMA(calcSMA(allBars,200),  'rgba(249,115,22,0.9)',  [],     'ma200');
-  if (state.overlays.ema20)  drawMA(calcEMA(allBars,20),   'rgba(59,130,246,0.9)',  [],     'ema20');
-  if (state.overlays.wma50)  drawMA(calcWMA(allBars,50),   'rgba(167,139,250,0.9)', [4,3],  'wma50');
-  if (state.overlays.wma200) drawMA(calcWMA(allBars,200),  'rgba(6,182,212,0.9)',   [6,3],  'wma200');
+  try {
+    if (state.overlays.ma50)   drawMA(calcSMA(allBars,50),   'rgba(234,179,8,0.9)',   [],     'ma50');
+    if (state.overlays.ma200)  drawMA(calcSMA(allBars,200),  'rgba(249,115,22,0.9)',  [],     'ma200');
+    if (state.overlays.ema20)  drawMA(calcEMA(allBars,20),   'rgba(59,130,246,0.9)',  [],     'ema20');
+    if (state.overlays.wma50)  drawMA(calcWMA(allBars,50),   'rgba(167,139,250,0.9)', [4,3],  'wma50');
+    if (state.overlays.wma200) drawMA(calcWMA(allBars,200),  'rgba(6,182,212,0.9)',   [6,3],  'wma200');
+  } catch(e) { ctx.restore(); }
 
   // ── Bollinger Bands ──────────────────────────────────────────────────────────
+  try {
   if (state.overlays.bb) {
     const bb = calcBollingerBands(bars);
     const drawBBLine = (arr, col, dash=[]) => {
@@ -3911,6 +3925,7 @@ function redrawChart() {
       }
     }
   }
+  } catch(e) { ctx.restore(); }
 
   // VWAP
   if (state.overlays.vwap && bars.length > 0) {
@@ -3935,6 +3950,7 @@ function redrawChart() {
   }
 
   // Pivot Points
+  try {
   if (state.overlays.pivot && allBars.length > 1) {
     (function drawPivots() {
       const period = state.pivotPeriod || 'D';
@@ -4040,6 +4056,7 @@ function redrawChart() {
       ctx.restore();
     })();
   }
+  } catch(e) { ctx.restore(); }
 
   // MA price labels on right axis
   (function drawMALabels() {
@@ -4068,77 +4085,82 @@ function redrawChart() {
   })();
 
   // ── Fibonacci levels ──────────────────────────────────────────────────────
-  if (state.overlays.fibs && state.waves[state.selected]) {
-    const hlFib = _hlKey === 'fibs';
-    const wave = state.waves[state.selected]?.primary || state.waves[state.selected];
-    const keyRatios = [0, 0.236, 0.382, 0.5, 0.618, 1];
-    wave.fibLevels?.filter(f=>keyRatios.includes(f.ratio)).forEach(f => {
-      const y = py(f.price);
-      if (y < cT || y > cB) return;
-      ctx.save();
-      ctx.globalAlpha = hlFib ? 0.9 : 0.5;
-      ctx.strokeStyle = cssVar('--purple');
-      ctx.lineWidth = hlFib ? 2 : 1;
-      ctx.setLineDash(hlFib ? [] : [2,4]);
-      if (hlFib) { ctx.shadowColor = cssVar('--purple'); ctx.shadowBlur = 10; }
-      ctx.beginPath(); ctx.moveTo(cL,y); ctx.lineTo(cR,y); ctx.stroke();
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = cssVar('--purple');
-      ctx.font = (hlFib ? 'bold ' : '') + '9px JetBrains Mono';
-      ctx.textAlign = 'right';
-      ctx.fillText(f.label, cR-2, y-2);
-      ctx.restore();
-    });
-  }
+  try {
+    if (state.overlays.fibs && state.waves[state.selected]) {
+      const hlFib = _hlKey === 'fibs';
+      const wave = state.waves[state.selected]?.primary || state.waves[state.selected];
+      const keyRatios = [0, 0.236, 0.382, 0.5, 0.618, 1];
+      wave.fibLevels?.filter(f=>keyRatios.includes(f.ratio)).forEach(f => {
+        const y = py(f.price);
+        if (y < cT || y > cB) return;
+        ctx.save();
+        ctx.globalAlpha = hlFib ? 0.9 : 0.5;
+        ctx.strokeStyle = cssVar('--purple');
+        ctx.lineWidth = hlFib ? 2 : 1;
+        ctx.setLineDash(hlFib ? [] : [2,4]);
+        if (hlFib) { ctx.shadowColor = cssVar('--purple'); ctx.shadowBlur = 10; }
+        ctx.beginPath(); ctx.moveTo(cL,y); ctx.lineTo(cR,y); ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = cssVar('--purple');
+        ctx.font = (hlFib ? 'bold ' : '') + '9px JetBrains Mono';
+        ctx.textAlign = 'right';
+        ctx.fillText(f.label, cR-2, y-2);
+        ctx.restore();
+      });
+    }
+  } catch(e) { ctx.restore(); }
 
   // ── Wave pivots ───────────────────────────────────────────────────────────
-  if (state.overlays.waves && state.waves[state.selected]) {
-    const hlW = _hlKey === 'waves';
-    const wave = state.waves[state.selected]?.primary || state.waves[state.selected];
-    const allP = wave.startPivot ? [wave.startPivot, ...wave.pivots] : wave.pivots;
+  try {
+    if (state.overlays.waves && state.waves[state.selected]) {
+      const hlW = _hlKey === 'waves';
+      const wave = state.waves[state.selected]?.primary || state.waves[state.selected];
+      const allP = wave.startPivot ? [wave.startPivot, ...wave.pivots] : wave.pivots;
 
-    ctx.save();
-    ctx.lineWidth = hlW ? 3.5 : 2;
-    ctx.setLineDash([]);
-    for (let k=1; k<allP.length; k++) {
-      const a=allP[k-1], b=allP[k];
-      const ai = bars.findIndex(bar => Math.abs(bar.date.getTime()-a.date.getTime()) < 86400000*3);
-      const bi = bars.findIndex(bar => Math.abs(bar.date.getTime()-b.date.getTime()) < 86400000*3);
-      if (ai<0||bi<0) continue;
-      ctx.strokeStyle = b.col || cssVar('--blue');
-      ctx.globalAlpha = hlW ? 1 : 0.7;
-      if (hlW) { ctx.shadowColor = b.col || cssVar('--blue'); ctx.shadowBlur = 12; }
-      ctx.beginPath(); ctx.moveTo(px(ai),py(a.price)); ctx.lineTo(px(bi),py(b.price)); ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    ctx.shadowBlur = 0;
-
-    allP.forEach(p => {
-      const pi = bars.findIndex(bar => Math.abs(bar.date.getTime()-p.date.getTime()) < 86400000*3);
-      if (pi<0) return;
-      const x=px(pi), y=py(p.price);
-      const isHigh = p.type==='H' || (wave.direction==='up' && ['Ⅰ','Ⅲ','Ⅴ','B'].includes(p.label));
-      const dotY = isHigh ? y - 10 : y + 10;
-      ctx.fillStyle = p.col || cssVar('--text');
-      if (hlW) { ctx.shadowColor = p.col || cssVar('--text'); ctx.shadowBlur = 8; }
-      ctx.beginPath(); ctx.arc(x, y, hlW ? 5 : 3, 0, Math.PI*2); ctx.fill();
+      ctx.save();
+      ctx.lineWidth = hlW ? 3.5 : 2;
+      ctx.setLineDash([]);
+      for (let k=1; k<allP.length; k++) {
+        const a=allP[k-1], b=allP[k];
+        const ai = bars.findIndex(bar => Math.abs(bar.date.getTime()-a.date.getTime()) < 86400000*3);
+        const bi = bars.findIndex(bar => Math.abs(bar.date.getTime()-b.date.getTime()) < 86400000*3);
+        if (ai<0||bi<0) continue;
+        ctx.strokeStyle = b.col || cssVar('--blue');
+        ctx.globalAlpha = hlW ? 1 : 0.7;
+        if (hlW) { ctx.shadowColor = b.col || cssVar('--blue'); ctx.shadowBlur = 12; }
+        ctx.beginPath(); ctx.moveTo(px(ai),py(a.price)); ctx.lineTo(px(bi),py(b.price)); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
       ctx.shadowBlur = 0;
-      // Wave label
-      ctx.font = (hlW ? 'bold 13px' : 'bold 11px') + ' JetBrains Mono';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = p.col || cssVar('--text');
-      ctx.fillText(p.label, x, dotY);
-      // Price label (smaller, slightly offset)
-      const priceStr = '$' + (p.price >= 1000 ? p.price.toFixed(0) : p.price.toFixed(2));
-      ctx.font = '8px JetBrains Mono';
-      ctx.fillStyle = (p.col || '#ffffff') + 'aa'; // semi-transparent
-      ctx.fillText(priceStr, x, isHigh ? dotY - 10 : dotY + 10);
-    });
-    ctx.textAlign = 'left';
-    ctx.restore();
-  }
+
+      allP.forEach(p => {
+        const pi = bars.findIndex(bar => Math.abs(bar.date.getTime()-p.date.getTime()) < 86400000*3);
+        if (pi<0) return;
+        const x=px(pi), y=py(p.price);
+        const isHigh = p.type==='H' || (wave.direction==='up' && ['Ⅰ','Ⅲ','Ⅴ','B'].includes(p.label));
+        const dotY = isHigh ? y - 10 : y + 10;
+        ctx.fillStyle = p.col || cssVar('--text');
+        if (hlW) { ctx.shadowColor = p.col || cssVar('--text'); ctx.shadowBlur = 8; }
+        ctx.beginPath(); ctx.arc(x, y, hlW ? 5 : 3, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0;
+        // Wave label
+        ctx.font = (hlW ? 'bold 13px' : 'bold 11px') + ' JetBrains Mono';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = p.col || cssVar('--text');
+        ctx.fillText(p.label, x, dotY);
+        // Price label (smaller, slightly offset)
+        const priceStr = '$' + (p.price >= 1000 ? p.price.toFixed(0) : p.price.toFixed(2));
+        ctx.font = '8px JetBrains Mono';
+        ctx.fillStyle = (p.col || '#ffffff') + 'aa'; // semi-transparent
+        ctx.fillText(priceStr, x, isHigh ? dotY - 10 : dotY + 10);
+      });
+      ctx.textAlign = 'left';
+      ctx.restore();
+    }
+  } catch(e) { ctx.restore(); }
 
   // ── Sub-waves ──────────────────────────────────────────────────────────────
+  try {
   if (state.overlays.subwaves && state.waves[state.selected]) {
     const wave = getActiveWave(state.selected);
     if (wave?.pattern === 'IMPULSE' && wave.waveData) {
@@ -4192,11 +4214,14 @@ function redrawChart() {
       }
     }
   }
+  } catch(e) { ctx.restore(); }
 
   // ── Volume profile ────────────────────────────────────────────────────────
+  try {
   if (state.overlays.vp) {
     drawVolumeProfile(bars, px, py, cL, cR, cT, cB, cW, cH);
   }
+  } catch(e) { ctx.restore(); }
 
   // ── Crosshair ────────────────────────────────────────────────────────────
   if (state.crosshair !== null) {
@@ -4409,46 +4434,49 @@ function redrawChart() {
   }
 
   // ── Buy Zone overlay ───────────────────────────────────────────────────────
-  if (state.overlays.buyzone && bars.length >= 10) {
-    const srLevels = detectSupportResistance(bars);
-    const supports = srLevels.filter(l => l.role === 'support').sort((a,b) => b.price - a.price);
-    if (supports.length >= 2) {
-      const s1 = supports[0].price, s2 = supports[1].price;
-      const y1 = py(Math.max(s1, s2)), y2 = py(Math.min(s1, s2));
-      ctx.save();
-      ctx.fillStyle = 'rgba(34,197,94,0.12)';
-      ctx.fillRect(cL, y1, cR - cL, y2 - y1);
-      ctx.strokeStyle = 'rgba(34,197,94,0.4)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath(); ctx.moveTo(cL, y1); ctx.lineTo(cR, y1); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cL, y2); ctx.lineTo(cR, y2); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.font = 'bold 9px JetBrains Mono';
-      ctx.fillStyle = 'rgba(34,197,94,0.85)';
-      ctx.textAlign = 'right';
-      ctx.fillText('Buy Zone', cR - 4, y1 - 3);
-      ctx.restore();
-    } else if (supports.length === 1) {
-      const s1 = supports[0].price;
-      const y1 = py(s1 * 1.02), y2 = py(s1 * 0.98);
-      ctx.save();
-      ctx.fillStyle = 'rgba(34,197,94,0.12)';
-      ctx.fillRect(cL, y1, cR - cL, y2 - y1);
-      ctx.strokeStyle = 'rgba(34,197,94,0.4)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath(); ctx.moveTo(cL, y1); ctx.lineTo(cR, y1); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.font = 'bold 9px JetBrains Mono';
-      ctx.fillStyle = 'rgba(34,197,94,0.85)';
-      ctx.textAlign = 'right';
-      ctx.fillText('Buy Zone', cR - 4, y1 - 3);
-      ctx.restore();
+  try {
+    if (state.overlays.buyzone && bars.length >= 10) {
+      const srLevels = detectSupportResistance(bars);
+      const supports = srLevels.filter(l => l.role === 'support').sort((a,b) => b.price - a.price);
+      if (supports.length >= 2) {
+        const s1 = supports[0].price, s2 = supports[1].price;
+        const y1 = py(Math.max(s1, s2)), y2 = py(Math.min(s1, s2));
+        ctx.save();
+        ctx.fillStyle = 'rgba(34,197,94,0.12)';
+        ctx.fillRect(cL, y1, cR - cL, y2 - y1);
+        ctx.strokeStyle = 'rgba(34,197,94,0.4)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath(); ctx.moveTo(cL, y1); ctx.lineTo(cR, y1); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cL, y2); ctx.lineTo(cR, y2); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font = 'bold 9px JetBrains Mono';
+        ctx.fillStyle = 'rgba(34,197,94,0.85)';
+        ctx.textAlign = 'right';
+        ctx.fillText('Buy Zone', cR - 4, y1 - 3);
+        ctx.restore();
+      } else if (supports.length === 1) {
+        const s1 = supports[0].price;
+        const y1 = py(s1 * 1.02), y2 = py(s1 * 0.98);
+        ctx.save();
+        ctx.fillStyle = 'rgba(34,197,94,0.12)';
+        ctx.fillRect(cL, y1, cR - cL, y2 - y1);
+        ctx.strokeStyle = 'rgba(34,197,94,0.4)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath(); ctx.moveTo(cL, y1); ctx.lineTo(cR, y1); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font = 'bold 9px JetBrains Mono';
+        ctx.fillStyle = 'rgba(34,197,94,0.85)';
+        ctx.textAlign = 'right';
+        ctx.fillText('Buy Zone', cR - 4, y1 - 3);
+        ctx.restore();
+      }
     }
-  }
+  } catch(e) { ctx.restore(); }
 
   // ── SMC overlay ────────────────────────────────────────────────────────────
+  try {
   if (state.overlays && state.overlays.smc) {
     const visibleBars = bars.slice(state.viewStart, state.viewEnd);
     const smc = detectSMC(visibleBars);
@@ -4511,6 +4539,7 @@ function redrawChart() {
       ctx.restore();
     });
   }
+  } catch(e) { ctx.restore(); }
 
   // ── Forecast / Prediction View ────────────────────────────────────────────
   if (state.forecastView) {
