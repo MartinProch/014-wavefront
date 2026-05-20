@@ -1629,6 +1629,7 @@ strong { font-weight: 600; }
         <button onclick="switchJournalTab('dca')" id="jst-dca" style="flex:1;padding:10px;font-size:11px;font-weight:600;color:#9ca3af;background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer">DCA</button>
         <button onclick="switchJournalTab('perf')" id="jst-perf" style="flex:1;padding:10px;font-size:11px;font-weight:600;color:#9ca3af;background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer">PERF</button>
         <button onclick="switchJournalTab('watchperf')" id="jst-watchperf" style="flex:1;padding:10px;font-size:11px;font-weight:600;color:#9ca3af;background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer">WATCH PERF</button>
+        <button onclick="switchJournalTab('sizing')" id="jst-sizing" style="flex:1;padding:10px;font-size:11px;font-weight:600;color:#9ca3af;background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer">SIZING</button>
       </div>
       <div id="journal-trades-view" style="flex:1;overflow-y:auto;padding:12px"></div>
       <div id="journal-add-view" style="display:none;flex:1;overflow-y:auto;padding:12px"></div>
@@ -1637,6 +1638,18 @@ strong { font-weight: 600; }
       <div id="journal-dca-view" style="display:none;flex:1;overflow-y:auto;padding:12px"></div>
       <div id="journal-perf-view" style="display:none;flex:1;overflow-y:auto;padding:12px"></div>
       <div id="journal-watchperf-view" style="display:none;flex:1;overflow-y:auto;padding:12px"></div>
+      <div id="journal-sizing-view" style="display:none;flex:1;overflow-y:auto;padding:12px"></div>
+    </div>
+
+    <!-- DASHBOARD TAB -->
+    <div id="tab-dash" class="tab-view">
+      <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1f2937;border-bottom:1px solid #374151;flex-shrink:0">
+          <div style="font-size:13px;font-weight:700;color:#f9fafb;letter-spacing:0.5px">📊 DASHBOARD</div>
+          <button onclick="renderDashboard()" style="padding:6px 12px;background:transparent;border:1px solid #4fc3f7;border-radius:6px;color:#4fc3f7;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:0.5px">↺ OBNOVIT</button>
+        </div>
+        <div id="dash-content" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:12px"></div>
+      </div>
     </div>
 
   <!-- BOTTOM NAV -->
@@ -1668,6 +1681,10 @@ strong { font-weight: 600; }
     <button class="nav-item" id="nav-journal" onclick="switchTab('journal')">
       <div class="nav-icon">📓</div>
       <div class="nav-label">Journal</div>
+    </button>
+    <button class="nav-item" id="nav-dash" onclick="switchTab('dash')">
+      <div class="nav-icon">📊</div>
+      <div class="nav-label">Dash</div>
     </button>
   </div>
 </div>
@@ -6052,6 +6069,9 @@ function switchTab(tab) {
   }
   if (tab === 'journal') {
     switchJournalTab('trades');
+  }
+  if (tab === 'dash') {
+    renderDashboard();
   }
 }
 
@@ -10577,7 +10597,32 @@ function renderAlerts() {
       </div>`;
     }).join('')}</div>`;
 
-  el.innerHTML = formHtml + `<div class="section-header">ACTIVE ALERTS (${alerts.length})</div>` + listHtml;
+  const smartSection = buildSmartAlertSection(sym);
+  el.innerHTML = formHtml + `<div class="section-header">ACTIVE ALERTS (${alerts.length})</div>` + listHtml + smartSection;
+  renderSmartAlertForm();
+  renderSmartAlertList();
+  evaluateSmartAlerts();
+}
+
+function buildSmartAlertSection(sym) {
+  const condOptions = Object.entries(SMART_COND_LABELS).map(([k,v]) =>
+    `<option value="${k}">${v}</option>`).join('');
+  return `
+  <div class="section-header" style="margin-top:8px">⚡ SMART ALERT</div>
+  <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <input id="sa-sym" placeholder="TICKER" value="${sym}" style="width:80px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;outline:none;text-transform:uppercase">
+      <input id="sa-name" placeholder="Název alertu" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;outline:none">
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:8px;align-items:center">
+      <select id="sa-cond-type" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;outline:none">${condOptions}</select>
+      <input id="sa-cond-val" type="number" step="any" placeholder="Hodnota" style="width:80px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;outline:none">
+      <button onclick="addSmartCondition()" style="padding:7px 12px;background:rgba(79,195,247,0.1);border:1px solid rgba(79,195,247,0.3);border-radius:6px;color:var(--blue);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">+ PŘIDAT</button>
+    </div>
+    <div id="sa-form-conditions" style="margin-bottom:8px"></div>
+    <button onclick="createSmartAlert()" style="width:100%;padding:9px;background:rgba(79,195,247,0.12);border:1px solid rgba(79,195,247,0.35);border-radius:8px;color:var(--blue);font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">⚡ ULOŽIT ALERT</button>
+  </div>
+  <div id="sa-list"></div>`;
 }
 
 function addAlert() {
@@ -10692,6 +10737,197 @@ function addAlertFromModal() {
   renderAlerts();
   redrawChart();
   showToast(`Alert set: ${sym} ${_alertDir === 'above' ? '≥' : '≤'} $${fmtPrice(price)}`);
+}
+
+// ─── SMART COMBINED ALERTS ────────────────────────────────────────────────────
+function loadSmartAlerts() { try { return JSON.parse(localStorage.getItem('wf_smart_alerts')||'[]'); } catch(e){return[];} }
+function saveSmartAlerts(a) { try { localStorage.setItem('wf_smart_alerts', JSON.stringify(a)); } catch(e){} }
+
+let _smartDraft = { conditions: [], logic: 'AND' };
+
+const SMART_COND_LABELS = {
+  pe_below:      'P/E <',
+  pe_above:      'P/E >',
+  rsi_below:     'RSI <',
+  rsi_above:     'RSI >',
+  price_below:   'Cena <',
+  price_above:   'Cena >',
+  fscore_above:  'F-Score ≥',
+  pct_from_high: '% od 52W high ≥',
+  near_support:  'Blízko support ±%',
+};
+
+function addSmartCondition() {
+  const typeEl = document.getElementById('sa-cond-type');
+  const valEl  = document.getElementById('sa-cond-val');
+  if (!typeEl || !valEl) return;
+  const type  = typeEl.value;
+  const value = parseFloat(valEl.value);
+  if (isNaN(value)) { showToast('Zadej hodnotu podmínky'); return; }
+  _smartDraft.conditions.push({ type, value });
+  valEl.value = '';
+  renderSmartAlertForm();
+}
+
+function removeSmartCondition(idx) {
+  _smartDraft.conditions.splice(idx, 1);
+  renderSmartAlertForm();
+}
+
+function setSmartLogic(logic) {
+  _smartDraft.logic = logic;
+  renderSmartAlertForm();
+}
+
+function createSmartAlert() {
+  const symEl  = document.getElementById('sa-sym');
+  const nameEl = document.getElementById('sa-name');
+  if (!symEl || !nameEl) return;
+  const sym  = (symEl.value||'').toUpperCase().trim();
+  const name = (nameEl.value||'').trim();
+  if (!sym)  { showToast('Zadej ticker'); return; }
+  if (!name) { showToast('Zadej název alertu'); return; }
+  if (!_smartDraft.conditions.length) { showToast('Přidej alespoň jednu podmínku'); return; }
+  const alerts = loadSmartAlerts();
+  alerts.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    sym,
+    name,
+    conditions: JSON.parse(JSON.stringify(_smartDraft.conditions)),
+    logic: _smartDraft.logic,
+    triggered: false,
+    createdAt: Date.now()
+  });
+  saveSmartAlerts(alerts);
+  _smartDraft = { conditions: [], logic: 'AND' };
+  renderAlerts();
+  showToast(`Smart alert "${name}" uložen`);
+}
+
+function deleteSmartAlert(id) {
+  const alerts = loadSmartAlerts().filter(a => a.id !== id);
+  saveSmartAlerts(alerts);
+  renderAlerts();
+}
+
+function renderSmartAlertForm() {
+  const el = document.getElementById('sa-form-conditions');
+  if (!el) return;
+  const logic = _smartDraft.logic;
+  let condHtml = _smartDraft.conditions.map((c, i) => `
+    <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--blue);flex:1">${SMART_COND_LABELS[c.type]||c.type} <strong style="color:var(--text)">${c.value}</strong></span>
+      <button onclick="removeSmartCondition(${i})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0 2px">✕</button>
+    </div>`).join('');
+  if (_smartDraft.conditions.length > 1) {
+    condHtml = `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);padding:4px 0 2px">LOGIKA:</div>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <button onclick="setSmartLogic('AND')" style="font-family:'JetBrains Mono',monospace;font-size:9px;padding:4px 10px;border-radius:6px;border:1px solid ${logic==='AND'?'var(--blue)':'var(--border)'};background:${logic==='AND'?'rgba(79,195,247,0.15)':'var(--bg3)'};color:${logic==='AND'?'var(--blue)':'var(--muted)'};cursor:pointer">AND</button>
+        <button onclick="setSmartLogic('OR')" style="font-family:'JetBrains Mono',monospace;font-size:9px;padding:4px 10px;border-radius:6px;border:1px solid ${logic==='OR'?'#a78bfa':'var(--border)'};background:${logic==='OR'?'rgba(167,139,250,0.15)':'var(--bg3)'};color:${logic==='OR'?'#a78bfa':'var(--muted)'};cursor:pointer">OR</button>
+      </div>` + condHtml;
+  }
+  el.innerHTML = condHtml || '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--muted);padding:4px 0">Žádné podmínky</div>';
+}
+
+function renderSmartAlertList() {
+  const el = document.getElementById('sa-list');
+  if (!el) return;
+  const alerts = loadSmartAlerts();
+  if (!alerts.length) {
+    el.innerHTML = '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--muted);text-align:center;padding:14px">Žádné smart alerty</div>';
+    return;
+  }
+  el.innerHTML = alerts.map(a => {
+    const badgesHtml = a.conditions.map(c =>
+      `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;background:rgba(79,195,247,0.1);border:1px solid rgba(79,195,247,0.25);border-radius:4px;padding:2px 5px;color:var(--blue);white-space:nowrap">${SMART_COND_LABELS[c.type]||c.type} ${c.value}</span>`
+    ).join('');
+    const statusHtml = a.triggered
+      ? `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--green);font-weight:700">SPLNĚNO ✓</span>`
+      : `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--blue);font-weight:700">AKTIVNÍ</span>`;
+    return `<div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px">
+        <div>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--blue)">${a.sym}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);margin-left:6px">${a.name}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${statusHtml}
+          <button onclick="deleteSmartAlert('${a.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0">✕</button>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted)">${a.logic}:</span>
+        ${badgesHtml}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function evaluateSmartAlerts() {
+  const alerts = loadSmartAlerts();
+  if (!alerts.length) return;
+  let changed = false;
+  alerts.forEach((a, idx) => {
+    if (a.triggered) return;
+    const bars = state.data[a.sym]?.bars;
+    const curPrice = bars?.length ? bars[bars.length-1].c : null;
+    const rsi = (bars?.length >= 15) ? calcRSI(bars, 14) : null;
+    const bzCache = _buyZoneCache[a.sym] || null;
+    const peValue = bzCache?._peCurrent ?? null;
+    const fscoreValue = bzCache?._fscore ?? null;
+
+    const results = a.conditions.map(c => {
+      switch(c.type) {
+        case 'price_below': return curPrice != null ? curPrice < c.value : null;
+        case 'price_above': return curPrice != null ? curPrice > c.value : null;
+        case 'rsi_below':   return rsi != null ? rsi < c.value : null;
+        case 'rsi_above':   return rsi != null ? rsi > c.value : null;
+        case 'pe_below':    return peValue != null ? peValue < c.value : null;
+        case 'pe_above':    return peValue != null ? peValue > c.value : null;
+        case 'fscore_above': return fscoreValue != null ? fscoreValue >= c.value : null;
+        case 'pct_from_high': {
+          if (!bars?.length || !curPrice) return null;
+          const high52 = Math.max(...bars.slice(-252).map(b=>b.h));
+          const pctOff = (high52 - curPrice) / high52 * 100;
+          return pctOff >= c.value;
+        }
+        case 'near_support': {
+          if (!bars?.length || !curPrice) return null;
+          const srLevels = detectSupportResistance(bars);
+          const supports = srLevels.filter(l => l.role === 'support');
+          if (!supports.length) return null;
+          const nearest = supports.reduce((best, l) => Math.abs(l.price-curPrice) < Math.abs(best.price-curPrice) ? l : best);
+          const distPct = Math.abs(curPrice - nearest.price) / curPrice * 100;
+          return distPct <= c.value;
+        }
+        default: return null;
+      }
+    });
+
+    const defined = results.filter(r => r !== null);
+    if (!defined.length) return;
+    const triggered = a.logic === 'OR'
+      ? defined.some(r => r === true)
+      : defined.every(r => r === true);
+
+    if (triggered) {
+      alerts[idx].triggered = true;
+      changed = true;
+      showToast(`⚡ SMART ALERT: ${a.sym} — ${a.name}`, 6000);
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(`⚡ Smart Alert: ${a.sym}`, {
+            body: a.name + ' — podmínky splněny',
+            icon: '/icon.png'
+          });
+        } catch(e) {}
+      }
+    }
+  });
+  if (changed) {
+    saveSmartAlerts(alerts);
+    renderSmartAlertList();
+  }
 }
 
 // ─── SELECT TICKER HELPER ─────────────────────────────────────────────────────
@@ -11199,6 +11435,7 @@ async function init() {
   // Live polling every 60s, alert check every 30s
   setInterval(pollLivePrices, 60000);
   setInterval(checkAlerts, 30000);
+  setInterval(evaluateSmartAlerts, 30000);
 
   // Earnings reminders (delayed so initial render is not blocked)
   setTimeout(checkEarningsReminders, 3000);
@@ -11584,6 +11821,186 @@ async function computeFScore(sym) {
   } catch(e) { return null; }
 }
 
+// ─── DASHBOARD ────────────────────────────────────────────────────────────────
+function renderDashboard() {
+  const el = document.getElementById('dash-content');
+  if (!el) return;
+
+  const card = (title, body) =>
+    '<div style="background:#16213e;border-radius:10px;padding:12px 14px;border:1px solid #1e3a5f">'
+    + '<div style="font-size:11px;font-weight:700;color:#4fc3f7;letter-spacing:1px;margin-bottom:10px">' + title + '</div>'
+    + body + '</div>';
+
+  const moverRow = (sym, price, chg) => {
+    const col = chg >= 0 ? '#22c55e' : '#ef4444';
+    const sign = chg >= 0 ? '+' : '';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #1e3a5f;font-size:12px">'
+      + '<span style="font-weight:700;color:#f9fafb">' + sym + '</span>'
+      + '<span style="color:#9ca3af">$' + price.toFixed(2) + '</span>'
+      + '<span style="color:' + col + ';font-weight:600">' + sign + chg.toFixed(2) + '%</span>'
+      + '</div>';
+  };
+
+  const earRow = (sym, date, timing) =>
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #1e3a5f;font-size:12px">'
+    + '<span style="font-weight:700;color:#f9fafb">' + sym + '</span>'
+    + '<span style="color:#9ca3af">' + date + '</span>'
+    + '<span style="color:#4fc3f7">' + timing + '</span>'
+    + '</div>';
+
+  // Widget 1: Market Pulse
+  let w1 = '';
+  const vix = state.vix;
+  if (vix) {
+    const vp = vix.price;
+    const vc = vix.changePercent || 0;
+    const vCol = vp > 30 ? '#ef4444' : vp > 20 ? '#f59e0b' : '#22c55e';
+    const vLabel = vp > 30 ? 'High Fear' : vp > 20 ? 'Elevated' : 'Low';
+    w1 += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      + '<span style="color:#9ca3af;font-size:12px">VIX</span>'
+      + '<span style="font-size:20px;font-weight:700;color:' + vCol + '">' + vp.toFixed(2) + '</span>'
+      + '<span style="color:' + (vc>=0?'#ef4444':'#22c55e') + ';font-size:11px">' + (vc>=0?'+':'') + vc.toFixed(1) + '%</span>'
+      + '<span style="color:' + vCol + ';font-size:11px">' + vLabel + '</span>'
+      + '</div>';
+  } else {
+    w1 += '<div style="color:#6b7280;font-size:12px;margin-bottom:8px">VIX: načítání…</div>';
+  }
+  if (typeof _rotationCache !== 'undefined' && _rotationCache.raw && _rotationCache.raw.length) {
+    const sorted = _rotationCache.raw.slice().sort(function(a,b){return b.perf-a.perf;});
+    const top = sorted[0], bot = sorted[sorted.length-1];
+    const topPct = (top.perf*100).toFixed(1), botPct = (bot.perf*100).toFixed(1);
+    w1 += '<div style="font-size:11px;color:#9ca3af;padding-top:4px;border-top:1px solid #1e3a5f">Rotace: '
+      + '<span style="color:#22c55e">' + (top.sector||top.sym) + ' ▲' + topPct + '%</span>'
+      + ' | <span style="color:#ef4444">' + (bot.sector||bot.sym) + ' ▼' + Math.abs(botPct) + '%</span></div>';
+  }
+
+  // Widget 2: Watchlist Movers
+  const tickers = state.tickers || [];
+  const movers = [];
+  tickers.forEach(function(sym) {
+    const bars = state.data[sym] && state.data[sym].bars;
+    if (!bars || bars.length < 2) return;
+    const last = bars[bars.length-1], prev = bars[bars.length-2];
+    const chg = prev.c ? (last.c - prev.c) / prev.c * 100 : 0;
+    movers.push({ sym: sym, chg: chg, price: last.c });
+  });
+  movers.sort(function(a,b){return b.chg-a.chg;});
+
+  let w2 = '';
+  if (!movers.length) {
+    w2 = '<div style="color:#6b7280;font-size:12px;text-align:center;padding:8px">Žádná data — načti tickery v Chart tabu.</div>';
+  } else {
+    const gainers = movers.slice(0, Math.min(3, movers.length));
+    const losers = movers.slice(Math.max(0, movers.length-3)).reverse();
+    w2 += '<div style="font-size:10px;color:#6b7280;font-weight:700;letter-spacing:0.5px;margin-bottom:4px">TOP GAINERS</div>';
+    gainers.forEach(function(m){w2+=moverRow(m.sym,m.price,m.chg);});
+    if (losers.length) {
+      w2 += '<div style="font-size:10px;color:#6b7280;font-weight:700;letter-spacing:0.5px;margin:10px 0 4px">TOP LOSERS</div>';
+      losers.forEach(function(m){w2+=moverRow(m.sym,m.price,m.chg);});
+    }
+  }
+
+  // Widget 3: Buy Zone Alerts
+  let w3 = '';
+  const bzAlerts = tickers.filter(function(sym){ return (typeof _buyZoneCache!=='undefined' && _buyZoneCache[sym] && (_buyZoneCache[sym].score||0) >= 4); });
+  if (!bzAlerts.length) {
+    w3 = '<div style="color:#6b7280;font-size:12px;text-align:center;padding:8px">Žádný ticker není momentálně v buy zóně.</div>';
+  } else {
+    bzAlerts.forEach(function(sym){
+      const sc = _buyZoneCache[sym].score;
+      w3 += '<div onclick="selectTicker(\''+sym+'\');switchTab(\'fund\')" style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1e3a5f;cursor:pointer">'
+        + '<span style="font-weight:700;color:#f9fafb;font-size:13px">'+sym+'</span>'
+        + '<span style="color:#f59e0b;font-size:11px">Score '+sc+'/5</span>'
+        + '<span style="color:#22c55e;font-size:11px">&#x2713; Valuačně zajímavé</span>'
+        + '</div>';
+    });
+  }
+
+  // Widget 4: Earnings This Week
+  let w4 = '';
+  const nowMs = Date.now();
+  const weekMs = 7 * 24 * 3600 * 1000;
+  const earningsThisWeek = [];
+  tickers.forEach(function(sym){
+    (state.earnings[sym]||[]).forEach(function(e){
+      const d = new Date(e.date).getTime();
+      if (d >= nowMs && d <= nowMs + weekMs) earningsThisWeek.push({sym:sym, date:e.date, time:e.time||''});
+    });
+  });
+  earningsThisWeek.sort(function(a,b){return a.date.localeCompare(b.date);});
+  if (!earningsThisWeek.length) {
+    w4 = '<div style="color:#6b7280;font-size:12px;text-align:center;padding:8px">Žádné earnings tento týden.</div>';
+  } else {
+    earningsThisWeek.forEach(function(e){
+      const timing = e.time==='bmo' ? 'BTO' : e.time==='amc' ? 'ATC' : e.time||'';
+      w4 += earRow(e.sym, e.date, timing);
+    });
+  }
+
+  // Widget 5: Rebalancing Alerts
+  let w5 = '';
+  const targets = (typeof getTargetAlloc === 'function') ? getTargetAlloc() : {};
+  const rebalAlerts = [];
+  if (Object.keys(targets).length) {
+    try {
+      const byTicker = {};
+      (typeof getJournal==='function'?getJournal():[]).filter(function(e){return !e.exitPrice && e.entryPrice && e.shares;}).forEach(function(t){
+        if (!byTicker[t.sym]) byTicker[t.sym] = {sym:t.sym, shares:0, totalCost:0};
+        const sh = parseFloat(t.shares)||0, ep = parseFloat(t.entryPrice||t.entry)||0;
+        byTicker[t.sym].shares += sh;
+        byTicker[t.sym].totalCost += sh * ep;
+      });
+      const positions = Object.values(byTicker).map(function(p){
+        const bars = state.data[p.sym] && state.data[p.sym].bars;
+        const price = bars && bars.length ? bars[bars.length-1].c : p.totalCost/(p.shares||1);
+        return {sym:p.sym, value:p.shares*price};
+      }).filter(function(p){return p.value>0;});
+      const total = positions.reduce(function(s,p){return s+p.value;}, 0);
+      if (total > 0) {
+        positions.forEach(function(p){ p.pct = p.value/total*100; });
+        positions.forEach(function(p){
+          const t = targets[p.sym];
+          if (t !== undefined && Math.abs(p.pct-t) > 5) rebalAlerts.push({sym:p.sym, drift:p.pct-t});
+        });
+      }
+    } catch(e) {}
+  }
+  if (!rebalAlerts.length) {
+    w5 = '<div style="color:#6b7280;font-size:12px;text-align:center;padding:8px">Žádné odchylky > 5% od cílové alokace.</div>';
+  } else {
+    rebalAlerts.forEach(function(a){
+      const label = a.drift > 0 ? '▲'+a.drift.toFixed(1)+'% nadváha' : '▼'+Math.abs(a.drift).toFixed(1)+'% podváha';
+      const col = a.drift > 0 ? '#ef4444' : '#22c55e';
+      w5 += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #1e3a5f;font-size:12px">'
+        + '<span style="font-weight:700;color:#f9fafb">'+a.sym+'</span>'
+        + '<span style="color:'+col+'">'+label+'</span>'
+        + '</div>';
+    });
+    w5 += '<button onclick="switchTab(\'journal\');switchJournalTab(\'alloc\')" style="margin-top:10px;width:100%;padding:8px;background:transparent;border:1px solid #4fc3f7;border-radius:6px;color:#4fc3f7;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:0.5px">ALLOC ZOBRAZIT</button>';
+  }
+
+  // Widget 6: Thesis Reminders
+  let w6 = '';
+  const noThesis = tickers.filter(function(sym){ try { return !localStorage.getItem('wf_thesis_'+sym); } catch(e) { return false; } });
+  if (!noThesis.length) {
+    w6 = '<div style="color:#22c55e;font-size:12px;text-align:center;padding:8px">&#x2713; Všechny tickery mají Investment Thesis.</div>';
+  } else {
+    w6 = '<div style="font-size:12px;color:#9ca3af;margin-bottom:8px">'+noThesis.length+' tickerů bez Investment Thesis:</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
+    noThesis.forEach(function(sym){
+      w6 += '<span onclick="selectTicker(\''+sym+'\');typeof openThesisModal===\'function\'&&openThesisModal(\''+sym+'\')" style="padding:4px 10px;background:#1a1a2e;border:1px solid #374151;border-radius:20px;font-size:12px;color:#4fc3f7;cursor:pointer;font-weight:600">'+sym+'</span>';
+    });
+    w6 += '</div>';
+  }
+
+  el.innerHTML =
+    card('📡 MARKET PULSE', w1) +
+    card('📈 WATCHLIST MOVERS', w2) +
+    card('🎯 BUY ZONE ALERTS', w3) +
+    card('📅 EARNINGS TENTO TÝDEN', w4) +
+    card('&#x26A0; REBALANCING ALERTS', w5) +
+    card('📝 THESIS REMINDERS', w6);
+}
+
 function renderScreenFilters() {
   const el = document.getElementById('screen-filters');
   if (!el) return;
@@ -11806,7 +12223,7 @@ function saveWfJournal() {
 }
 
 function switchJournalTab(name) {
-  ['trades','add','stats','alloc','dca','perf','watchperf'].forEach(t => {
+  ['trades','add','stats','alloc','dca','perf','watchperf','sizing'].forEach(t => {
     const v = document.getElementById(`journal-${t}-view`);
     if (v) v.style.display = t===name ? 'block' : 'none';
     const btn = document.getElementById(`jst-${t}`);
@@ -11819,6 +12236,7 @@ function switchJournalTab(name) {
   if (name==='dca') renderDCA();
   if (name==='perf') renderPortfolioPerf();
   if (name==='watchperf') renderWatchPerf();
+  if (name==='sizing') renderSizing();
 }
 
 function renderJournalTrades() {
@@ -13945,82 +14363,6 @@ async function renderEPV() {
   }
 }
 
-</script>
-
-<!-- HELP OVERLAY -->
-<div id="help-overlay">
-  <div id="help-header">
-    <button id="help-close" onclick="closeHelp()">✕</button>
-    <div id="help-title">NÁPOVĚDA</div>
-    <div id="help-search-wrap">
-      <input id="help-search" type="search" placeholder="Hledat…" oninput="filterHelp(this.value)">
-    </div>
-  </div>
-  <div id="help-body"></div>
-</div>
-
-<!-- TAG MODAL -->
-<div id="tag-modal-overlay" onclick="closeTagModal(event)">
-  <div id="tag-modal">
-    <div class="tag-modal-handle"></div>
-    <div class="tag-modal-title" id="tag-modal-label">ASSIGN TAG</div>
-    <div class="tag-grid" id="tag-grid"></div>
-    <div class="tag-modal-none" onclick="assignTag(null)">✕ Remove tag</div>
-  </div>
-</div>
-<div id="alert-modal-overlay" onclick="closeAlertModal(event)" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.6);align-items:flex-end;justify-content:center">
-  <div id="alert-modal" onclick="event.stopPropagation()" style="width:100%;max-width:480px;background:var(--bg2);border-radius:16px 16px 0 0;padding:20px 16px 32px;border-top:1px solid var(--border)">
-    <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px"></div>
-    <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;letter-spacing:1px;color:var(--text);margin-bottom:4px">🔔 PRICE ALERT</div>
-    <div id="alert-modal-ticker" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:14px"></div>
-    <div style="display:flex;gap:8px;margin-bottom:10px">
-      <input id="alert-modal-price" type="number" step="any" placeholder="Target price ($)" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;outline:none">
-      <div style="display:flex;gap:4px">
-        <button id="alert-dir-above" onclick="setAlertDir('above')" style="font-family:'JetBrains Mono',monospace;font-size:9px;padding:8px 10px;border-radius:8px;border:1px solid var(--green);background:rgba(34,197,94,0.15);color:var(--green);cursor:pointer">▲ ABOVE</button>
-        <button id="alert-dir-below" onclick="setAlertDir('below')" style="font-family:'JetBrains Mono',monospace;font-size:9px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--muted);cursor:pointer">▼ BELOW</button>
-      </div>
-    </div>
-    <button onclick="addAlertFromModal()" style="width:100%;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:1px;padding:12px;border-radius:8px;border:none;background:#f97316;color:#fff;cursor:pointer;margin-bottom:14px">+ ADD ALERT</button>
-    <div id="alert-modal-list" style="max-height:200px;overflow-y:auto"></div>
-  </div>
-</div>
-
-<!-- THESIS MODAL -->
-<div id="thesis-modal" style="display:none;position:fixed;inset:0;z-index:400;background:#1a1a2e;flex-direction:column;">
-  <div style="display:flex;align-items:center;gap:10px;padding:14px 16px 10px;border-bottom:1px solid #1e3a5f;flex-shrink:0;">
-    <button onclick="closeThesisModal()" style="background:#16213e;border:1px solid #1e3a5f;border-radius:8px;color:#e2e8f0;font-size:18px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">✕</button>
-    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:2px;color:#4fc3f7;flex:1;" id="thesis-modal-title">📝 INVESTMENT THESIS</div>
-  </div>
-  <div style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 16px 32px;">
-    <div style="margin-bottom:14px;">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:#4fc3f7;margin-bottom:6px;">PROČ TO DRŽÍM</div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#64748b;margin-bottom:4px;">Co je business model, jaká je konkurenční výhoda (moat)?</div>
-      <textarea id="thesis-why" style="width:100%;box-sizing:border-box;min-height:70px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:8px;font-size:13px;font-family:'JetBrains Mono',monospace;resize:vertical;outline:none;" placeholder="Napiš proč tuto akcii držíš…"></textarea>
-    </div>
-    <div style="margin-bottom:14px;">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:#4fc3f7;margin-bottom:6px;">KATALYZÁTOR RŮSTU</div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#64748b;margin-bottom:4px;">Co způsobí ocenění na fair value / vyšší?</div>
-      <textarea id="thesis-catalyst" style="width:100%;box-sizing:border-box;min-height:70px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:8px;font-size:13px;font-family:'JetBrains Mono',monospace;resize:vertical;outline:none;" placeholder="Hlavní katalyzátor…"></textarea>
-    </div>
-    <div style="margin-bottom:14px;">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:#ef4444;margin-bottom:6px;">RIZIKA</div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#64748b;margin-bottom:4px;">Co by mě přimělo prodat?</div>
-      <textarea id="thesis-risks" style="width:100%;box-sizing:border-box;min-height:70px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:8px;font-size:13px;font-family:'JetBrains Mono',monospace;resize:vertical;outline:none;" placeholder="Hlavní rizika pozice…"></textarea>
-    </div>
-    <div style="margin-bottom:14px;">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:#22c55e;margin-bottom:6px;">CÍLOVÁ CENA &amp; HORIZONT</div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#64748b;margin-bottom:4px;">Moje fair value odhad a časový horizont (např. 180 USD / 3 roky)</div>
-      <textarea id="thesis-target" style="width:100%;box-sizing:border-box;min-height:60px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:8px;font-size:13px;font-family:'JetBrains Mono',monospace;resize:vertical;outline:none;" placeholder="180 USD / 3 roky…"></textarea>
-    </div>
-    <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#64748b;margin-bottom:16px;" id="thesis-date-label">Datum záznamu: —</div>
-    <div style="display:flex;gap:8px;">
-      <button onclick="saveThesis()" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:1px;padding:12px;border-radius:8px;border:none;background:#3b82f6;color:#fff;cursor:pointer;">ULOŽIT</button>
-      <button onclick="closeThesisModal()" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:1px;padding:12px;border-radius:8px;border:1px solid #334155;background:#16213e;color:#94a3b8;cursor:pointer;">ZAVŘÍT</button>
-    </div>
-  </div>
-</div>
-
-<script>
 // ─── REVERSE DCF ─────────────────────────────────────────────────────────────
 
 function _rdcfNPV(fcf, g, r, tg, n) {
@@ -14228,6 +14570,360 @@ function _renderRevDCFHTML(el) {
   el.innerHTML = '<div style="display:flex;flex-direction:column;gap:12px;padding-bottom:20px;">'
     + assum + s1 + s2 + s3 + '</div>';
 }
+// ─── POSITION SIZING WIZARD ───────────────────────────────────────────────────
+
+function calcSizing(ticker, conviction, swanScore, portfolioTotal, currentPrice, riskPct, stopDistPct) {
+  // Method A: Conviction-based sizing
+  const convMap = { 1: 2, 2: 4, 3: 6, 4: 8, 5: 10 };
+  let baseA = convMap[conviction] || 6;
+  let swanMult = 1.0;
+  if (swanScore !== null) {
+    if (swanScore >= 70) swanMult = 1.2;
+    else if (swanScore < 40) swanMult = 0.7;
+  }
+  let methodA = Math.min(baseA * swanMult, 15);
+
+  // Method B: Kelly Criterion (simplified, half-Kelly)
+  loadWfJournal();
+  const closedTrades = (state.journal || []).filter(t => t.status === 'closed' && t.exitPrice);
+  let winRate = 0.55, avgWin = 1.5, avgLoss = 1.0;
+  if (closedTrades.length >= 3) {
+    const wins = closedTrades.filter(t => (t.exitPrice - t.entry) * (t.direction === 'short' ? -1 : 1) > 0);
+    const losses = closedTrades.filter(t => (t.exitPrice - t.entry) * (t.direction === 'short' ? -1 : 1) <= 0);
+    winRate = wins.length / closedTrades.length;
+    avgWin = wins.length ? wins.reduce((s, t) => s + Math.abs((t.exitPrice - t.entry) / t.entry * 100), 0) / wins.length : 1.5;
+    avgLoss = losses.length ? losses.reduce((s, t) => s + Math.abs((t.exitPrice - t.entry) / t.entry * 100), 0) / losses.length : 1.0;
+  }
+  const kellFull = avgLoss > 0 ? (winRate * avgWin - (1 - winRate) * avgLoss) / avgWin * 100 : 0;
+  const kellHalf = Math.max(0, Math.min(kellFull / 2, 20));
+  const hasJournalData = closedTrades.length >= 3;
+
+  // Method C: Risk-based sizing
+  const rp = riskPct || 2.0;
+  const sd = stopDistPct || 8.0;
+  let methodC = sd > 0 ? (rp / sd) * 100 : 0;
+  methodC = Math.min(methodC, 20);
+
+  // Average recommendation
+  const avg = (methodA + kellHalf + methodC) / 3;
+  const rounded = Math.round(avg * 2) / 2;
+
+  const portfolioDollars = portfolioTotal > 0 ? portfolioTotal * rounded / 100 : null;
+  const shares = portfolioDollars && currentPrice > 0 ? Math.floor(portfolioDollars / currentPrice) : null;
+
+  return {
+    methodA, kellFull, kellHalf, methodC,
+    avgRec: rounded, portfolioDollars, shares,
+    winRate, avgWin, avgLoss, hasJournalData,
+    riskPct: rp, stopDistPct: sd,
+    swanScore, swanMult, conviction
+  };
+}
+
+async function renderSizing() {
+  const el = document.getElementById('journal-sizing-view');
+  if (!el) return;
+
+  const sym = state.selected || '';
+  const curBars = state.data?.[sym]?.bars;
+  const currentPrice = curBars && curBars.length ? curBars[curBars.length - 1].c : 0;
+
+  // Get portfolio total from ALLOC positions
+  loadWfJournal();
+  const openTrades = (state.journal || []).filter(t => t.status === 'open' && t.shares > 0);
+  const byTicker = {};
+  openTrades.forEach(t => {
+    if (!byTicker[t.sym]) byTicker[t.sym] = { shares: 0, totalCost: 0 };
+    byTicker[t.sym].shares += t.shares;
+    byTicker[t.sym].totalCost += t.shares * t.entry;
+  });
+  let portfolioTotal = 0;
+  Object.entries(byTicker).forEach(([s, p]) => {
+    const bars = state.data?.[s]?.bars;
+    const price = bars && bars.length ? bars[bars.length - 1].c : p.totalCost / p.shares;
+    portfolioTotal += p.shares * price;
+  });
+
+  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px;padding-bottom:20px">
+
+    <!-- Header card -->
+    <div style="background:#16213e;border-radius:10px;padding:14px">
+      <div style="font-size:10px;color:#9ca3af;letter-spacing:1px;margin-bottom:10px">POSITION SIZING WIZARD</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div>
+          <label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">TICKER</label>
+          <input id="sz-ticker" value="${sym}" autocapitalize="characters" style="width:100%;box-sizing:border-box;padding:9px;background:#1a1a2e;border:1px solid #374151;border-radius:7px;color:#f9fafb;font-size:14px;font-weight:700">
+        </div>
+        <div>
+          <label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">AKTUÁLNÍ CENA $</label>
+          <input id="sz-price" type="number" step="0.01" value="${currentPrice > 0 ? currentPrice.toFixed(2) : ''}" style="width:100%;box-sizing:border-box;padding:9px;background:#1a1a2e;border:1px solid #374151;border-radius:7px;color:#f9fafb;font-size:14px">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">PORTFOLIO CELKEM $</label>
+          <input id="sz-portfolio" type="number" step="100" value="${portfolioTotal > 0 ? portfolioTotal.toFixed(0) : ''}" style="width:100%;box-sizing:border-box;padding:9px;background:#1a1a2e;border:1px solid #374151;border-radius:7px;color:#f9fafb;font-size:14px">
+        </div>
+        <div>
+          <label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">SWAN SKÓRE</label>
+          <input id="sz-swan" type="number" min="0" max="100" placeholder="auto" style="width:100%;box-sizing:border-box;padding:9px;background:#1a1a2e;border:1px solid #374151;border-radius:7px;color:#f9fafb;font-size:14px">
+        </div>
+      </div>
+      <button onclick="sizingLoadSwan()" style="margin-top:10px;width:100%;padding:9px;background:#4fc3f722;color:#4fc3f7;border:1px solid #4fc3f755;border-radius:7px;font-size:12px;font-weight:600">NAČÍST SWAN SKÓRE</button>
+    </div>
+
+    <!-- Conviction -->
+    <div style="background:#16213e;border-radius:10px;padding:14px">
+      <div style="font-size:10px;color:#9ca3af;letter-spacing:1px;margin-bottom:10px">KONVIKCE / PŘESVĚDČENÍ</div>
+      <div style="display:flex;gap:6px">
+        ${[1,2,3,4,5].map(n => {
+          const labels = {1:'1 — Nízká', 2:'2', 3:'3 — Střední', 4:'4', 5:'5 — Vysoká'};
+          return `<button id="sz-conv-${n}" onclick="setSizingConviction(${n})" style="flex:1;padding:10px 4px;background:#1a1a2e;color:#9ca3af;border:1px solid #374151;border-radius:7px;font-size:10px;font-weight:600;cursor:pointer">${labels[n]}</button>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- Risk params -->
+    <div style="background:#16213e;border-radius:10px;padding:14px">
+      <div style="font-size:10px;color:#9ca3af;letter-spacing:1px;margin-bottom:10px">PARAMETRY RIZIKA (METODA C)</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:12px;color:#d1d5db">Max. ztráta z portfolia</span>
+        <span id="sz-risk-label" style="font-size:13px;font-weight:700;color:#4fc3f7">2.0%</span>
+      </div>
+      <input id="sz-risk" type="range" min="0.5" max="5" step="0.5" value="2" oninput="document.getElementById('sz-risk-label').textContent=parseFloat(this.value).toFixed(1)+'%'" style="width:100%;accent-color:#4fc3f7">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;margin-bottom:6px">
+        <span style="font-size:12px;color:#d1d5db">Stop loss vzdálenost</span>
+        <span id="sz-stop-label" style="font-size:13px;font-weight:700;color:#ef4444">8.0%</span>
+      </div>
+      <input id="sz-stop" type="range" min="2" max="30" step="1" value="8" oninput="document.getElementById('sz-stop-label').textContent=parseFloat(this.value).toFixed(0)+'%'" style="width:100%;accent-color:#ef4444">
+    </div>
+
+    <button onclick="runSizingCalc()" style="padding:14px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700">VYPOČÍTAT SIZING</button>
+
+    <div id="sz-results" style="display:none;flex-direction:column;gap:12px"></div>
+  </div>`;
+
+  state._sizingConviction = 3;
+  setSizingConviction(3);
+}
+
+function setSizingConviction(n) {
+  state._sizingConviction = n;
+  [1,2,3,4,5].forEach(i => {
+    const btn = document.getElementById('sz-conv-' + i);
+    if (!btn) return;
+    if (i === n) {
+      btn.style.background = '#4fc3f733';
+      btn.style.color = '#4fc3f7';
+      btn.style.borderColor = '#4fc3f7';
+    } else {
+      btn.style.background = '#1a1a2e';
+      btn.style.color = '#9ca3af';
+      btn.style.borderColor = '#374151';
+    }
+  });
+}
+
+async function sizingLoadSwan() {
+  const ticker = document.getElementById('sz-ticker')?.value?.trim()?.toUpperCase();
+  if (!ticker) { showToast('Zadej ticker'); return; }
+  const btn = document.querySelector('[onclick="sizingLoadSwan()"]');
+  if (btn) btn.textContent = 'Načítám…';
+  try {
+    const [kmArr, incArr, divData, profArr] = await Promise.all([
+      fetch(`https://financialmodelingprep.com/api/v3/key-metrics/${ticker}?limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/api/v3/income-statement/${ticker}?limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/api/v3/historical-dividends/${ticker}?limit=30&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/api/v3/profile/${ticker}?apikey=${FMP_KEY}`).then(r=>r.json()),
+    ]);
+    const km0 = Array.isArray(kmArr) && kmArr.length ? kmArr[0] : {};
+    const profile = Array.isArray(profArr) && profArr.length ? profArr[0] : {};
+    const nd2e = km0.netDebtToEBITDA;
+    let balScore = nd2e==null?10:nd2e<0?20:nd2e<1?20:nd2e<2?15:nd2e<3?10:nd2e<=5?5:0;
+    const historicalDivs = Array.isArray(divData?.historical)?divData.historical:Array.isArray(divData)?divData:[];
+    const hasDividend = historicalDivs.some(d=>(d.adjDividend||d.dividend||0)>0);
+    let divScore = hasDividend ? 10 : 5;
+    const incStmts = Array.isArray(incArr)?incArr.slice(0,5):[];
+    const earnScore = incStmts.filter(s=>(s.netIncome||0)>0).length * 4;
+    const beta = km0.beta??profile.beta??null;
+    const betaScore = beta==null?10:beta<0.5?20:beta<0.8?16:beta<1.0?12:beta<1.2?8:beta<1.5?4:0;
+    const km = Array.isArray(kmArr)?kmArr:[];
+    let fScore = 0;
+    if (km.length>=2){const k0=km[0],k1=km[1];if((k0.returnOnEquity||0)>0)fScore++;if((k0.returnOnAssets||0)>0)fScore++;if((k0.freeCashFlowPerShare||0)>0)fScore++;if((k0.returnOnAssets||0)>(k1.returnOnAssets||0))fScore++;if((k0.currentRatio||0)>1)fScore++;if((k0.debtToEquity||0)<(k1.debtToEquity||0))fScore++;if((k0.grossProfitMargin||0)>(k1.grossProfitMargin||0))fScore++;if((k0.assetTurnover||0)>(k1.assetTurnover||0))fScore++;}
+    const pioScore = fScore>=7?20:fScore>=5?14:fScore>=3?8:2;
+    const total = balScore + divScore + earnScore + betaScore + pioScore;
+    const inp = document.getElementById('sz-swan');
+    if (inp) inp.value = total;
+    showToast(`SWAN skóre ${ticker}: ${total}/100`);
+  } catch(e) { showToast('Chyba načítání SWAN'); }
+  if (btn) btn.textContent = 'NAČÍST SWAN SKÓRE';
+}
+
+function runSizingCalc() {
+  const ticker = document.getElementById('sz-ticker')?.value?.trim()?.toUpperCase() || '';
+  const price = parseFloat(document.getElementById('sz-price')?.value) || 0;
+  const portfolio = parseFloat(document.getElementById('sz-portfolio')?.value) || 0;
+  const swanRaw = document.getElementById('sz-swan')?.value;
+  const swanScore = swanRaw !== '' && swanRaw !== null ? parseFloat(swanRaw) : null;
+  const conviction = state._sizingConviction || 3;
+  const riskPct = parseFloat(document.getElementById('sz-risk')?.value) || 2;
+  const stopDistPct = parseFloat(document.getElementById('sz-stop')?.value) || 8;
+
+  const r = calcSizing(ticker, conviction, swanScore, portfolio, price, riskPct, stopDistPct);
+
+  const recColor = r.avgRec <= 10 ? '#22c55e' : r.avgRec <= 12 ? '#f59e0b' : '#ef4444';
+  const swanBadgeColor = swanScore === null ? '#6b7280' : swanScore >= 70 ? '#22c55e' : swanScore >= 40 ? '#f59e0b' : '#ef4444';
+  const swanLabel = swanScore === null ? 'N/A' : swanScore >= 70 ? 'Klidný spánek' : swanScore >= 40 ? 'Průměrné riziko' : 'Vysoké riziko';
+
+  const portfolioDollarsStr = r.portfolioDollars ? `$${r.portfolioDollars.toLocaleString('en-US',{maximumFractionDigits:0})}` : '—';
+  const sharesStr = r.shares ? `${r.shares} akcií` : '—';
+
+  const elRes = document.getElementById('sz-results');
+  if (!elRes) return;
+  elRes.style.display = 'flex';
+
+  // Summary card
+  let summaryHtml = `<div style="background:#16213e;border-radius:10px;padding:14px;border-left:3px solid #4fc3f7">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:18px;font-weight:700;color:#f9fafb">${ticker || '—'}</span>
+      ${swanScore !== null ? `<span style="font-size:11px;background:${swanBadgeColor}22;color:${swanBadgeColor};padding:3px 9px;border-radius:6px;font-weight:600">SWAN ${swanScore} — ${swanLabel}</span>` : ''}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:#9ca3af">
+      <span>Cena: <strong style="color:#f9fafb">${price > 0 ? '$'+price.toFixed(2) : '—'}</strong></span>
+      <span>Portfolio: <strong style="color:#f9fafb">${portfolio > 0 ? '$'+portfolio.toLocaleString('en-US',{maximumFractionDigits:0}) : '—'}</strong></span>
+    </div>
+  </div>`;
+
+  // Method A
+  let methodAHtml = `<div style="background:#16213e;border-radius:10px;padding:14px">
+    <div style="font-size:10px;color:#9ca3af;letter-spacing:1px;margin-bottom:8px">METODA A — CONVICTION</div>
+    <div style="font-size:13px;color:#d1d5db;margin-bottom:6px">Konvikce ${conviction}/5 → základ ${[2,4,6,8,10][conviction-1]}%
+      ${swanScore !== null ? ` × SWAN korekce ${r.swanMult.toFixed(1)}×` : ''}</div>
+    <div style="font-size:20px;font-weight:700;color:#4fc3f7">${r.methodA.toFixed(1)}% portfolia</div>
+  </div>`;
+
+  // Method B
+  const kellySource = r.hasJournalData ? `z ${(r.winRate*100).toFixed(0)}% win rate · avg win ${r.avgWin.toFixed(1)}% / avg loss ${r.avgLoss.toFixed(1)}%` : 'výchozí 55% WR · 1.5:1 R:R';
+  let methodBHtml = `<div style="background:#16213e;border-radius:10px;padding:14px">
+    <div style="font-size:10px;color:#9ca3af;letter-spacing:1px;margin-bottom:8px">METODA B — KELLY CRITERION</div>
+    <div style="font-size:12px;color:#9ca3af;margin-bottom:6px">${kellySource}</div>
+    <div style="display:flex;gap:16px;align-items:baseline">
+      <div><span style="font-size:12px;color:#6b7280">Full Kelly: </span><span style="font-size:15px;color:#9ca3af">${r.kellFull.toFixed(1)}%</span></div>
+      <div><span style="font-size:12px;color:#9ca3af">Half-Kelly: </span><span style="font-size:20px;font-weight:700;color:#4fc3f7">${r.kellHalf.toFixed(1)}%</span></div>
+    </div>
+  </div>`;
+
+  // Method C
+  let methodCHtml = `<div style="background:#16213e;border-radius:10px;padding:14px">
+    <div style="font-size:10px;color:#9ca3af;letter-spacing:1px;margin-bottom:8px">METODA C — RISK-BASED</div>
+    <div style="font-size:12px;color:#9ca3af;margin-bottom:6px">Max ztráta ${r.riskPct.toFixed(1)}% portfolia · stop ${r.stopDistPct.toFixed(0)}% od entry</div>
+    <div style="font-size:20px;font-weight:700;color:#4fc3f7">${r.methodC.toFixed(1)}% portfolia</div>
+    ${portfolio > 0 && price > 0 ? `<div style="font-size:12px;color:#9ca3af;margin-top:4px">Při stop −${r.stopDistPct.toFixed(0)}%: koupit za <strong style="color:#f9fafb">$${(portfolio * r.methodC / 100).toLocaleString('en-US',{maximumFractionDigits:0})}</strong></div>` : ''}
+  </div>`;
+
+  // Recommendation banner
+  let recHtml = `<div style="background:${recColor}22;border:1px solid ${recColor}55;border-radius:10px;padding:16px;text-align:center">
+    <div style="font-size:10px;color:${recColor};letter-spacing:1px;margin-bottom:6px">DOPORUČENÁ ALOKACE</div>
+    <div style="font-size:26px;font-weight:700;color:${recColor}">${r.avgRec.toFixed(1)}% portfolia</div>
+    ${portfolio > 0 ? `<div style="font-size:14px;color:#d1d5db;margin-top:4px">= ${portfolioDollarsStr}${price > 0 ? ` (${sharesStr})` : ''}</div>` : ''}
+    <div style="font-size:11px;color:#6b7280;margin-top:4px">průměr 3 metod zaokrouhlený na 0.5%</div>
+  </div>`;
+
+  // Add to journal button
+  const addBtn = `<button onclick="sizingAddToJournal('${ticker}', ${price}, ${r.shares||0})" style="padding:14px;background:#22c55e22;color:#22c55e;border:1px solid #22c55e55;border-radius:10px;font-size:14px;font-weight:600">PŘIDAT DO DENÍKU</button>`;
+
+  elRes.innerHTML = summaryHtml + recHtml + methodAHtml + methodBHtml + methodCHtml + addBtn;
+  elRes.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function sizingAddToJournal(ticker, price, shares) {
+  switchJournalTab('add');
+  setTimeout(() => {
+    const symEl = document.getElementById('jf-sym');
+    if (symEl) symEl.value = ticker;
+    const entryEl = document.getElementById('jf-entry');
+    if (entryEl && price > 0) entryEl.value = price.toFixed(2);
+    const sharesEl = document.getElementById('jf-shares');
+    if (sharesEl && shares > 0) sharesEl.value = shares;
+    updateRRPreview();
+    showToast('Formulář předvyplněn ze sizing wizardu');
+  }, 150);
+}
+
 </script>
+
+<!-- HELP OVERLAY -->
+<div id="help-overlay">
+  <div id="help-header">
+    <button id="help-close" onclick="closeHelp()">✕</button>
+    <div id="help-title">NÁPOVĚDA</div>
+    <div id="help-search-wrap">
+      <input id="help-search" type="search" placeholder="Hledat…" oninput="filterHelp(this.value)">
+    </div>
+  </div>
+  <div id="help-body"></div>
+</div>
+
+<!-- TAG MODAL -->
+<div id="tag-modal-overlay" onclick="closeTagModal(event)">
+  <div id="tag-modal">
+    <div class="tag-modal-handle"></div>
+    <div class="tag-modal-title" id="tag-modal-label">ASSIGN TAG</div>
+    <div class="tag-grid" id="tag-grid"></div>
+    <div class="tag-modal-none" onclick="assignTag(null)">✕ Remove tag</div>
+  </div>
+</div>
+<div id="alert-modal-overlay" onclick="closeAlertModal(event)" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.6);align-items:flex-end;justify-content:center">
+  <div id="alert-modal" onclick="event.stopPropagation()" style="width:100%;max-width:480px;background:var(--bg2);border-radius:16px 16px 0 0;padding:20px 16px 32px;border-top:1px solid var(--border)">
+    <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px"></div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;letter-spacing:1px;color:var(--text);margin-bottom:4px">🔔 PRICE ALERT</div>
+    <div id="alert-modal-ticker" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:14px"></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input id="alert-modal-price" type="number" step="any" placeholder="Target price ($)" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;outline:none">
+      <div style="display:flex;gap:4px">
+        <button id="alert-dir-above" onclick="setAlertDir('above')" style="font-family:'JetBrains Mono',monospace;font-size:9px;padding:8px 10px;border-radius:8px;border:1px solid var(--green);background:rgba(34,197,94,0.15);color:var(--green);cursor:pointer">▲ ABOVE</button>
+        <button id="alert-dir-below" onclick="setAlertDir('below')" style="font-family:'JetBrains Mono',monospace;font-size:9px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--muted);cursor:pointer">▼ BELOW</button>
+      </div>
+    </div>
+    <button onclick="addAlertFromModal()" style="width:100%;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:1px;padding:12px;border-radius:8px;border:none;background:#f97316;color:#fff;cursor:pointer;margin-bottom:14px">+ ADD ALERT</button>
+    <div id="alert-modal-list" style="max-height:200px;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- THESIS MODAL -->
+<div id="thesis-modal" style="display:none;position:fixed;inset:0;z-index:400;background:#1a1a2e;flex-direction:column;">
+  <div style="display:flex;align-items:center;gap:10px;padding:14px 16px 10px;border-bottom:1px solid #1e3a5f;flex-shrink:0;">
+    <button onclick="closeThesisModal()" style="background:#16213e;border:1px solid #1e3a5f;border-radius:8px;color:#e2e8f0;font-size:18px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">✕</button>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:2px;color:#4fc3f7;flex:1;" id="thesis-modal-title">📝 INVESTMENT THESIS</div>
+  </div>
+  <div style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 16px 32px;">
+    <div style="margin-bottom:14px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:#4fc3f7;margin-bottom:6px;">PROČ TO DRŽÍM</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#64748b;margin-bottom:4px;">Co je business model, jaká je konkurenční výhoda (moat)?</div>
+      <textarea id="thesis-why" style="width:100%;box-sizing:border-box;min-height:70px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:8px;font-size:13px;font-family:'JetBrains Mono',monospace;resize:vertical;outline:none;" placeholder="Napiš proč tuto akcii držíš…"></textarea>
+    </div>
+    <div style="margin-bottom:14px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:#4fc3f7;margin-bottom:6px;">KATALYZÁTOR RŮSTU</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#64748b;margin-bottom:4px;">Co způsobí ocenění na fair value / vyšší?</div>
+      <textarea id="thesis-catalyst" style="width:100%;box-sizing:border-box;min-height:70px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:8px;font-size:13px;font-family:'JetBrains Mono',monospace;resize:vertical;outline:none;" placeholder="Hlavní katalyzátor…"></textarea>
+    </div>
+    <div style="margin-bottom:14px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:#ef4444;margin-bottom:6px;">RIZIKA</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#64748b;margin-bottom:4px;">Co by mě přimělo prodat?</div>
+      <textarea id="thesis-risks" style="width:100%;box-sizing:border-box;min-height:70px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:8px;font-size:13px;font-family:'JetBrains Mono',monospace;resize:vertical;outline:none;" placeholder="Hlavní rizika pozice…"></textarea>
+    </div>
+    <div style="margin-bottom:14px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:#22c55e;margin-bottom:6px;">CÍLOVÁ CENA &amp; HORIZONT</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#64748b;margin-bottom:4px;">Moje fair value odhad a časový horizont (např. 180 USD / 3 roky)</div>
+      <textarea id="thesis-target" style="width:100%;box-sizing:border-box;min-height:60px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:8px;font-size:13px;font-family:'JetBrains Mono',monospace;resize:vertical;outline:none;" placeholder="180 USD / 3 roky…"></textarea>
+    </div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#64748b;margin-bottom:16px;" id="thesis-date-label">Datum záznamu: —</div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="saveThesis()" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:1px;padding:12px;border-radius:8px;border:none;background:#3b82f6;color:#fff;cursor:pointer;">ULOŽIT</button>
+      <button onclick="closeThesisModal()" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:1px;padding:12px;border-radius:8px;border:1px solid #334155;background:#16213e;color:#94a3b8;cursor:pointer;">ZAVŘÍT</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
