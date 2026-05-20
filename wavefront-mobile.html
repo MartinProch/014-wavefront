@@ -1768,17 +1768,21 @@ let state = {
 };
 
 // ─── PERSISTENCE ─────────────────────────────────────────────────────────────
-function saveState() {
+function saveStateLight() {
+  // Fast save — overlays, settings only. Called on every toggle/interaction.
   try {
-    localStorage.setItem('wfm_tickers', JSON.stringify(state.tickers));
-    localStorage.setItem('wfm_selected', state.selected || '');
-    localStorage.setItem('wfm_tf', state.timeframe);
-    localStorage.setItem('wfm_overlays', JSON.stringify(state.overlays));
-    localStorage.setItem('wfm_pivotPeriod', state.pivotPeriod || 'D');
-    localStorage.setItem('wfm_ticker_tags', JSON.stringify(state.tickerTags));
-    localStorage.setItem('wfm_annotations', JSON.stringify(state.annotations));
+    localStorage.setItem('wfm_tickers',      JSON.stringify(state.tickers));
+    localStorage.setItem('wfm_selected',     state.selected || '');
+    localStorage.setItem('wfm_tf',           state.timeframe);
+    localStorage.setItem('wfm_overlays',     JSON.stringify(state.overlays));
+    localStorage.setItem('wfm_pivotPeriod',  state.pivotPeriod || 'D');
+    localStorage.setItem('wfm_ticker_tags',  JSON.stringify(state.tickerTags));
+    localStorage.setItem('wfm_annotations',  JSON.stringify(state.annotations));
   } catch(e) {}
-  // Cache bar data for offline use
+}
+
+function saveBarsCache() {
+  // Slow save — bar data. Called only when ticker/timeframe changes, NOT on every toggle.
   try {
     const cacheData = {};
     state.tickers.forEach(sym => {
@@ -1788,6 +1792,11 @@ function saveState() {
     });
     localStorage.setItem('wfm_bars_cache', JSON.stringify(cacheData));
   } catch(e) {}
+}
+
+function saveState() {
+  saveStateLight();
+  saveBarsCache();
 }
 
 function loadState() {
@@ -6136,7 +6145,7 @@ function setTF(tf, btn) {
     if (tfBars.length >= 10) state.waves[state.selected] = detectWaves(tfBars);
     computeMTF(state.selected);
   }
-  saveState();
+  saveStateLight(); // fast — TF change doesn't need bar cache write
   redrawChart();
   if (state.activeTab === 'analysis') renderAnalysis();
 }
@@ -6148,7 +6157,7 @@ function toggleOv(key, btn) {
     const tog = document.getElementById('pivot-period-toggle');
     if (tog) tog.style.display = state.overlays.pivot ? 'flex' : 'none';
   }
-  saveState();
+  saveStateLight(); // fast — no bar cache serialization
   if (key === 'econ' && state.overlays.econ) fetchEconCalendar();
   else redrawChart();
 }
@@ -6161,7 +6170,7 @@ function setPivotPeriod(p) {
     btn.style.background = k === p ? 'rgba(6,182,212,0.25)' : 'transparent';
     btn.style.color      = k === p ? '#06b6d4' : 'var(--muted)';
   });
-  saveState();
+  saveStateLight();
   redrawChart();
 }
 
