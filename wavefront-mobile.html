@@ -3710,7 +3710,7 @@ function redrawChart() {
         ctx.setLineDash(hlSR ? [] : [4,4]);
         ctx.strokeStyle = supColor + (hlSR ? '0.9)' : '0.4)');
         ctx.lineWidth = hlSR ? 2.5 : 1;
-        if (hlSR) { ctx.shadowColor = supColor + '1)'; ctx.shadowBlur = 10; }
+        if (hlSR) { ctx.lineWidth = 3; ctx.globalAlpha = 1; }
         ctx.beginPath(); ctx.moveTo(cL,y); ctx.lineTo(cR,y); ctx.stroke();
         ctx.restore();
         ctx.fillStyle = lv.role==='support' ? cssVar('--green') : cssVar('--red');
@@ -3743,7 +3743,7 @@ function redrawChart() {
           ctx.strokeStyle = `rgba(${zCol},${hlZ ? 0.8 : 0.25})`;
           ctx.lineWidth = hlZ ? 2 : 1;
           ctx.setLineDash(hlZ ? [] : [3,3]);
-          if (hlZ) { ctx.shadowColor = `rgba(${zCol},1)`; ctx.shadowBlur = 10; }
+          if (hlZ) { ctx.lineWidth = 3; }
           ctx.beginPath(); ctx.moveTo(cL,zTop); ctx.lineTo(cR,zTop); ctx.stroke();
           ctx.beginPath(); ctx.moveTo(cL,zBot); ctx.lineTo(cR,zBot); ctx.stroke();
           ctx.restore();
@@ -3860,7 +3860,7 @@ function redrawChart() {
     ctx.strokeStyle = color;
     ctx.lineWidth = hl ? 3.5 : 1.5;
     ctx.setLineDash(dash);
-    if (hl) { ctx.shadowColor = color; ctx.shadowBlur = 14; }
+    if (hl) { ctx.lineWidth = 5; ctx.globalAlpha = 1; }
     let started=false;
     bars.forEach((b,vi) => {
       const fi = b.date ? (_allBarsIdxMap.get(b.date.getTime()) ?? -1) : -1;
@@ -4098,7 +4098,7 @@ function redrawChart() {
         ctx.strokeStyle = cssVar('--purple');
         ctx.lineWidth = hlFib ? 2 : 1;
         ctx.setLineDash(hlFib ? [] : [2,4]);
-        if (hlFib) { ctx.shadowColor = cssVar('--purple'); ctx.shadowBlur = 10; }
+        if (hlFib) { ctx.lineWidth = 3; ctx.globalAlpha = 1; }
         ctx.beginPath(); ctx.moveTo(cL,y); ctx.lineTo(cR,y); ctx.stroke();
         ctx.globalAlpha = 1;
         ctx.fillStyle = cssVar('--purple');
@@ -4127,7 +4127,7 @@ function redrawChart() {
         if (ai<0||bi<0) continue;
         ctx.strokeStyle = b.col || cssVar('--blue');
         ctx.globalAlpha = hlW ? 1 : 0.7;
-        if (hlW) { ctx.shadowColor = b.col || cssVar('--blue'); ctx.shadowBlur = 12; }
+        if (hlW) { ctx.lineWidth = 5; ctx.globalAlpha = 1; }
         ctx.beginPath(); ctx.moveTo(px(ai),py(a.price)); ctx.lineTo(px(bi),py(b.price)); ctx.stroke();
       }
       ctx.globalAlpha = 1;
@@ -4140,7 +4140,7 @@ function redrawChart() {
         const isHigh = p.type==='H' || (wave.direction==='up' && ['Ⅰ','Ⅲ','Ⅴ','B'].includes(p.label));
         const dotY = isHigh ? y - 10 : y + 10;
         ctx.fillStyle = p.col || cssVar('--text');
-        if (hlW) { ctx.shadowColor = p.col || cssVar('--text'); ctx.shadowBlur = 8; }
+        if (hlW) { /* dots already larger */ }
         ctx.beginPath(); ctx.arc(x, y, hlW ? 5 : 3, 0, Math.PI*2); ctx.fill();
         ctx.shadowBlur = 0;
         // Wave label
@@ -6206,11 +6206,15 @@ function setPivotPeriod(p) {
 function triggerOverlayHighlight(key) {
   haptic(20);
   state._hlOverlay = key;
-  state._hlUntil = Date.now() + 1500;
+  state._hlUntil = Date.now() + 1800;
+  // If overlay is OFF, temporarily enable it so the line is visible during highlight
+  const wasOff = !state.overlays[key];
+  if (wasOff) state.overlays[key] = true;
   (function loop() {
     if (!state._hlUntil || Date.now() > state._hlUntil) {
       state._hlOverlay = null;
       state._hlUntil = 0;
+      if (wasOff) state.overlays[key] = false; // restore off state
       redrawChart();
       return;
     }
