@@ -1513,6 +1513,8 @@ strong { font-weight: 600; }
         <button class="subtab" id="ast-recession" onclick="switchWavesSubtab('recession')">RECESSION</button>
         <button class="subtab" id="ast-rotation" onclick="switchWavesSubtab('rotation')">ROTATION</button>
         <button class="subtab" id="ast-rrg" onclick="switchWavesSubtab('rrg')">RRG</button>
+        <button class="subtab" id="ast-wyckoff" onclick="switchWavesSubtab('wyckoff')">WYCKOFF</button>
+        <button class="subtab" id="ast-squeeze" onclick="switchWavesSubtab('squeeze')">SQUEEZE</button>
       </div>
       <div id="waves-analysis-view" class="subtab-view" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="analysis-content">
@@ -1570,6 +1572,8 @@ strong { font-weight: 600; }
       <div id="waves-rrg-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="rrg-content"><div class="empty-state"><div class="empty-icon">🎯</div><div class="empty-text">RRG SECTOR ROTATION<br>LOADING…</div></div></div>
       </div>
+      <div id="waves-wyckoff-view" class="subtab-view" style="display:none;padding:12px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;"></div>
+      <div id="waves-squeeze-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;"></div>
     </div>
 
     <!-- FUND TAB -->
@@ -2599,6 +2603,89 @@ function calcRSI(bars, period=14) {
   }
   if (avgL===0) return 100;
   return 100-100/(1+avgG/avgL);
+}
+
+// ── ADX / DMI calculation ─────────────────────────────────────────────────────
+function calcADX(bars, period = 14) {
+  if (bars.length < period + 1) return null;
+  const trueRange = (cur, prev) => Math.max(
+    cur.h - cur.l,
+    Math.abs(cur.h - prev.c),
+    Math.abs(cur.l - prev.c)
+  );
+  const dmPlus  = (cur, prev) => Math.max(cur.h - prev.h, 0) > Math.max(prev.l - cur.l, 0) ? Math.max(cur.h - prev.h, 0) : 0;
+  const dmMinus = (cur, prev) => Math.max(prev.l - cur.l, 0) > Math.max(cur.h - prev.h, 0) ? Math.max(prev.l - cur.l, 0) : 0;
+
+  let atr = 0, diP = 0, diM = 0;
+  for (let i = 1; i <= period; i++) {
+    atr  += trueRange(bars[i], bars[i-1]);
+    diP  += dmPlus(bars[i], bars[i-1]);
+    diM  += dmMinus(bars[i], bars[i-1]);
+  }
+  const dxArr = [];
+  for (let i = period + 1; i < bars.length; i++) {
+    atr  = atr  - atr/period  + trueRange(bars[i], bars[i-1]);
+    diP  = diP  - diP/period  + dmPlus(bars[i], bars[i-1]);
+    diM  = diM  - diM/period  + dmMinus(bars[i], bars[i-1]);
+    const diPct = atr > 0 ? (diP / atr) * 100 : 0;
+    const diMct = atr > 0 ? (diM / atr) * 100 : 0;
+    const dx = (diPct + diMct) > 0 ? Math.abs(diPct - diMct) / (diPct + diMct) * 100 : 0;
+    dxArr.push({ dx, diP: diPct, diM: diMct });
+  }
+  if (dxArr.length < period) return null;
+  let adx = dxArr.slice(0, period).reduce((s, d) => s + d.dx, 0) / period;
+  for (let i = period; i < dxArr.length; i++) {
+    adx = (adx * (period - 1) + dxArr[i].dx) / period;
+  }
+  const last = dxArr[dxArr.length - 1];
+  return { adx: Math.round(adx), diP: Math.round(last.diP), diM: Math.round(last.diM) };
+}
+
+// ── Wyckoff Phase Detection ───────────────────────────────────────────────────
+function detectWyckoffPhase(bars) {
+  if (bars.length < 50) return null;
+  const recent = bars.slice(-50);
+  const earlier = bars.slice(-100, -50);
+
+  const recentAvg = recent.reduce((s,b) => s+b.c, 0) / recent.length;
+  const earlierAvg = earlier.length ? earlier.reduce((s,b) => s+b.c, 0) / earlier.length : recentAvg;
+  const trendPct = (recentAvg - earlierAvg) / earlierAvg * 100;
+
+  const recentRange = (Math.max(...recent.map(b=>b.h)) - Math.min(...recent.map(b=>b.l))) / recentAvg;
+
+  const upVol   = recent.filter((b,i) => i>0 && b.c > recent[i-1]?.c).reduce((s,b) => s+(b.v||0), 0);
+  const downVol = recent.filter((b,i) => i>0 && b.c < recent[i-1]?.c).reduce((s,b) => s+(b.v||0), 0);
+  const volBias = upVol > 0 && downVol > 0 ? upVol / (upVol + downVol) : 0.5;
+
+  const last10  = bars.slice(-10).reduce((s,b) => s+b.c, 0) / 10;
+  const prev10  = bars.slice(-20,-10).reduce((s,b) => s+b.c, 0) / 10;
+  const momentumPct = (last10 - prev10) / prev10 * 100;
+
+  let phase, description, action, color;
+
+  if (trendPct < -5 && recentRange < 0.12 && volBias > 0.5) {
+    phase = 'ACCUMULATION'; color = '#22c55e';
+    description = 'Konsolidace po poklesu. Smart money pravděpodobně nakupuje — volume silnější na up-days.';
+    action = 'Watch for breakout above trading range.';
+  } else if (trendPct > 5 && momentumPct > 0) {
+    phase = 'MARKUP'; color = '#3b82f6';
+    description = 'Rostoucí trend s momentum. Trh ve fázi expanze.';
+    action = 'Trend following strategy. Watch for signs of distribution.';
+  } else if (trendPct > 3 && recentRange < 0.12 && volBias < 0.5) {
+    phase = 'DISTRIBUTION'; color = '#f59e0b';
+    description = 'Konsolidace po růstu. Volume silnější na down-days — možná distribuce.';
+    action = 'Caution — possible topping. Tighten stops.';
+  } else if (trendPct < -5 && momentumPct < 0) {
+    phase = 'MARKDOWN'; color = '#ef4444';
+    description = 'Klesající trend. Nabídka převyšuje poptávku.';
+    action = 'Avoid longs. Wait for accumulation signs.';
+  } else {
+    phase = 'NEUTRAL'; color = '#6b7280';
+    description = 'Fáze není jednoznačná. Trh v přechodném stavu.';
+    action = 'Wait for clearer signal.';
+  }
+
+  return { phase, description, action, color, trendPct: trendPct.toFixed(1), volBias: (volBias*100).toFixed(0), recentRange: (recentRange*100).toFixed(1) };
 }
 
 // Returns full RSI array (length === bars.length, nulls for first `period` bars)
@@ -4036,6 +4123,55 @@ function drawRRGChart(canvasId, sectors) {
     ctx.textAlign = 'right';
     ctx.fillText(yVal.toFixed(1), cL - 8, yPos + 3);
   }
+}
+
+// ─── WYCKOFF ─────────────────────────────────────────────────────────────────
+function renderWyckoff(sym) {
+  const el = document.getElementById('waves-wyckoff-view');
+  if (!el || !sym) return;
+  const bars = state.data[sym]?.bars;
+  if (!bars || bars.length < 50) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-text">NOT ENOUGH DATA</div></div>';
+    return;
+  }
+  const tfBars = filterBars(bars, state.timeframe);
+  const w = detectWyckoffPhase(tfBars.length >= 50 ? tfBars : bars);
+  if (!w) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-text">INSUFFICIENT DATA</div></div>'; return; }
+
+  const phases = ['ACCUMULATION','MARKUP','DISTRIBUTION','MARKDOWN'];
+  const phaseColors = {'ACCUMULATION':'#22c55e','MARKUP':'#3b82f6','DISTRIBUTION':'#f59e0b','MARKDOWN':'#ef4444','NEUTRAL':'#6b7280'};
+
+  el.innerHTML = `
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1px;color:#9ca3af;margin-bottom:8px">WYCKOFF MARKET CYCLE</div>
+
+    <div style="background:${w.color}18;border:1px solid ${w.color}44;border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="font-size:18px;font-weight:800;color:${w.color};font-family:'JetBrains Mono',monospace;letter-spacing:2px;margin-bottom:6px">${w.phase}</div>
+      <div style="font-size:12px;color:#d1d5db;line-height:1.5;margin-bottom:8px">${w.description}</div>
+      <div style="font-size:11px;color:${w.color};font-style:italic">→ ${w.action}</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px">
+      ${phases.map(p => `
+        <div style="padding:8px;border-radius:8px;border:1px solid ${p===w.phase ? phaseColors[p]+'88' : '#374151'};background:${p===w.phase ? phaseColors[p]+'15' : 'transparent'}">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:${p===w.phase ? phaseColors[p] : '#6b7280'}">${p==='ACCUMULATION'?'① ACC':p==='MARKUP'?'② MARKUP':p==='DISTRIBUTION'?'③ DIST':'④ DOWN'}</div>
+          ${p===w.phase ? `<div style="font-size:8px;color:${phaseColors[p]};margin-top:2px">← CURRENT</div>` : ''}
+        </div>`).join('')}
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+      <div style="background:#1f2937;border-radius:8px;padding:8px;text-align:center">
+        <div style="font-size:9px;color:#9ca3af;font-family:'JetBrains Mono',monospace">TREND 50D</div>
+        <div style="font-size:13px;font-weight:700;color:${parseFloat(w.trendPct)>=0?'#22c55e':'#ef4444'}">${w.trendPct}%</div>
+      </div>
+      <div style="background:#1f2937;border-radius:8px;padding:8px;text-align:center">
+        <div style="font-size:9px;color:#9ca3af;font-family:'JetBrains Mono',monospace">UP VOL%</div>
+        <div style="font-size:13px;font-weight:700;color:${parseInt(w.volBias)>=50?'#22c55e':'#ef4444'}">${w.volBias}%</div>
+      </div>
+      <div style="background:#1f2937;border-radius:8px;padding:8px;text-align:center">
+        <div style="font-size:9px;color:#9ca3af;font-family:'JetBrains Mono',monospace">RANGE</div>
+        <div style="font-size:13px;font-weight:700;color:#f59e0b">${w.recentRange}%</div>
+      </div>
+    </div>`;
 }
 
 // ─── FORMAT HELPERS ───────────────────────────────────────────────────────────
@@ -6087,7 +6223,28 @@ function renderAnalysis() {
       html += `<div class="section-header">WAVE STRUCTURE</div><div class="card">`;
     }
 
+    // ADX Trend Strength meter
+    const adxResult = calcADX(bars);
+    const adxVal = adxResult?.adx ?? 0;
+    const adxLabel = adxVal < 20 ? 'RANGING' : adxVal < 40 ? 'DEVELOPING' : adxVal < 60 ? 'STRONG' : 'VERY STRONG';
+    const adxColor = adxVal < 20 ? '#6b7280' : adxVal < 40 ? '#f59e0b' : adxVal < 60 ? '#22c55e' : '#10b981';
+    const adxHtml = `
+<div style="background:#1f2937;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#9ca3af;letter-spacing:1px">ADX TREND STRENGTH</span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${adxColor}">${adxVal} · ${adxLabel}</span>
+  </div>
+  <div style="background:#374151;border-radius:4px;height:6px;overflow:hidden">
+    <div style="height:100%;width:${Math.min(adxVal,100)}%;background:${adxColor};border-radius:4px;transition:width 0.4s"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:9px">
+    <span style="color:#22c55e">+DI ${adxResult?.diP ?? '—'}</span>
+    <span style="color:#ef4444">-DI ${adxResult?.diM ?? '—'}</span>
+  </div>
+</div>`;
+
     html += `
+      ${adxHtml}
       ${scenarioHtml}
       <div class="wave-badge-row">
         <div class="wave-badge" style="color:${dirCol};border-color:${dirCol}44;background:${dirCol}11">${patternLabel}</div>
@@ -6957,7 +7114,7 @@ function switchWatchSubtab(sub) {
 function switchWavesSubtab(sub) {
   document.querySelectorAll('#waves-subtab-bar .subtab').forEach(b => b.classList.remove('active'));
   document.getElementById('ast-' + sub).classList.add('active');
-  ['analysis','forecast','signals','sector','patterns','backtest','earnhist','season','correl','options','candles','diverg','momentum','bench','recession','rotation','rrg'].forEach(s => {
+  ['analysis','forecast','signals','sector','patterns','backtest','earnhist','season','correl','options','candles','diverg','momentum','bench','recession','rotation','rrg','wyckoff','squeeze'].forEach(s => {
     const v = document.getElementById('waves-' + s + '-view');
     if (v) v.style.display = s === sub ? '' : 'none';
   });
@@ -6978,6 +7135,8 @@ function switchWavesSubtab(sub) {
   if (sub === 'recession') renderRecession();
   if (sub === 'rotation') renderRotation();
   if (sub === 'rrg') renderRRG();
+  if (sub === 'wyckoff') renderWyckoff(state.selected);
+  if (sub === 'squeeze') renderSqueezeScore(state.selected);
 }
 
 function switchToolsSubtab(sub) {
@@ -12064,7 +12223,8 @@ function detectChartPatterns(bars) {
     patterns.push({ type:'Double Top', emoji:'🔴', direction:'bearish', col:'#ef4444',
       startDate: p1.date, endDate: p2.date,
       desc: `Two peaks at ~$${fmtPrice(p1.price)}, neckline $${fmtPrice(neckline)}. Target $${fmtPrice(target)}.`,
-      confidence: Math.round(85 - Math.abs(p1.price-p2.price)/p1.price*1000) });
+      confidence: Math.round(85 - Math.abs(p1.price-p2.price)/p1.price*1000),
+      high: p1.price, neckline, precomputedTarget: target });
   }
 
   // Double Bottom
@@ -12079,7 +12239,8 @@ function detectChartPatterns(bars) {
     patterns.push({ type:'Double Bottom', emoji:'🟢', direction:'bullish', col:'#22c55e',
       startDate: t1.date, endDate: t2.date,
       desc: `Two troughs at ~$${fmtPrice(t1.price)}, neckline $${fmtPrice(neckline)}. Target $${fmtPrice(target)}.`,
-      confidence: Math.round(85 - Math.abs(t1.price-t2.price)/t1.price*1000) });
+      confidence: Math.round(85 - Math.abs(t1.price-t2.price)/t1.price*1000),
+      low: t1.price, neckline, precomputedTarget: target });
   }
 
   // Head & Shoulders
@@ -12096,7 +12257,8 @@ function detectChartPatterns(bars) {
     patterns.push({ type:'Head & Shoulders', emoji:'🔴', direction:'bearish', col:'#ef4444',
       startDate: L.date, endDate: R.date,
       desc: `Head $${fmtPrice(H.price)}, shoulders ~$${fmtPrice(L.price)}, neckline $${fmtPrice(neckline)}. Target $${fmtPrice(target)}.`,
-      confidence: Math.round(80 - Math.abs(L.price-R.price)/L.price*500) });
+      confidence: Math.round(80 - Math.abs(L.price-R.price)/L.price*500),
+      head: H.price, neckline, precomputedTarget: target });
   }
 
   // Inverse Head & Shoulders
@@ -12113,7 +12275,8 @@ function detectChartPatterns(bars) {
     patterns.push({ type:'Inv. Head & Shoulders', emoji:'🟢', direction:'bullish', col:'#22c55e',
       startDate: L.date, endDate: R.date,
       desc: `Head $${fmtPrice(H.price)}, shoulders ~$${fmtPrice(L.price)}, neckline $${fmtPrice(neckline)}. Target $${fmtPrice(target)}.`,
-      confidence: Math.round(80 - Math.abs(L.price-R.price)/L.price*500) });
+      confidence: Math.round(80 - Math.abs(L.price-R.price)/L.price*500),
+      head: H.price, neckline, precomputedTarget: target });
   }
 
   // Cup & Handle
@@ -12128,12 +12291,63 @@ function detectChartPatterns(bars) {
         patterns.push({ type:'Cup & Handle', emoji:'🟢', direction:'bullish', col:'#22c55e',
           startDate: leftPeak.date, endDate: bars[n-1].date,
           desc: `Cup $${fmtPrice(leftPeak.price)}→$${fmtPrice(cupBottom.price)}→$${fmtPrice(rightPeak.price)}, handle at $${fmtPrice(handleTrough.price)}. Target $${fmtPrice(target)}.`,
-          confidence: 72 });
+          confidence: 72,
+          resistance: rightPeak.price, low: cupBottom.price, precomputedTarget: target });
       }
     }
   }
 
   return patterns.sort((a,b)=>b.confidence-a.confidence).slice(0,5);
+}
+
+// ─── PATTERN COMPLETION ───────────────────────────────────────────────────────
+function getPatternCompletion(pattern, bars) {
+  const last = bars[bars.length - 1];
+  const curPrice = last?.c;
+  if (!curPrice) return null;
+  const t = pattern.type;
+
+  if (t === 'Double Top') {
+    const high = pattern.high;
+    const neckline = pattern.neckline;
+    if (!high || !neckline) return null;
+    const target = pattern.precomputedTarget ?? (neckline - (high - neckline));
+    const pct = curPrice < neckline ? 100 : 75;
+    return { pct, target: target.toFixed(2), invalidation: (high * 1.02).toFixed(2), status: pct === 100 ? 'CONFIRMED' : 'FORMING' };
+  }
+  if (t === 'Double Bottom') {
+    const low = pattern.low;
+    const neckline = pattern.neckline;
+    if (!low || !neckline) return null;
+    const target = pattern.precomputedTarget ?? (neckline + (neckline - low));
+    const pct = curPrice > neckline ? 100 : 75;
+    return { pct, target: target.toFixed(2), invalidation: (low * 0.98).toFixed(2), status: pct === 100 ? 'CONFIRMED' : 'FORMING' };
+  }
+  if (t === 'Head & Shoulders') {
+    const head = pattern.head;
+    const neckline = pattern.neckline;
+    if (!neckline || !head) return null;
+    const target = pattern.precomputedTarget ?? (neckline - (head - neckline));
+    const pct = curPrice < neckline ? 100 : 80;
+    return { pct, target: target.toFixed(2), invalidation: (head * 1.01).toFixed(2), status: pct === 100 ? 'CONFIRMED' : 'FORMING' };
+  }
+  if (t === 'Inv. Head & Shoulders') {
+    const head = pattern.head;
+    const neckline = pattern.neckline;
+    if (!neckline || !head) return null;
+    const target = pattern.precomputedTarget ?? (neckline + (neckline - head));
+    const pct = curPrice > neckline ? 100 : 80;
+    return { pct, target: target.toFixed(2), invalidation: (head * 0.99).toFixed(2), status: pct === 100 ? 'CONFIRMED' : 'FORMING' };
+  }
+  if (t === 'Cup & Handle') {
+    const resistance = pattern.resistance;
+    const cupLow = pattern.low;
+    if (!resistance) return null;
+    const target = pattern.precomputedTarget ?? (resistance + (resistance - (cupLow || resistance * 0.85)));
+    const pct = curPrice >= resistance * 0.97 ? 90 : curPrice >= resistance * 0.9 ? 60 : 30;
+    return { pct, target: target.toFixed(2), invalidation: (resistance * 0.92).toFixed(2), status: pct >= 90 ? 'BREAKOUT READY' : 'FORMING' };
+  }
+  return { pct: Math.round(pattern.confidence || 50), target: null, invalidation: null, status: 'DETECTING' };
 }
 
 function renderPatterns() {
@@ -12157,6 +12371,21 @@ function renderPatterns() {
   } else {
     patterns.forEach(p => {
       const confCol = p.confidence >= 75 ? 'var(--green)' : p.confidence >= 60 ? 'var(--gold)' : 'var(--red)';
+      const comp = getPatternCompletion(p, bars);
+      const compHtml = comp ? `
+        <div style="padding:8px 14px 4px;border-top:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <div style="flex:1;background:#374151;border-radius:3px;height:4px">
+              <div style="height:100%;width:${comp.pct}%;background:${comp.pct>=100?'#22c55e':comp.pct>=75?'#f59e0b':'#3b82f6'};border-radius:3px"></div>
+            </div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${comp.pct>=100?'#22c55e':comp.pct>=75?'#f59e0b':'#9ca3af'}">${comp.pct}%</span>
+          </div>
+          <div style="display:flex;gap:12px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#9ca3af;flex-wrap:wrap">
+            ${comp.target?`<span>TGT <strong style="color:#22c55e">$${comp.target}</strong></span>`:''}
+            ${comp.invalidation?`<span>INVALID <strong style="color:#ef4444">$${comp.invalidation}</strong></span>`:''}
+            <span style="color:${comp.status==='CONFIRMED'||comp.status==='BREAKOUT READY'?'#22c55e':'#f59e0b'}">${comp.status}</span>
+          </div>
+        </div>` : '';
       html += `<div style="margin:0 12px 10px;background:var(--bg2);border:1px solid ${p.col}33;border-radius:14px;overflow:hidden">
         <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -12169,6 +12398,7 @@ function renderPatterns() {
           <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted)">${p.startDate} → ${p.endDate}</div>
         </div>
         <div style="padding:10px 14px;font-size:12px;color:var(--muted);line-height:1.5">${p.desc}</div>
+        ${compHtml}
         <div style="padding:6px 14px 10px">
           <span style="font-family:'JetBrains Mono',monospace;font-size:9px;padding:3px 8px;border-radius:4px;border:1px solid ${p.col}44;background:${p.col}11;color:${p.col}">${p.direction === 'bullish' ? '▲ BULLISH' : '▼ BEARISH'}</span>
         </div>
@@ -12177,6 +12407,84 @@ function renderPatterns() {
   }
   html += '</div>';
   el.innerHTML = html;
+}
+
+// ─── SHORT SQUEEZE SCORE ──────────────────────────────────────────────────────
+function calcShortSqueezeScore(sym) {
+  const bars = state.data[sym]?.bars;
+  if (!bars || bars.length < 20) return null;
+
+  const last = bars[bars.length - 1];
+  const scores = {};
+
+  // 1. Momentum (30 points)
+  const bars20 = bars.slice(-20);
+  const perf20 = bars20.length > 1 ? (bars20[bars20.length-1].c - bars20[0].c) / bars20[0].c * 100 : 0;
+  scores.momentum = Math.min(30, Math.max(0, perf20 * 1.5));
+
+  // 2. Volume spike (25 points)
+  const avgVol = bars.slice(-30).reduce((s,b) => s + (b.v || 0), 0) / 30;
+  const lastVol = last?.v || 0;
+  const volRatio = avgVol > 0 ? lastVol / avgVol : 1;
+  scores.volume = Math.min(25, Math.max(0, (volRatio - 1) * 15));
+
+  // 3. RSI oversold recovery (20 points)
+  const rsiSeries = calcRSISeries(bars, 14);
+  const lastRsi = rsiSeries[rsiSeries.length - 1] ?? 50;
+  const prevRsi = rsiSeries[rsiSeries.length - 5] ?? 50;
+  if (lastRsi > 40 && prevRsi < 35) scores.rsiRecovery = 20;
+  else if (lastRsi > 50 && prevRsi < 45) scores.rsiRecovery = 10;
+  else scores.rsiRecovery = 0;
+
+  // 4. Short interest (25 points)
+  const fund = state.fundamentals?.[sym];
+  let siScore = 12;
+  if (fund?.shortData) {
+    const siPct = fund.shortData.shortPercentFloat || 0;
+    siScore = Math.min(25, siPct * 2.5);
+  }
+  scores.shortInterest = siScore;
+
+  const total = Object.values(scores).reduce((s,v) => s + v, 0);
+  const clamped = Math.min(100, Math.max(0, Math.round(total)));
+  const label = clamped >= 75 ? 'HIGH SQUEEZE RISK' : clamped >= 50 ? 'MODERATE' : clamped >= 25 ? 'LOW' : 'MINIMAL';
+  const color = clamped >= 75 ? '#ef4444' : clamped >= 50 ? '#f59e0b' : clamped >= 25 ? '#3b82f6' : '#6b7280';
+  return { score: clamped, label, color, components: scores };
+}
+
+function renderSqueezeScore(sym) {
+  const el = document.getElementById('waves-squeeze-view');
+  if (!el || !sym) return;
+  const result = calcShortSqueezeScore(sym);
+  if (!result) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#9889;</div><div class="empty-text">NOT ENOUGH DATA</div></div>';
+    return;
+  }
+  const { score, label, color, components } = result;
+  const compLabels = { momentum: 'Momentum', volume: 'Volume Spike', rsiRecovery: 'RSI Recovery', shortInterest: 'Short Interest' };
+  const compMax    = { momentum: 30, volume: 25, rsiRecovery: 20, shortInterest: 25 };
+  el.innerHTML = `<div style="padding:12px">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1px;color:#9ca3af;margin-bottom:8px">SHORT SQUEEZE SCORE &middot; ${sym}</div>
+    <div style="background:${color}15;border:1px solid ${color}44;border-radius:12px;padding:16px;text-align:center;margin-bottom:12px">
+      <div style="font-size:48px;font-weight:800;color:${color};font-family:'JetBrains Mono',monospace;line-height:1">${score}</div>
+      <div style="font-size:11px;color:${color};font-weight:700;letter-spacing:1px;margin-top:4px">${label}</div>
+      <div style="background:#374151;border-radius:4px;height:8px;margin-top:10px;overflow:hidden">
+        <div style="height:100%;width:${score}%;background:linear-gradient(90deg,#3b82f6,${color});border-radius:4px"></div>
+      </div>
+    </div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#9ca3af;margin-bottom:6px;letter-spacing:1px">COMPONENTS</div>
+    ${Object.entries(components).map(([k,v]) => `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="width:90px;font-size:10px;color:#9ca3af;flex-shrink:0">${compLabels[k]||k}</div>
+        <div style="flex:1;background:#374151;border-radius:3px;height:5px">
+          <div style="height:100%;width:${Math.round(v/(compMax[k]||25)*100)}%;background:#3b82f6;border-radius:3px"></div>
+        </div>
+        <div style="width:28px;text-align:right;font-size:10px;color:#d1d5db;font-family:'JetBrains Mono',monospace">${Math.round(v)}</div>
+      </div>`).join('')}
+    <div style="margin-top:12px;padding:10px;background:#1f2937;border-radius:8px;font-size:11px;color:#9ca3af;line-height:1.5">
+      Short squeeze nastane kdy&#382; short sellers jsou nuceni zav&#345;&#237;t pozice p&#345;i rychl&#233;m r&#367;stu ceny &mdash; zp&#367;sobuje exponenci&#225;ln&#237; pohyb naho&#345;u.
+    </div>
+  </div>`;
 }
 
 // ─── ELLIOTT WAVE BACKTEST ────────────────────────────────────────────────────
