@@ -83,6 +83,45 @@
 [data-theme="light"] #bottom-nav { background: #ffffff; border-top-color: #d4d4d8; }
 [data-theme="light"] .hdr-btn { background: #f4f4f5; color: #18181b; border-color: #d4d4d8; }
 
+/* ── LIGHT MODE — comprehensive overrides ── */
+[data-theme="light"] .wl-item { background: #ffffff; }
+[data-theme="light"] .wl-item.selected { background: #eff6ff; }
+[data-theme="light"] .wl-sym { color: #2563eb; }
+[data-theme="light"] .wl-price { color: #18181b; }
+[data-theme="light"] .wl-wave-badge { background: rgba(37,99,235,0.1); color: #2563eb; }
+[data-theme="light"] .wl-remove-btn { color: #71717a; }
+[data-theme="light"] .section-header { background: #f4f4f5; color: #71717a; }
+[data-theme="light"] .subtab { color: #71717a; }
+[data-theme="light"] .subtab.active { color: #06b6d4; border-bottom-color: #06b6d4; }
+[data-theme="light"] .ov-btn { background: #f4f4f5; border-color: #d4d4d8; color: #52525b; }
+[data-theme="light"] .ov-btn.active { background: rgba(37,99,235,0.1); color: #2563eb; border-color: #93c5fd; }
+[data-theme="light"] .tf-pill { background: #f4f4f5; color: #71717a; border-color: #d4d4d8; }
+[data-theme="light"] .tf-pill.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+[data-theme="light"] .tag-filter-pill { background: #f4f4f5; }
+[data-theme="light"] .empty-state { color: #71717a; }
+[data-theme="light"] #search-modal { background: #ffffff; }
+[data-theme="light"] #search-input { background: #f4f4f5; color: #18181b; border-color: #d4d4d8; }
+[data-theme="light"] .search-result-item { border-bottom-color: #e4e4e7; color: #18181b; }
+[data-theme="light"] #help-modal { background: #ffffff; }
+[data-theme="light"] .help-item { border-bottom-color: #e4e4e7; color: #52525b; }
+[data-theme="light"] #tag-modal-overlay > div { background: #ffffff !important; }
+[data-theme="light"] .tag-opt { background: #f4f4f5; border-color: #d4d4d8; }
+[data-theme="light"] #toast { background: #1f2937; color: #f9fafb; }
+[data-theme="light"] .news-item { border-bottom-color: #e4e4e7; }
+[data-theme="light"] .news-title { color: #18181b; }
+[data-theme="light"] .journal-entry { border-bottom-color: #e4e4e7; }
+[data-theme="light"] #tab-watchlist { background: #f4f4f5; }
+[data-theme="light"] #wl-header { background: #ffffff; border-bottom-color: #e4e4e7; }
+[data-theme="light"] #wl-add-btn { background: #2563eb; }
+[data-theme="light"] #tab-fund,
+[data-theme="light"] #tab-analysis,
+[data-theme="light"] #tab-journal,
+[data-theme="light"] #tab-screen { background: #f4f4f5; }
+/* Fund/Analysis sub-panel backgrounds */
+[data-theme="light"] .subtab-bar { background: #ffffff; border-bottom-color: #e4e4e7; }
+[data-theme="light"] .fund-subtab-bar { background: #ffffff; }
+[data-theme="light"] #wl-action-sheet { background: #ffffff !important; border-top-color: #e4e4e7 !important; }
+
 html, body {
   height: 100%; height: 100dvh;
   background: var(--bg);
@@ -1242,9 +1281,40 @@ strong { font-weight: 600; }
   #nav-bar { display: none !important; }
   #tf-bar  { display: none !important; }
   #overlay-bar { display: none !important; }
-  #chart-wrap { height: 100vh !important; }
+  #chart-wrap { height: calc(100vh - 36px) !important; }
   #header { display: none !important; }
+  #landscape-toolbar { display: flex !important; }
 }
+
+#landscape-toolbar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 36px;
+  background: rgba(15,23,42,0.92);
+  border-top: 1px solid var(--border);
+  backdrop-filter: blur(8px);
+  display: none;
+  align-items: center;
+  padding: 0 12px;
+  gap: 6px;
+  z-index: 50;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#landscape-toolbar::-webkit-scrollbar { display: none; }
+
+.ls-pill {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; letter-spacing: 1px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.ls-pill.active { background: var(--blue); border-color: var(--blue); color: #fff; }
 </style>
 </head>
 <body>
@@ -5629,6 +5699,18 @@ function renderWatchlist() {
         }
       }
     } catch(e) {}
+    // 52W High/Low badge
+    const bars52 = bars.slice(-252);
+    const high52 = bars52.length ? Math.max(...bars52.map(b => b.h ?? b.c)) : null;
+    const low52  = bars52.length ? Math.min(...bars52.map(b => b.l ?? b.c)) : null;
+    const curP   = last?.c;
+    const near52H = high52 && curP && curP >= high52 * 0.95;
+    const near52L = low52  && curP && curP <= low52  * 1.05;
+    const badge52 = near52H
+      ? `<div style="font-size:9px;color:#22c55e;font-family:'JetBrains Mono',monospace;font-weight:700">▲52W H</div>`
+      : near52L
+      ? `<div style="font-size:9px;color:#ef4444;font-family:'JetBrains Mono',monospace;font-weight:700">▼52W L</div>`
+      : '';
     const bzCache = _buyZoneCache[sym];
     const bzBadge = (bzCache && bzCache.score >= 4)
       ? `<span title="Buy Zone: ${bzCache.score}/5" style="font-size:12px;cursor:default">🎯</span>`
@@ -5655,6 +5737,7 @@ function renderWatchlist() {
         ${sentiment ? `<div style="font-size:10px" title="News sentiment: ${sentiment}">${sentimentEmoji}</div>` : ''}
         ${state.upcomingEarnings?.[sym] ? `<div style="font-size:9px;color:#f59e0b;font-family:'JetBrains Mono',monospace">📅 EARN ${state.upcomingEarnings[sym]}</div>` : ''}
         ${watchPerfBadge}
+        ${badge52}
       </div>
       ${tagBtn}
       <button class="wl-remove-btn" onclick="removeTicker('${sym}')" title="Remove">✕</button>
@@ -5742,8 +5825,8 @@ function wireRowLongPress(row, sym) {
     if (e.touches && e.touches.length > 1) return;
     timer = setTimeout(() => {
       timer = null;
-      haptic(20);
-      triggerSpotlight(sym);
+      haptic(40);
+      openWatchlistActionSheet(sym);
     }, THRESHOLD);
   }
   function cancel() {
@@ -5753,6 +5836,66 @@ function wireRowLongPress(row, sym) {
   row.addEventListener('touchstart', start, { passive: true });
   row.addEventListener('touchend',   cancel, { passive: true });
   row.addEventListener('touchmove',  cancel, { passive: true });
+}
+
+function openWatchlistActionSheet(sym) {
+  const selected = state.selected;
+  const canCompare = selected && sym !== selected;
+
+  const sheet = document.createElement('div');
+  sheet.id = 'wl-action-sheet';
+  sheet.style.cssText = `position:fixed;bottom:0;left:0;right:0;z-index:9000;
+    background:var(--bg2);border-top:1px solid var(--border);border-radius:16px 16px 0 0;
+    padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom));
+    transform:translateY(100%);transition:transform 0.25s ease`;
+
+  sheet.innerHTML = `
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px"></div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px">${sym}</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${canCompare ? `<button onclick="startCompareFromWatchlist('${sym}')" style="padding:12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);border-radius:10px;color:#a78bfa;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:left">
+        📊 Compare with ${selected}
+      </button>` : ''}
+      <button onclick="selectTicker('${sym}');closeWatchlistActionSheet()" style="padding:12px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;text-align:left">
+        📈 Open chart
+      </button>
+      <button onclick="openTagModal('${sym}');closeWatchlistActionSheet()" style="padding:12px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;text-align:left">
+        🏷 Change tag
+      </button>
+      <button onclick="removeTicker('${sym}');closeWatchlistActionSheet()" style="padding:12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:10px;color:#ef4444;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:left">
+        ✕ Remove from watchlist
+      </button>
+      <button onclick="closeWatchlistActionSheet()" style="padding:10px;background:transparent;border:none;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:12px">
+        Cancel
+      </button>
+    </div>`;
+
+  document.body.appendChild(sheet);
+  requestAnimationFrame(() => { sheet.style.transform = 'translateY(0)'; });
+
+  const backdrop = document.createElement('div');
+  backdrop.id = 'wl-action-backdrop';
+  backdrop.style.cssText = 'position:fixed;inset:0;z-index:8999;background:rgba(0,0,0,0.5)';
+  backdrop.onclick = closeWatchlistActionSheet;
+  document.body.appendChild(backdrop);
+}
+
+function closeWatchlistActionSheet() {
+  const sheet = document.getElementById('wl-action-sheet');
+  const backdrop = document.getElementById('wl-action-backdrop');
+  if (sheet) { sheet.style.transform = 'translateY(100%)'; setTimeout(() => sheet.remove(), 250); }
+  if (backdrop) backdrop.remove();
+}
+
+function startCompareFromWatchlist(sym) {
+  closeWatchlistActionSheet();
+  state.compareSym = sym;
+  const chip = document.getElementById('compare-sym-chip');
+  const lbl  = document.getElementById('compare-sym-label');
+  if (chip && lbl) { chip.style.display = 'flex'; lbl.textContent = sym; }
+  fetchCompareData(sym);
+  switchTab('chart');
+  haptic(30);
 }
 
 function triggerSpotlight(sym) {
