@@ -1241,6 +1241,7 @@ strong { font-weight: 600; }
       <div id="header-price"></div>
     </div>
     <div id="header-actions">
+      <div id="portfolio-pnl-badge" style="display:flex;align-items:center;gap:2px;font-family:'JetBrains Mono',monospace;padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-size:10px;margin-right:4px"></div>
       <div id="vix-badge" style="display:flex;align-items:center;gap:2px;font-family:'JetBrains Mono',monospace;padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-size:10px;margin-right:4px"></div>
       <div id="live-badge" style="display:none">● LIVE</div>
       <button class="hdr-btn" onclick="openSearch()">
@@ -1366,6 +1367,7 @@ strong { font-weight: 600; }
           </div>
         </div>
         <div id="tag-filter-bar" class="tag-filter-bar"></div>
+        <div id="wl-sort-bar" class="tag-filter-bar"></div>
         <div id="wl-list"></div>
       </div>
       <div id="watch-screener-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
@@ -1774,6 +1776,8 @@ let state = {
   compareSym: null,
   compareData: {},
   annotations: {},     // sym → [{date, text}]
+  newsSentiment: {},   // sym → {sentiment: 'positive'|'negative'|'neutral', timestamp}
+  watchlistSortBy: 'default', // 'default'|'1d'|'1m'|'ytd'|'wave'|'alpha'
 };
 
 // ─── PERSISTENCE ─────────────────────────────────────────────────────────────
@@ -1787,6 +1791,7 @@ function saveStateLight() {
     localStorage.setItem('wfm_pivotPeriod',  state.pivotPeriod || 'D');
     localStorage.setItem('wfm_ticker_tags',  JSON.stringify(state.tickerTags));
     localStorage.setItem('wfm_annotations',  JSON.stringify(state.annotations));
+    localStorage.setItem('wfm_sort_by',      state.watchlistSortBy || 'default');
   } catch(e) {}
 }
 
@@ -1836,6 +1841,9 @@ function loadState() {
     document.querySelectorAll('.tf-pill').forEach(p => {
       p.classList.toggle('active', p.dataset.tf === state.timeframe);
     });
+    // Load watchlist sort preference
+    const sortBy = localStorage.getItem('wfm_sort_by');
+    if (sortBy) state.watchlistSortBy = sortBy;
   } catch(e) {}
   const savedTheme = localStorage.getItem('wfm_theme');
   if (savedTheme === 'light') {
@@ -4852,6 +4860,29 @@ function updateHeader() {
   const col   = chg>=0?'var(--green)':'var(--red)';
   document.getElementById('header-price').innerHTML =
     `<span style="color:var(--text)">$${fmtPrice(last.c)}</span> <span style="color:${col}">${sign}${chg.toFixed(2)}%</span>`;
+  updatePortfolioPnl();
+}
+
+function updatePortfolioPnl() {
+  const badge = document.getElementById('portfolio-pnl-badge');
+  if (!badge) return;
+  loadWfJournal();
+  const openTrades = (state.journal || []).filter(t => t.status === 'open' && t.shares > 0);
+  let totalPnl = 0, totalValue = 0;
+  openTrades.forEach(t => {
+    const cur = state.data[t.sym]?.bars?.[state.data[t.sym].bars.length-1]?.c;
+    if (cur && t.entry && t.shares) {
+      const pnl = (cur - t.entry) * t.shares * (t.direction === 'short' ? -1 : 1);
+      totalPnl += pnl;
+      totalValue += cur * t.shares;
+    }
+  });
+  const pnlPct = totalValue > 0 ? (totalPnl / (totalValue - totalPnl)) * 100 : 0;
+  const col = totalPnl >= 0 ? '#22c55e' : '#ef4444';
+  const sign = totalPnl >= 0 ? '+' : '';
+  badge.innerHTML = openTrades.length ?
+    `<span style="cursor:pointer;font-weight:600;color:${col}" onclick="switchToTab('journal')" title="Click to view journal">${sign}$${Math.abs(totalPnl).toFixed(0)} (${sign}${pnlPct.toFixed(1)}%)</span>` :
+    '';
 }
 
 // ─── TICKER TAGS ─────────────────────────────────────────────────────────────
@@ -4921,6 +4952,79 @@ function renderTagFilterBar() {
   bar.innerHTML = html;
 }
 
+function getSortedWatchlist() {
+  const filter = state.activeTagFilter;
+  let sorted = filter
+    ? state.tickers.filter(s => state.tickerTags[s] === filter)
+    : state.tickers.slice();
+
+  const sortBy = state.watchlistSortBy || 'default';
+  if (sortBy === 'default') return sorted;
+
+  sorted.sort((a, b) => {
+    const dA = state.data[a], dB = state.data[b];
+    const barsA = dA?.bars || [], barsB = dB?.bars || [];
+    const lastA = barsA[barsA.length-1], lastB = barsB[barsB.length-1];
+    const prevA = barsA[barsA.length-2], prevB = barsB[barsB.length-2];
+
+    if (sortBy === '1d') {
+      const chgA = lastA && prevA ? (lastA.c - prevA.c) / prevA.c : 0;
+      const chgB = lastB && prevB ? (lastB.c - prevB.c) / prevB.c : 0;
+      return chgB - chgA;
+    }
+    if (sortBy === '1m') {
+      const barsOf1M = Math.floor(21); // ~1 month
+      const prevA = barsA[Math.max(0, barsA.length - barsOf1M - 1)];
+      const prevB = barsB[Math.max(0, barsB.length - barsOf1M - 1)];
+      const chgA = lastA && prevA ? (lastA.c - prevA.c) / prevA.c : 0;
+      const chgB = lastB && prevB ? (lastB.c - prevB.c) / prevB.c : 0;
+      return chgB - chgA;
+    }
+    if (sortBy === 'ytd') {
+      const now = new Date();
+      const ytdStart = new Date(now.getFullYear(), 0, 1);
+      const barAtYTD = barsA.find(b => new Date(b.date) >= ytdStart);
+      const barAtYTDB = barsB.find(b => new Date(b.date) >= ytdStart);
+      const chgA = lastA && barAtYTD ? (lastA.c - barAtYTD.c) / barAtYTD.c : 0;
+      const chgB = lastB && barAtYTDB ? (lastB.c - barAtYTDB.c) / barAtYTDB.c : 0;
+      return chgB - chgA;
+    }
+    if (sortBy === 'wave') {
+      const wA = state.waves[a]?.primary?.currentWave || 0;
+      const wB = state.waves[b]?.primary?.currentWave || 0;
+      return wB - wA;
+    }
+    if (sortBy === 'alpha') {
+      return a.localeCompare(b);
+    }
+    return 0;
+  });
+  return sorted;
+}
+
+function renderWatchlistSortBar() {
+  const bar = document.getElementById('wl-sort-bar');
+  if (!bar) return;
+  const active = state.watchlistSortBy || 'default';
+  const sorts = [
+    { id: 'default', label: '→ Default' },
+    { id: '1d', label: '📊 1D %' },
+    { id: '1m', label: '📊 1M %' },
+    { id: 'ytd', label: '📊 YTD %' },
+    { id: 'wave', label: '🌊 Wave' },
+    { id: 'alpha', label: '🔤 A–Z' },
+  ];
+  bar.innerHTML = sorts.map(s => `<button class="tag-filter-pill ${s.id === active ? 'active' : ''}"
+    style="${s.id === active ? 'background:var(--blue);border-color:var(--blue)' : 'color:var(--muted);border-color:var(--border)'}"
+    onclick="setWatchlistSort('${s.id}')">${s.label}</button>`).join('');
+}
+
+function setWatchlistSort(sortBy) {
+  state.watchlistSortBy = sortBy;
+  saveStateLight();
+  renderWatchlist();
+}
+
 function setTagFilter(tagId) {
   state.activeTagFilter = tagId;
   haptic(15);
@@ -4939,11 +5043,9 @@ function removeTicker(sym) {
 
 function renderWatchlist() {
   renderTagFilterBar();
+  renderWatchlistSortBar();
   const list = document.getElementById('wl-list');
-  const filter = state.activeTagFilter;
-  const visible = filter
-    ? state.tickers.filter(s => state.tickerTags[s] === filter)
-    : state.tickers;
+  const visible = getSortedWatchlist();
 
   if (!state.tickers.length) {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">⭐</div><div class="empty-text">NO TICKERS YET<br>TAP + ADD</div></div>`;
@@ -4985,6 +5087,8 @@ function renderWatchlist() {
     const bzBadge = (bzCache && bzCache.score >= 4)
       ? `<span title="Buy Zone: ${bzCache.score}/5" style="font-size:12px;cursor:default">🎯</span>`
       : '';
+    const sentiment = state.newsSentiment[sym]?.sentiment;
+    const sentimentEmoji = sentiment === 'positive' ? '🟢' : sentiment === 'negative' ? '🔴' : '⚪';
     const tag = getTag(sym);
     const stripeHtml = tag
       ? `<div class="wl-tag-stripe" style="background:${tag.color}"></div>`
@@ -5002,6 +5106,7 @@ function renderWatchlist() {
         ${loading}
         ${chgStr ? `<div class="wl-chg ${chgCls}">${chgStr}</div>` : ''}
         ${waveStr ? `<div class="wl-wave-badge">${waveStr}</div>` : ''}
+        ${sentiment ? `<div style="font-size:10px" title="News sentiment: ${sentiment}">${sentimentEmoji}</div>` : ''}
         ${state.upcomingEarnings?.[sym] ? `<div style="font-size:9px;color:#f59e0b;font-family:'JetBrains Mono',monospace">📅 EARN ${state.upcomingEarnings[sym]}</div>` : ''}
         ${watchPerfBadge}
       </div>
@@ -5159,6 +5264,9 @@ function selectTicker(sym) {
 
   // Lazy-load earnings & dividends
   fetchEarningsDividends(sym).catch(() => {});
+
+  // Lazy-load news sentiment in background
+  fetchNewsSentiment(sym).catch(() => {});
 }
 
 function selectScenario(sym, idx) {
@@ -10251,6 +10359,36 @@ async function fetchNews(sym) {
   })).filter(n=>n.title);
   setCachedNews(sym, items);
   return items;
+}
+function getCachedNewsSentiment(sym) {
+  try { const r=JSON.parse(localStorage.getItem('wfm_sentiment_'+sym)||'null'); return r&&(Date.now()-r.t<NEWS_TTL)?r.sentiment:null; } catch(e){return null;}
+}
+function setCachedNewsSentiment(sym, sentiment) {
+  try { localStorage.setItem('wfm_sentiment_'+sym, JSON.stringify({t:Date.now(),sentiment})); } catch(e){}
+}
+async function fetchNewsSentiment(sym) {
+  const cached = getCachedNewsSentiment(sym);
+  if (cached) { state.newsSentiment[sym] = {sentiment:cached, timestamp:Date.now()}; return cached; }
+  try {
+    const items = await fetchNews(sym);
+    if (!items.length) { setCachedNewsSentiment(sym, 'neutral'); state.newsSentiment[sym] = {sentiment:'neutral', timestamp:Date.now()}; return 'neutral'; }
+    const posWords = ['up','bullish','rally','surge','gain','beat','strong','growth','recovery','success'];
+    const negWords = ['down','bearish','sell','crash','loss','miss','weak','decline','fall','concern'];
+    let posCount=0, negCount=0;
+    items.forEach(n => {
+      const title = (n.title||'').toLowerCase();
+      posWords.forEach(w => { if (title.includes(w)) posCount++; });
+      negWords.forEach(w => { if (title.includes(w)) negCount++; });
+    });
+    const sentiment = posCount > negCount ? 'positive' : negCount > posCount ? 'negative' : 'neutral';
+    setCachedNewsSentiment(sym, sentiment);
+    state.newsSentiment[sym] = {sentiment, timestamp:Date.now()};
+    return sentiment;
+  } catch(e) {
+    setCachedNewsSentiment(sym, 'neutral');
+    state.newsSentiment[sym] = {sentiment:'neutral', timestamp:Date.now()};
+    return 'neutral';
+  }
 }
 function timeAgo(d) {
   if (!d) return '';
