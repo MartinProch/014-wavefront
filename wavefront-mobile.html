@@ -1386,6 +1386,20 @@ strong { font-weight: 600; }
         </div>
       </div>
 
+      <!-- Landscape compact toolbar (visible only in landscape orientation) -->
+      <div id="landscape-toolbar" style="display:none">
+        <!-- TF pills -->
+        <div id="ls-tf-pills"></div>
+        <!-- Separator -->
+        <div style="width:1px;background:var(--border);height:20px;flex-shrink:0"></div>
+        <!-- Key overlays -->
+        <div id="ls-overlay-pills"></div>
+        <!-- Spacer -->
+        <div style="flex:1"></div>
+        <!-- Price info -->
+        <div id="ls-price-info" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text)"></div>
+      </div>
+
       <!-- Overlay toggles -->
       <div id="overlay-bar">
         <button class="ov-btn is-on" data-key="waves"  data-color="cyan">WAVES</button>
@@ -5338,6 +5352,11 @@ function redrawChart() {
     ctx.fillText(label, bx + 8, by + 15);
     ctx.restore();
   }
+
+  // Update landscape toolbar if in landscape orientation
+  if (window.matchMedia('(orientation: landscape)').matches) {
+    updateLandscapeToolbar();
+  }
 }
 
 function drawRegressionChannel(bars, px, py, cL, cR, cT, cB) {
@@ -5957,6 +5976,8 @@ function selectTicker(sym) {
 
   // Lazy-load news sentiment in background
   fetchNewsSentiment(sym).catch(() => {});
+
+  updateLandscapeToolbar();
 }
 
 function selectScenario(sym, idx) {
@@ -6972,6 +6993,49 @@ function switchToolsSubtab(sub) {
   if (sub === 'alerts') renderAlerts();
 }
 
+// ─── LANDSCAPE TOOLBAR ───────────────────────────────────────────────────────
+function updateLandscapeToolbar() {
+  // TF pills
+  const tfs = ['1W','1M','3M','6M','1Y','2Y','5Y'];
+  const lsTf = document.getElementById('ls-tf-pills');
+  if (lsTf) {
+    lsTf.style.cssText = 'display:flex;gap:4px;flex-shrink:0';
+    lsTf.innerHTML = tfs.map(tf =>
+      `<button class="ls-pill ${state.timeframe===tf?'active':''}" onclick="setTF('${tf}',this);updateLandscapeToolbar()">${tf}</button>`
+    ).join('');
+  }
+  // Key overlays (most important)
+  const keyOverlays = [
+    {key:'waves', label:'W'},
+    {key:'fibs',  label:'FIB'},
+    {key:'sr',    label:'S/R'},
+    {key:'ma50',  label:'MA50'},
+    {key:'ma200', label:'MA200'},
+    {key:'vol',   label:'VOL'},
+    {key:'bb',    label:'BB'},
+    {key:'vwap',  label:'VWAP'},
+  ];
+  const lsOv = document.getElementById('ls-overlay-pills');
+  if (lsOv) {
+    lsOv.style.cssText = 'display:flex;gap:4px;flex-shrink:0';
+    lsOv.innerHTML = keyOverlays.map(o =>
+      `<button class="ls-pill ${state.overlays[o.key]?'active':''}"
+        onclick="state.overlays['${o.key}']=!state.overlays['${o.key}'];saveStateLight();redrawChart();updateLandscapeToolbar()">${o.label}</button>`
+    ).join('');
+  }
+  // Price info
+  const sym = state.selected;
+  const lsPrice = document.getElementById('ls-price-info');
+  if (lsPrice && sym && state.data[sym]?.bars?.length) {
+    const bars = state.data[sym].bars;
+    const last = bars[bars.length-1];
+    const prev = bars[bars.length-2];
+    const chg = prev ? ((last.c-prev.c)/prev.c*100) : 0;
+    const col = chg>=0?'#22c55e':'#ef4444';
+    lsPrice.innerHTML = `<span style="font-weight:700">${sym}</span> <span>$${last.c.toFixed(2)}</span> <span style="color:${col}">${chg>=0?'+':''}${chg.toFixed(2)}%</span>`;
+  }
+}
+
 // ─── TF & OVERLAYS ───────────────────────────────────────────────────────────
 function setTF(tf, btn) {
   state.timeframe = tf;
@@ -6986,6 +7050,7 @@ function setTF(tf, btn) {
   saveStateLight(); // fast — TF change doesn't need bar cache write
   redrawChart();
   if (state.activeTab === 'analysis') renderAnalysis();
+  updateLandscapeToolbar();
 }
 
 function toggleOv(key, btn) {
@@ -7268,10 +7333,10 @@ canvas.addEventListener('touchend', e => {
 canvas.addEventListener('dblclick', resetZoom);
 
 window.addEventListener('orientationchange', () => {
-  setTimeout(() => { resizeCanvas(); redrawChart(); }, 200);
+  setTimeout(() => { resizeCanvas(); redrawChart(); updateLandscapeToolbar(); }, 300);
 });
 screen.orientation?.addEventListener('change', () => {
-  setTimeout(() => { resizeCanvas(); redrawChart(); }, 200);
+  setTimeout(() => { resizeCanvas(); redrawChart(); updateLandscapeToolbar(); }, 300);
 });
 let _lastTap = 0;
 canvas.addEventListener('touchend', e => {
