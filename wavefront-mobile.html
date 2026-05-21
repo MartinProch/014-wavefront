@@ -1401,6 +1401,7 @@ strong { font-weight: 600; }
         <button class="subtab" id="ast-bench" onclick="switchWavesSubtab('bench')">BENCH</button>
         <button class="subtab" id="ast-recession" onclick="switchWavesSubtab('recession')">RECESSION</button>
         <button class="subtab" id="ast-rotation" onclick="switchWavesSubtab('rotation')">ROTATION</button>
+        <button class="subtab" id="ast-rrg" onclick="switchWavesSubtab('rrg')">RRG</button>
       </div>
       <div id="waves-analysis-view" class="subtab-view" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="analysis-content">
@@ -1454,6 +1455,9 @@ strong { font-weight: 600; }
       </div>
       <div id="waves-rotation-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="rotation-content"><div class="empty-state"><div class="empty-icon">🔄</div><div class="empty-text">SECTOR ROTATION<br>LOADING…</div></div></div>
+      </div>
+      <div id="waves-rrg-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+        <div id="rrg-content"><div class="empty-state"><div class="empty-icon">🎯</div><div class="empty-text">RRG SECTOR ROTATION<br>LOADING…</div></div></div>
       </div>
     </div>
 
@@ -1780,6 +1784,7 @@ let state = {
   annotations: {},     // sym → [{date, text}]
   newsSentiment: {},   // sym → {sentiment: 'positive'|'negative'|'neutral', timestamp}
   watchlistSortBy: 'default', // 'default'|'1d'|'1m'|'ytd'|'wave'|'alpha'
+  rrgHistory: {},      // {date, sectors: [{name, etf, x, y, perf, vol}, ...]}
 };
 
 // ─── PERSISTENCE ─────────────────────────────────────────────────────────────
@@ -3590,6 +3595,336 @@ async function renderRotation() {
       + '<div id="rot-body"></div>';
   }
   await _renderRotationContent();
+}
+
+// ─── RRG (RELATIVES ROTATION GRAPH) ───────────────────────────────────────────
+const RRG_SECTOR_COLORS = {
+  'Technology': '#60a5fa',    // blue
+  'Energy': '#f59e0b',         // amber
+  'Financials': '#a78bfa',     // purple
+  'Healthcare': '#34d399',     // emerald
+  'Consumer': '#f472b6',       // pink
+  'Industrials': '#fb923c',    // orange
+  'Utilities': '#4f46e5',      // indigo
+  'Materials': '#8b5cf6',      // violet
+  'Real Estate': '#ec4899'     // rose
+};
+
+const RRG_ETFS = ['XLK','XLE','XLF','XLV','XLY','XLI','XLU','XLB','XLRE'];
+
+function getRRGCachedData(date) {
+  try {
+    const cached = JSON.parse(localStorage.getItem('wfm_rrg_' + date) || 'null');
+    return cached && (Date.now() - cached.t < 24*60*60*1000) ? cached.data : null;
+  } catch(e) { return null; }
+}
+
+function setRRGCachedData(date, data) {
+  try {
+    localStorage.setItem('wfm_rrg_' + date, JSON.stringify({t: Date.now(), data}));
+  } catch(e) {}
+}
+
+async function computeRRGData() {
+  const today = new Date().toISOString().slice(0, 10);
+  const cached = getRRGCachedData(today);
+  if (cached) return cached;
+
+  try {
+    // Fetch 3M data for all sector ETFs and SPY
+    const from = new Date(Date.now() - 90*86400*1000).toISOString().slice(0, 10);
+    const to = today;
+
+    const allEtfs = [...RRG_ETFS, 'SPY'];
+    const results = await Promise.allSettled(allEtfs.map(etf =>
+      fetch(`https://api.polygon.io/v2/aggs/ticker/${etf}/range/1/day/${from}/${to}?adjusted=true&sort=asc&limit=100&apiKey=${POLYGON_KEY}`)
+        .then(r => r.json())
+        .then(j => ({ etf, bars: j.results || [] }))
+    ));
+
+    // Extract bars from results
+    const barMap = {};
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled' && r.value.bars.length > 1) {
+        barMap[r.value.etf] = r.value.bars;
+      }
+    });
+
+    if (!barMap['SPY'] || barMap['SPY'].length < 2) {
+      return [];
+    }
+
+    const spyBars = barMap['SPY'];
+    const spy3mPerf = (spyBars[spyBars.length - 1].c - spyBars[0].c) / spyBars[0].c * 100;
+    const spyRSI = calcRSI(spyBars, 14) || 50;
+    const spyVol = calculateVolatility(spyBars.map(b => b.c));
+
+    // Calculate RRG data for each sector
+    const sectors = [];
+    const sectorNames = Object.keys(SECTOR_ETFS);
+
+    for (let i = 0; i < RRG_ETFS.length; i++) {
+      const etf = RRG_ETFS[i];
+      const sectorName = sectorNames[i];
+
+      if (!barMap[etf] || barMap[etf].length < 2) continue;
+
+      const bars = barMap[etf];
+      const perf3m = (bars[bars.length - 1].c - bars[0].c) / bars[0].c * 100;
+      const rsi = calcRSI(bars, 14) || 50;
+      const vol = calculateVolatility(bars.map(b => b.c));
+
+      sectors.push({
+        name: sectorName,
+        etf: etf,
+        x: rsi - spyRSI,           // Momentum ratio
+        y: perf3m - spy3mPerf,     // Relative strength
+        perf: perf3m,
+        vol: vol,
+        color: RRG_SECTOR_COLORS[sectorName] || '#a0a0a0'
+      });
+    }
+
+    const rrgData = { date: today, sectors };
+    setRRGCachedData(today, rrgData);
+    return rrgData;
+  } catch(e) {
+    console.error('RRG compute error:', e);
+    return [];
+  }
+}
+
+function calculateVolatility(closes) {
+  if (closes.length < 2) return 0;
+  const returns = [];
+  for (let i = 1; i < closes.length; i++) {
+    returns.push((closes[i] - closes[i-1]) / closes[i-1]);
+  }
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+  const variance = returns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / returns.length;
+  return Math.sqrt(variance) * 100;
+}
+
+async function renderRRG() {
+  const el = document.getElementById('rrg-content');
+  if (!el) return;
+
+  el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-text">COMPUTING RRG…</div></div>';
+
+  try {
+    const rrgData = await computeRRGData();
+
+    if (!rrgData.sectors || rrgData.sectors.length === 0) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">RRG DATA UNAVAILABLE</div></div>';
+      return;
+    }
+
+    el.innerHTML = `<div style="padding:12px;display:flex;flex-direction:column;height:100%;gap:12px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);padding:6px 12px">
+        RRG • RELATIVES ROTATION GRAPH · ${rrgData.date}
+      </div>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;background:var(--bg2);border-radius:12px;border:1px solid var(--border);overflow:hidden;position:relative">
+        <canvas id="rrg-canvas" style="display:block"></canvas>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 12px">
+        <div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:10px;font-size:9px">
+          <div style="color:var(--green);font-weight:700;margin-bottom:4px">LEADING (↗)</div>
+          <div style="color:var(--muted);font-size:8px">Strong sectors, uptrend</div>
+        </div>
+        <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px;font-size:9px">
+          <div style="color:var(--red);font-weight:700;margin-bottom:4px">LAGGING (↙)</div>
+          <div style="color:var(--muted);font-size:8px">Weak sectors, downtrend</div>
+        </div>
+        <div style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:8px;padding:10px;font-size:9px">
+          <div style="color:var(--blue);font-weight:700;margin-bottom:4px">IMPROVING (↖)</div>
+          <div style="color:var(--muted);font-size:8px">Recovery starting</div>
+        </div>
+        <div style="background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.3);border-radius:8px;padding:10px;font-size:9px">
+          <div style="color:var(--orange);font-weight:700;margin-bottom:4px">WEAKENING (↘)</div>
+          <div style="color:var(--muted);font-size:8px">Losing strength</div>
+        </div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;margin:0 12px;overflow-y:auto;max-height:200px">
+        <div style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">SECTORS</div>
+        ${rrgData.sectors.map(s => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--bg3);font-size:10px;font-family:'JetBrains Mono',monospace">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:12px;height:12px;border-radius:50%;background:${s.color};border:2px solid ${s.color}"></div>
+            <span style="font-weight:700;color:var(--text)">${s.etf}</span>
+            <span style="color:var(--muted)">${s.name}</span>
+          </div>
+          <div style="text-align:right">
+            <div style="color:${s.y >= 0 ? 'var(--green)' : 'var(--red)'}">X:${s.x.toFixed(1)} Y:${s.y.toFixed(1)}</div>
+            <div style="color:var(--muted);font-size:8px">3M: ${s.perf >= 0 ? '+' : ''}${s.perf.toFixed(1)}%</div>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+
+    setTimeout(() => {
+      drawRRGChart('rrg-canvas', rrgData.sectors);
+    }, 100);
+  } catch(e) {
+    console.error('RRG render error:', e);
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">ERROR<br>' + e.message + '</div></div>';
+  }
+}
+
+function drawRRGChart(canvasId, sectors) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const w = rect.width, h = rect.height;
+
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  ctx.scale(dpr, dpr);
+
+  // Chart dimensions
+  const PAD = 60;
+  const cL = PAD, cR = w - PAD, cT = PAD, cB = h - PAD;
+  const cW = cR - cL, cH = cB - cT;
+
+  // Clear
+  ctx.fillStyle = cssVar('--bg2');
+  ctx.fillRect(0, 0, w, h);
+
+  // Find data range for axes
+  let minX = Math.min(...sectors.map(s => s.x));
+  let maxX = Math.max(...sectors.map(s => s.x));
+  let minY = Math.min(...sectors.map(s => s.y));
+  let maxY = Math.max(...sectors.map(s => s.y));
+
+  // Add padding
+  const xRange = Math.max(Math.abs(minX), Math.abs(maxX)) * 1.3;
+  const yRange = Math.max(Math.abs(minY), Math.abs(maxY)) * 1.3;
+  minX = -xRange; maxX = xRange;
+  minY = -yRange; maxY = yRange;
+
+  // Scaling functions
+  const px = x => cL + ((x - minX) / (maxX - minX)) * cW;
+  const py = y => cB - ((y - minY) / (maxY - minY)) * cH;
+
+  const x0 = px(0);  // Center X (momentum = 0)
+  const y0 = py(0);  // Center Y (relative strength = 0)
+
+  // Draw quadrant backgrounds
+  const quadrants = [
+    { label: 'LEADING', x1: x0, y1: cT, x2: cR, y2: y0, color: 'rgba(34,197,94,0.08)' },        // x>0, y>0
+    { label: 'LAGGING', x1: cL, y1: y0, x2: x0, y2: cB, color: 'rgba(239,68,68,0.08)' },        // x<0, y<0
+    { label: 'IMPROVING', x1: cL, y1: cT, x2: x0, y2: y0, color: 'rgba(59,130,246,0.08)' },    // x<0, y>0
+    { label: 'WEAKENING', x1: x0, y1: y0, x2: cR, y2: cB, color: 'rgba(249,115,22,0.08)' }     // x>0, y<0
+  ];
+
+  quadrants.forEach(q => {
+    ctx.fillStyle = q.color;
+    ctx.fillRect(q.x1, q.y1, q.x2 - q.x1, q.y2 - q.y1);
+  });
+
+  // Draw axes
+  ctx.strokeStyle = 'rgba(148,163,184,0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x0, cT);
+  ctx.lineTo(x0, cB);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cL, y0);
+  ctx.lineTo(cR, y0);
+  ctx.stroke();
+
+  // Draw grid
+  ctx.strokeStyle = 'rgba(148,163,184,0.1)';
+  ctx.lineWidth = 0.5;
+  for (let i = 1; i <= 3; i++) {
+    // Vertical grid
+    const gridX = cL + (cW / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(gridX, cT);
+    ctx.lineTo(gridX, cB);
+    ctx.stroke();
+    // Horizontal grid
+    const gridY = cT + (cH / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(cL, gridY);
+    ctx.lineTo(cR, gridY);
+    ctx.stroke();
+  }
+
+  // Draw bubbles (circles for sectors)
+  sectors.forEach(sector => {
+    const bx = px(sector.x);
+    const by = py(sector.y);
+    const radius = 20 + (sector.vol || 0) * 0.5; // Radius based on volatility
+
+    // Draw circle with gradient
+    const grad = ctx.createRadialGradient(bx - 5, by - 5, 0, bx, by, radius);
+    grad.addColorStop(0, sector.color + '40');
+    grad.addColorStop(1, sector.color + '10');
+
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(bx, by, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Border
+    ctx.strokeStyle = sector.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(bx, by, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Label
+    ctx.font = 'bold 10px JetBrains Mono';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = sector.color;
+    ctx.fillText(sector.etf, bx, by);
+  });
+
+  // Draw axis labels
+  ctx.font = '10px JetBrains Mono';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = cssVar('--muted');
+
+  // X-axis label (Momentum)
+  ctx.fillText('MOMENTUM RATIO (RSI diff)', w / 2, h - 10);
+
+  // Y-axis label (Relative Strength)
+  ctx.save();
+  ctx.translate(15, h / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText('RELATIVE STRENGTH (3M perf diff)', 0, 0);
+  ctx.restore();
+
+  // Draw axis values
+  ctx.font = '8px JetBrains Mono';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(148,163,184,0.6)';
+
+  // X-axis values
+  for (let i = -2; i <= 2; i++) {
+    if (i === 0) continue;
+    const xVal = i * xRange / 3;
+    const xPos = px(xVal);
+    ctx.fillText(xVal.toFixed(1), xPos, cB + 8);
+  }
+
+  // Y-axis values
+  for (let i = -2; i <= 2; i++) {
+    if (i === 0) continue;
+    const yVal = i * yRange / 3;
+    const yPos = py(yVal);
+    ctx.textAlign = 'right';
+    ctx.fillText(yVal.toFixed(1), cL - 8, yPos + 3);
+  }
 }
 
 // ─── FORMAT HELPERS ───────────────────────────────────────────────────────────
@@ -6405,7 +6740,7 @@ function switchWatchSubtab(sub) {
 function switchWavesSubtab(sub) {
   document.querySelectorAll('#waves-subtab-bar .subtab').forEach(b => b.classList.remove('active'));
   document.getElementById('ast-' + sub).classList.add('active');
-  ['analysis','forecast','signals','sector','patterns','backtest','earnhist','season','correl','options','candles','diverg','momentum','bench','recession','rotation'].forEach(s => {
+  ['analysis','forecast','signals','sector','patterns','backtest','earnhist','season','correl','options','candles','diverg','momentum','bench','recession','rotation','rrg'].forEach(s => {
     const v = document.getElementById('waves-' + s + '-view');
     if (v) v.style.display = s === sub ? '' : 'none';
   });
@@ -6425,6 +6760,7 @@ function switchWavesSubtab(sub) {
   if (sub === 'bench') renderBenchmark();
   if (sub === 'recession') renderRecession();
   if (sub === 'rotation') renderRotation();
+  if (sub === 'rrg') renderRRG();
 }
 
 function switchToolsSubtab(sub) {
