@@ -1312,6 +1312,7 @@ strong { font-weight: 600; }
         <button class="ov-btn"       data-key="div"    data-color="green">DIV</button>
         <button class="ov-btn"       data-key="smc"    data-color="gold">SMC</button>
         <button class="ov-btn"       data-key="pivot"  data-color="cyan" id="pivot-ov-btn">PIVOT</button>
+        <button class="ov-btn"       data-key="valuation" data-color="purple">VALU</button>
         <button class="ov-btn"       data-key="buyzone" data-color="green">🎯 ZONE</button>
         <span id="pivot-period-toggle" style="display:none;align-items:center;gap:0;border:1px solid rgba(6,182,212,0.4);border-radius:6px;overflow:hidden;flex-shrink:0">
           <button id="pp-D" onclick="setPivotPeriod('D')" style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;padding:4px 7px;border:none;background:rgba(6,182,212,0.25);color:#06b6d4;cursor:pointer">D</button>
@@ -1755,7 +1756,8 @@ let state = {
   wavesMTF: {},
   fundamentals: {},
   fundLoading: {},
-  overlays: { waves:true, fibs:true, sr:true, zones:true, vol:true, ma50:true, ma200:true, ema20:true, wma50:false, wma200:false, bb:false, macd:false, econ:false, chan:false, vp:false, subwaves:false, vwap:false, smc:false, pivot:false, buyzone:false },
+  peHistory: {},      // sym → {min, avg, max, currentPE}
+  overlays: { waves:true, fibs:true, sr:true, zones:true, vol:true, ma50:true, ma200:true, ema20:true, wma50:false, wma200:false, bb:false, macd:false, econ:false, chan:false, vp:false, subwaves:false, vwap:false, smc:false, pivot:false, valuation:false, buyzone:false },
   showCandlePatterns: true,
   forecastView: false,
   econEvents: [],
@@ -2838,6 +2840,64 @@ function calcBollingerBands(bars, period=20, mult=2) {
     lower[i] = sma[i] - mult * std;
   }
   return { upper, lower, mid: sma };
+}
+
+// ── P/E Valuation Band ──────────────────────────────────────────────────────
+async function getPEHistory(sym) {
+  if (state.peHistory[sym]) return state.peHistory[sym];
+
+  try {
+    // Fetch historical P/E ratios from FMP key-metrics endpoint
+    const resp = await fetch(`https://financialmodelingprep.com/api/v3/key-metrics/${sym}?period=annual&limit=8&apikey=${FMP_KEY}`);
+    const kmData = await resp.json();
+
+    if (!Array.isArray(kmData) || kmData.length === 0) return null;
+
+    // Extract P/E ratios and filter out invalid values
+    const peValues = kmData
+      .map(k => k.peRatio)
+      .filter(v => v != null && v > 0 && v < 500)
+      .sort((a, b) => a - b);
+
+    if (peValues.length === 0) return null;
+
+    // Calculate min, avg, max for the 8-year period
+    const minPE = Math.min(...peValues);
+    const maxPE = Math.max(...peValues);
+    const avgPE = peValues.reduce((a, b) => a + b, 0) / peValues.length;
+    const currentPE = kmData[0]?.peRatio || null;
+
+    const result = { min: minPE, avg: avgPE, max: maxPE, currentPE };
+    state.peHistory[sym] = result;
+    return result;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Compute relative P/E band for historical bars
+// If we don't have historical earnings, estimate based on price movement relative to current P/E
+function computeHistoricalPEBand(bars, currentPE) {
+  if (!currentPE || bars.length === 0) return null;
+
+  const currentPrice = bars[bars.length - 1]?.c;
+  if (!currentPrice) return null;
+
+  // For each bar, estimate what the P/E would be if earnings stayed constant
+  // Formula: estimated_PE = (bar_price / current_price) * current_PE
+  // This assumes earnings are constant over the period
+  const estimatedPEValues = bars.map(b => {
+    if (!b.c) return null;
+    return (b.c / currentPrice) * currentPE;
+  }).filter(v => v != null);
+
+  if (estimatedPEValues.length === 0) return null;
+
+  const minPE = Math.min(...estimatedPEValues);
+  const maxPE = Math.max(...estimatedPEValues);
+  const avgPE = estimatedPEValues.reduce((a, b) => a + b, 0) / estimatedPEValues.length;
+
+  return { min: minPE, avg: avgPE, max: maxPE };
 }
 
 function calcMACD(bars, fast=12, slow=26, signal=9) {
@@ -4075,6 +4135,104 @@ function redrawChart() {
   }
   } catch(e) { ctx.restore(); }
 
+  // ── Valuation P/E Band ──────────────────────────────────────────────────────
+  if (state.overlays.valuation && state.peHistory[sym]) {
+    (function drawValuationBand() {
+      const peBand = state.peHistory[sym];
+      if (!peBand || !peBand.min || !peBand.max || !peBand.currentPE) return;
+
+      const currentPrice = bars[bars.length - 1]?.c;
+      if (!currentPrice) return;
+
+      // Calculate price levels based on P/E band
+      // price = (PE_ratio / current_PE) * current_price
+      const priceMin = (peBand.min / peBand.currentPE) * currentPrice;
+      const priceAvg = (peBand.avg / peBand.currentPE) * currentPrice;
+      const priceMax = (peBand.max / peBand.currentPE) * currentPrice;
+
+      const yMin = py(priceMin);
+      const yAvg = py(priceAvg);
+      const yMax = py(priceMax);
+
+      // Skip if bands are out of view
+      if (yMax > cB && yMin > cB) return;
+      if (yMax < cT && yMin < cT) return;
+
+      ctx.save();
+
+      // Draw colored bands from low to high P/E
+      // Low P/E band (undervalued) — green
+      if (yAvg < cB) {
+        ctx.fillStyle = 'rgba(34,197,94,0.15)'; // Light green
+        ctx.fillRect(cL, Math.min(yAvg, cB), cW, Math.max(0, Math.min(yMin, cB) - Math.min(yAvg, cB)));
+      }
+
+      // Average P/E band — neutral
+      if (yAvg >= cT && yAvg <= cB) {
+        ctx.fillStyle = 'rgba(100,200,150,0.1)';
+        const topY = Math.max(yAvg, cT);
+        const bottomY = Math.min(yAvg, cB);
+        if (topY < bottomY) ctx.fillRect(cL, topY, cW, bottomY - topY);
+      }
+
+      // High P/E band (overvalued) — orange/red
+      if (yMax > cT) {
+        ctx.fillStyle = 'rgba(249,115,22,0.15)'; // Orange
+        ctx.fillRect(cL, Math.max(yMax, cT), cW, Math.max(0, Math.min(yAvg, cB) - Math.max(yMax, cT)));
+      }
+
+      // Draw dashed lines for min/avg/max
+      ctx.strokeStyle = 'rgba(34,197,94,0.6)'; // Green for min
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      if (yMin >= cT && yMin <= cB) {
+        ctx.beginPath();
+        ctx.moveTo(cL, yMin);
+        ctx.lineTo(cR, yMin);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = 'rgba(100,200,150,0.5)'; // Neutral for avg
+      if (yAvg >= cT && yAvg <= cB) {
+        ctx.beginPath();
+        ctx.moveTo(cL, yAvg);
+        ctx.lineTo(cR, yAvg);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = 'rgba(249,115,22,0.6)'; // Orange for max
+      if (yMax >= cT && yMax <= cB) {
+        ctx.beginPath();
+        ctx.moveTo(cL, yMax);
+        ctx.lineTo(cR, yMax);
+        ctx.stroke();
+      }
+
+      ctx.setLineDash([]);
+
+      // Draw labels
+      ctx.font = 'bold 9px JetBrains Mono';
+      ctx.textAlign = 'left';
+
+      if (yMin >= cT && yMin <= cB) {
+        ctx.fillStyle = 'rgba(34,197,94,0.8)';
+        ctx.fillText('PE-MIN', cR + 2, yMin + 3);
+      }
+
+      if (yAvg >= cT && yAvg <= cB) {
+        ctx.fillStyle = 'rgba(100,200,150,0.8)';
+        ctx.fillText('PE-AVG', cR + 2, yAvg + 3);
+      }
+
+      if (yMax >= cT && yMax <= cB) {
+        ctx.fillStyle = 'rgba(249,115,22,0.8)';
+        ctx.fillText('PE-MAX', cR + 2, yMax + 3);
+      }
+
+      ctx.restore();
+    })();
+  }
+
   // MA price labels on right axis
   (function drawMALabels() {
     const labels = [];
@@ -5262,8 +5420,9 @@ function selectTicker(sym) {
   // Switch to chart tab when selecting from watchlist/signals
   if (state.activeTab === 'watchlist') switchTab('chart');
 
-  // Lazy-load earnings & dividends
+  // Lazy-load earnings & dividends & P/E history
   fetchEarningsDividends(sym).catch(() => {});
+  getPEHistory(sym).catch(() => {});
 
   // Lazy-load news sentiment in background
   fetchNewsSentiment(sym).catch(() => {});
