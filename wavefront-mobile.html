@@ -4878,31 +4878,37 @@ function redrawChart() {
   // ── Compare overlay ────────────────────────────────────────────────────────
   if (state.compareSym && state.compareData[state.compareSym]?.length) {
     const cmpBars = state.compareData[state.compareSym];
-    const startDate = bars[0].date;
-    const endDate   = bars[bars.length-1].date;
+    const toDateStr = d => d instanceof Date ? d.toISOString().slice(0,10) : String(d).slice(0,10);
+    const startDate = toDateStr(bars[0].date);
+    const endDate   = toDateStr(bars[bars.length-1].date);
     const aligned   = cmpBars.filter(b => b.date >= startDate && b.date <= endDate);
     if (aligned.length > 1) {
       const base    = aligned[0].c;
       const mainBase = bars[0].c;
       const normalized = aligned.map(b => ({ date: b.date, c: mainBase * (b.c / base) }));
+      // Build date→index map once for O(n) lookup
+      const barDateMap = new Map();
+      bars.forEach((mb, i) => barDateMap.set(toDateStr(mb.date), i));
       ctx.save();
       ctx.strokeStyle = '#a78bfa';
       ctx.lineWidth   = 1.5;
       ctx.setLineDash([4, 3]);
       ctx.globalAlpha = 0.8;
       ctx.beginPath();
-      normalized.forEach((b, ni) => {
-        const barIdx = bars.findIndex(mb => mb.date === b.date);
-        if (barIdx < 0) return;
+      let started = false;
+      normalized.forEach(b => {
+        const barIdx = barDateMap.get(b.date);
+        if (barIdx == null) return;
         const x = px(barIdx);
         const y = py(b.c);
-        ni === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        if (!started) { ctx.moveTo(x, y); started = true; }
+        else ctx.lineTo(x, y);
       });
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
       const last = normalized[normalized.length-1];
-      const lastBarIdx = bars.findIndex(b => b.date === last.date);
+      const lastBarIdx = barDateMap.get(last.date) ?? -1;
       if (lastBarIdx >= 0) {
         ctx.font = 'bold 9px system-ui';
         ctx.fillStyle = '#a78bfa';
