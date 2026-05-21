@@ -6204,17 +6204,31 @@ function setPivotPeriod(p) {
 }
 
 function triggerOverlayHighlight(key) {
-  haptic(20);
+  haptic(30);
+  // Flash the button itself — reliable on all platforms
+  const btn = document.querySelector(`.ov-btn[data-key="${key}"]`);
+  if (btn) {
+    btn.style.transition = 'none';
+    btn.style.background = 'rgba(255,255,255,0.25)';
+    btn.style.borderColor = '#fff';
+    btn.style.color = '#fff';
+    setTimeout(() => {
+      btn.style.transition = '';
+      btn.style.background = '';
+      btn.style.borderColor = '';
+      btn.style.color = '';
+    }, 600);
+  }
+  // Highlight the line in chart (thicker line for 1.8s)
   state._hlOverlay = key;
   state._hlUntil = Date.now() + 1800;
-  // If overlay is OFF, temporarily enable it so the line is visible during highlight
   const wasOff = !state.overlays[key];
   if (wasOff) state.overlays[key] = true;
   (function loop() {
     if (!state._hlUntil || Date.now() > state._hlUntil) {
       state._hlOverlay = null;
       state._hlUntil = 0;
-      if (wasOff) state.overlays[key] = false; // restore off state
+      if (wasOff) state.overlays[key] = false;
       redrawChart();
       return;
     }
@@ -6226,19 +6240,25 @@ function triggerOverlayHighlight(key) {
 // Wire long-press on overlay buttons
 document.querySelectorAll('.ov-btn').forEach(btn => {
   let timer = null;
+  let didMove = false;
   btn.addEventListener('touchstart', e => {
-    e.preventDefault(); // stops system copy/share menu
-    timer = setTimeout(() => { timer = null; triggerOverlayHighlight(btn.dataset.key); }, 450);
-  }, { passive: false });
+    didMove = false;
+    timer = setTimeout(() => { timer = null; triggerOverlayHighlight(btn.dataset.key); }, 500);
+  }, { passive: true });
   btn.addEventListener('touchend', e => {
-    if (timer) {
+    if (timer && !didMove) {
       clearTimeout(timer);
       timer = null;
-      // Short tap → toggle the overlay (preventDefault killed the click event)
       toggleOv(btn.dataset.key, btn);
+    } else if (timer) {
+      clearTimeout(timer);
+      timer = null;
     }
   }, { passive: true });
-  btn.addEventListener('touchmove', () => { if (timer) { clearTimeout(timer); timer = null; } }, { passive: true });
+  btn.addEventListener('touchmove', () => {
+    didMove = true;
+    if (timer) { clearTimeout(timer); timer = null; }
+  }, { passive: true });
 });
 
 // ─── TOUCH / CROSSHAIR + PINCH ZOOM + PAN ─────────────────────────────────────
