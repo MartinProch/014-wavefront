@@ -1480,6 +1480,7 @@ strong { font-weight: 600; }
         <button class="fund-subtab subtab" id="fst-revdcf" onclick="switchFundSubtab('revdcf')">REV DCF</button>
         <button class="fund-subtab subtab" id="fst-epv" onclick="switchFundSubtab('epv')">EPV</button>
         <button class="fund-subtab subtab" id="fst-relval" onclick="switchFundSubtab('relval')">REL VAL</button>
+        <button class="fund-subtab subtab" id="fst-pthist" onclick="switchFundSubtab('pthist')">PT HIST</button>
       </div>
       <!-- Single ticker view -->
       <div id="fund-single-view" class="subtab-view" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
@@ -1579,6 +1580,10 @@ strong { font-weight: 600; }
       <div id="fund-relval-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
         <div id="relval-content"><div class="empty-state"><div class="empty-icon">⚖️</div><div class="empty-text">SELECT A TICKER<br>TO SEE RELATIVE VALUATION</div></div></div>
       </div>
+      <!-- PT HIST view -->
+      <div id="fund-pthist-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
+        <div id="pthist-content"></div>
+      </div>
     </div>
 
     <!-- TOOLS TAB -->
@@ -1630,6 +1635,7 @@ strong { font-weight: 600; }
         <button onclick="switchJournalTab('perf')" id="jst-perf" style="flex:1;padding:10px;font-size:11px;font-weight:600;color:#9ca3af;background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer">PERF</button>
         <button onclick="switchJournalTab('watchperf')" id="jst-watchperf" style="flex:1;padding:10px;font-size:11px;font-weight:600;color:#9ca3af;background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer">WATCH PERF</button>
         <button onclick="switchJournalTab('sizing')" id="jst-sizing" style="flex:1;padding:10px;font-size:11px;font-weight:600;color:#9ca3af;background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer">SIZING</button>
+        <button onclick="switchJournalTab('import')" id="jst-import" style="flex:1;padding:10px;font-size:11px;font-weight:600;color:#9ca3af;background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer">📥 IMPORT</button>
       </div>
       <div id="journal-trades-view" style="flex:1;overflow-y:auto;padding:12px"></div>
       <div id="journal-add-view" style="display:none;flex:1;overflow-y:auto;padding:12px"></div>
@@ -1639,6 +1645,9 @@ strong { font-weight: 600; }
       <div id="journal-perf-view" style="display:none;flex:1;overflow-y:auto;padding:12px"></div>
       <div id="journal-watchperf-view" style="display:none;flex:1;overflow-y:auto;padding:12px"></div>
       <div id="journal-sizing-view" style="display:none;flex:1;overflow-y:auto;padding:12px"></div>
+      <div id="journal-import-view" style="display:none;padding:16px;overflow-y:auto;-webkit-overflow-scrolling:touch">
+        <div id="journal-import-content"></div>
+      </div>
     </div>
 
     <!-- DASHBOARD TAB -->
@@ -5764,7 +5773,7 @@ let compareState = { sortKey: 'pe', sortDir: 'asc', activeMetrics: ['pe','fwdPe'
 function switchFundSubtab(sub) {
   document.querySelectorAll('.fund-subtab').forEach(b => b.classList.remove('active'));
   document.getElementById('fst-' + sub).classList.add('active');
-  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval'].forEach(s => {
+  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval','pthist'].forEach(s => {
     const v = document.getElementById('fund-' + s + '-view');
     if (v) v.style.display = s === sub ? '' : 'none';
   });
@@ -5789,6 +5798,7 @@ function switchFundSubtab(sub) {
   if (sub === 'revdcf') renderRevDCF();
   if (sub === 'epv') renderEPV();
   if (sub === 'relval') renderRelVal();
+  if (sub === 'pthist') renderPtHist();
 }
 
 // ─── ECONOMIC MOAT ───────────────────────────────────────────────────────────
@@ -9221,11 +9231,11 @@ async function renderValHist() {
   }
   el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Loading…</div>';
   try {
-    const data = await fetch(`https://financialmodelingprep.com/api/v3/key-metrics/${sym}?limit=20&apikey=${FMP_KEY}`).then(r => r.json());
+    const data = await fetch(`https://financialmodelingprep.com/api/v3/key-metrics/${sym}?limit=40&apikey=${FMP_KEY}`).then(r => r.json());
     if (!Array.isArray(data) || !data.length) throw new Error('No data');
 
-    // Take up to 5 annual entries, sorted oldest→newest
-    const annual = data.filter(d => d.date).slice(0, 5).reverse();
+    // Take up to 8 annual entries, sorted oldest→newest
+    const annual = data.filter(d => d.date).slice(0, 8).reverse();
 
     function drawLineChart(canvasId, points, color, avgVal) {
       const canvas = document.getElementById(canvasId);
@@ -9381,6 +9391,13 @@ async function renderValHist() {
           <canvas id="vh-pfcf-canvas" style="width:100%;height:160px;display:block"></canvas>
         </div>
         <div style="background:#16213e;border-radius:10px;padding:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-size:11px;color:#9ca3af;font-weight:600;letter-spacing:.5px">P/B RATIO</div>
+            ${badge(pbCur, pbAvg)}
+          </div>
+          <canvas id="vh-pb-canvas" style="width:100%;height:160px;display:block"></canvas>
+        </div>
+        <div style="background:#16213e;border-radius:10px;padding:12px;">
           <div style="font-size:11px;color:#9ca3af;font-weight:600;letter-spacing:.5px;margin-bottom:10px">SUMMARY</div>
           <table style="width:100%;border-collapse:collapse;font-size:12px;">
             <thead>
@@ -9427,8 +9444,140 @@ async function renderValHist() {
       drawLineChart('vh-pe-canvas',   pePts,   '#4fc3f7', peAvg);
       drawLineChart('vh-ps-canvas',   psPts,   '#81c784', psAvg);
       drawLineChart('vh-pfcf-canvas', pfcfPts, '#ffb74d', pfcfAvg);
+      drawLineChart('vh-pb-canvas',   pbPts,   '#c084fc', pbAvg);
     });
 
+  } catch(e) {
+    el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}</div>`;
+  }
+}
+
+async function renderPtHist() {
+  const el = document.getElementById('pthist-content');
+  if (!el) return;
+  const sym = state.ticker || state.selected;
+  if (!sym) { el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">SELECT A TICKER FIRST</div>'; return; }
+  el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Loading…</div>';
+  try {
+    const [targetsRaw, summaryRaw] = await Promise.all([
+      fetch(`https://financialmodelingprep.com/api/v4/price-target?symbol=${sym}&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/api/v4/price-target-summary?symbol=${sym}&apikey=${FMP_KEY}`).then(r=>r.json())
+    ]);
+    const targets = Array.isArray(targetsRaw) ? targetsRaw : [];
+    if (!targets.length) throw new Error('No data');
+
+    // Sort oldest→newest, take up to 40 most recent
+    const pts = targets.slice(0, 40).reverse();
+    const curPrice = state.data?.[sym]?.bars?.slice(-1)[0]?.c || null;
+
+    // Summary stats
+    const sum = Array.isArray(summaryRaw) ? summaryRaw[0] : summaryRaw;
+    const lastTarget = targets[0]?.priceTarget;
+    const upside = curPrice && lastTarget ? ((lastTarget - curPrice) / curPrice * 100) : null;
+
+    // Draw canvas chart: dots per analyst target over time + current price line
+    const chartHtml = `<canvas id="pthist-canvas" style="width:100%;height:200px;display:block"></canvas>`;
+
+    // Build recent targets table (last 10)
+    const recent = targets.slice(0, 10);
+    const tableRows = recent.map(t => {
+      const d = t.publishedDate ? t.publishedDate.slice(0, 10) : '';
+      const col = curPrice && t.priceTarget ? (t.priceTarget > curPrice ? '#22c55e' : '#ef4444') : '#9ca3af';
+      const upd = curPrice && t.priceTarget ? ((t.priceTarget - curPrice) / curPrice * 100) : null;
+      return `<tr style="border-bottom:1px solid #1e293b44">
+        <td style="padding:6px 4px;font-size:11px;color:#9ca3af">${d}</td>
+        <td style="padding:6px 4px;font-size:11px;color:#d1d5db;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.analystCompany||t.analystName||'—'}</td>
+        <td style="padding:6px 4px;font-size:12px;font-weight:700;color:${col};text-align:right">$${t.priceTarget?.toFixed(2)||'—'}</td>
+        <td style="padding:6px 4px;font-size:11px;color:${col};text-align:right">${upd!==null?(upd>=0?'+':'')+upd.toFixed(1)+'%':'—'}</td>
+      </tr>`;
+    }).join('');
+
+    const upsideColor = upside == null ? '#9ca3af' : upside >= 0 ? '#22c55e' : '#ef4444';
+    const consensusHtml = sum ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+        ${[['HIGH', sum.lastMonthAvgPriceTarget||sum.lastQuarterAvgPriceTarget, '#22c55e'],
+           ['MEAN', sum.lastMonthAvgPriceTarget||lastTarget, '#4fc3f7'],
+           ['LOW',  sum.lastMonthAvgPriceTarget, '#ef4444'],
+           ['UPSIDE', upside!=null?upside.toFixed(1)+'%':'N/A', upsideColor]
+          ].map(([l,v,c]) => `<div style="background:#1e293b;border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:9px;color:#6b7280;letter-spacing:.5px;margin-bottom:4px">${l}</div>
+          <div style="font-size:13px;font-weight:700;color:${c}">${typeof v==='number'?'$'+v.toFixed(2):v||'N/A'}</div>
+        </div>`).join('')}
+      </div>` : '';
+
+    el.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="background:#16213e;border-radius:10px;padding:12px">
+          <div style="font-size:11px;color:#9ca3af;font-weight:600;letter-spacing:.5px;margin-bottom:10px">ANALYST PRICE TARGETS — ${sym}</div>
+          ${consensusHtml}
+          ${chartHtml}
+        </div>
+        <div style="background:#16213e;border-radius:10px;padding:12px">
+          <div style="font-size:11px;color:#9ca3af;font-weight:600;letter-spacing:.5px;margin-bottom:8px">POSLEDNÍCH 10 TARGETŮ</div>
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr style="color:#6b7280;font-size:9px;letter-spacing:.5px">
+              <th style="text-align:left;padding:4px;border-bottom:1px solid #1e293b">DATUM</th>
+              <th style="text-align:left;padding:4px;border-bottom:1px solid #1e293b">ANALYTIK</th>
+              <th style="text-align:right;padding:4px;border-bottom:1px solid #1e293b">TARGET</th>
+              <th style="text-align:right;padding:4px;border-bottom:1px solid #1e293b">UPSIDE</th>
+            </tr></thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+        </div>
+      </div>`;
+
+    // Draw chart
+    requestAnimationFrame(() => {
+      const cv = document.getElementById('pthist-canvas');
+      if (!cv) return;
+      const ctx2 = cv.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const W = cv.clientWidth, H = cv.clientHeight;
+      cv.width = W * dpr; cv.height = H * dpr;
+      ctx2.scale(dpr, dpr);
+      const padL=46, padR=14, padT=14, padB=28;
+      const cW=W-padL-padR, cH=H-padT-padB;
+      const vals = pts.map(p=>p.priceTarget).filter(v=>v&&isFinite(v));
+      if (!vals.length) return;
+      const allVals = curPrice ? [...vals, curPrice] : vals;
+      const minV=Math.min(...allVals)*0.95, maxV=Math.max(...allVals)*1.05;
+      const range=maxV-minV||1;
+      const toX=i=>padL+(pts.length>1?(i/(pts.length-1))*cW:cW/2);
+      const toY=v=>padT+cH-((v-minV)/range)*cH;
+      // Grid
+      [0,0.5,1].forEach(t=>{
+        const v=minV+t*range, y=toY(v);
+        ctx2.strokeStyle='#1e293b'; ctx2.lineWidth=0.5;
+        ctx2.beginPath(); ctx2.moveTo(padL,y); ctx2.lineTo(W-padR,y); ctx2.stroke();
+        ctx2.fillStyle='#6b7280'; ctx2.font='10px sans-serif'; ctx2.textAlign='right';
+        ctx2.fillText('$'+v.toFixed(0), padL-4, y+4);
+      });
+      // Current price line
+      if (curPrice) {
+        const cy=toY(curPrice);
+        ctx2.save(); ctx2.setLineDash([4,3]);
+        ctx2.strokeStyle='#f59e0b'; ctx2.lineWidth=1.5;
+        ctx2.beginPath(); ctx2.moveTo(padL,cy); ctx2.lineTo(W-padR,cy); ctx2.stroke();
+        ctx2.restore();
+        ctx2.fillStyle='#f59e0b'; ctx2.font='bold 10px sans-serif'; ctx2.textAlign='right';
+        ctx2.fillText('PRICE', W-padR, cy-4);
+      }
+      // Target area
+      ctx2.beginPath();
+      pts.forEach((p,i)=>{ if(!p.priceTarget) return; const x=toX(i),y=toY(p.priceTarget); i===0?ctx2.moveTo(x,y):ctx2.lineTo(x,y); });
+      const last=pts.findLastIndex(p=>p.priceTarget); const first=pts.findIndex(p=>p.priceTarget);
+      if(last>=0){ctx2.lineTo(toX(last),padT+cH); ctx2.lineTo(toX(first),padT+cH); ctx2.closePath(); ctx2.fillStyle='rgba(79,195,247,0.15)'; ctx2.fill();}
+      // Target line
+      ctx2.beginPath(); ctx2.strokeStyle='#4fc3f7'; ctx2.lineWidth=2;
+      pts.forEach((p,i)=>{ if(!p.priceTarget) return; const x=toX(i),y=toY(p.priceTarget); ctx2.moveTo(x,y); if(i>0){const prev=pts.slice(0,i).reverse().find(pp=>pp.priceTarget); if(prev){const pi=pts.indexOf(prev); ctx2.moveTo(toX(pi),toY(prev.priceTarget)); ctx2.lineTo(x,y);}} });
+      ctx2.stroke();
+      // Dots
+      pts.forEach((p,i)=>{ if(!p.priceTarget) return; const x=toX(i),y=toY(p.priceTarget); ctx2.beginPath(); ctx2.arc(x,y,3,0,Math.PI*2); ctx2.fillStyle='#4fc3f7'; ctx2.fill(); });
+      // X axis dates (every ~8 points)
+      ctx2.fillStyle='#6b7280'; ctx2.font='9px sans-serif'; ctx2.textAlign='center';
+      const step = Math.ceil(pts.length/5);
+      pts.forEach((p,i)=>{ if(i%step===0 && p.publishedDate){ ctx2.fillText(p.publishedDate.slice(0,7), toX(i), H-padB+14); }});
+    });
   } catch(e) {
     el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}</div>`;
   }
@@ -12285,7 +12434,7 @@ function saveWfJournal() {
 }
 
 function switchJournalTab(name) {
-  ['trades','add','stats','alloc','dca','perf','watchperf','sizing'].forEach(t => {
+  ['trades','add','stats','alloc','dca','perf','watchperf','sizing','import'].forEach(t => {
     const v = document.getElementById(`journal-${t}-view`);
     if (v) v.style.display = t===name ? 'block' : 'none';
     const btn = document.getElementById(`jst-${t}`);
@@ -12299,6 +12448,7 @@ function switchJournalTab(name) {
   if (name==='perf') renderPortfolioPerf();
   if (name==='watchperf') renderWatchPerf();
   if (name==='sizing') renderSizing();
+  if (name==='import') renderJournalImport();
 }
 
 function renderJournalTrades() {
@@ -12389,6 +12539,167 @@ function renderJournalAdd() {
   });
 
   state._journalDir = 'long';
+}
+
+function renderJournalImport() {
+  const el = document.getElementById('journal-import-content');
+  if (!el) return;
+  el.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="background:#16213e;border-radius:10px;padding:14px">
+        <div style="font-size:13px;font-weight:700;color:#f9fafb;margin-bottom:6px">📥 Revolut CSV Import</div>
+        <div style="font-size:11px;color:#9ca3af;margin-bottom:12px;line-height:1.6">
+          Exportuj z Revolut: <strong style="color:#d1d5db">Settings → Statements → Trading</strong><br>
+          Formát: Date, Ticker, Type, Quantity, Price per share, Total Amount, Currency
+        </div>
+        <label style="display:block;background:#0f172a;border:2px dashed #374151;border-radius:8px;padding:20px;text-align:center;cursor:pointer" id="csv-drop-zone">
+          <div style="font-size:24px;margin-bottom:8px">📄</div>
+          <div style="font-size:12px;color:#9ca3af">Klikni pro výběr CSV souboru</div>
+          <input type="file" id="revolut-csv-input" accept=".csv" style="display:none" onchange="handleRevolutCSV(this)">
+        </label>
+      </div>
+      <div id="csv-preview" style="display:none;background:#16213e;border-radius:10px;padding:14px">
+        <div id="csv-preview-content"></div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button onclick="importRevolutTrades()" style="flex:1;padding:10px;background:#22c55e22;color:#22c55e;border:1px solid #22c55e55;border-radius:8px;font-size:12px;font-weight:700">✓ IMPORTOVAT</button>
+          <button onclick="document.getElementById('csv-preview').style.display='none'" style="padding:10px 16px;background:#ef444422;color:#ef4444;border:1px solid #ef444455;border-radius:8px;font-size:12px">✕</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('csv-drop-zone').addEventListener('click', () => {
+    document.getElementById('revolut-csv-input').click();
+  });
+}
+
+let _pendingRevolutTrades = [];
+
+function handleRevolutCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = e.target.result;
+    _pendingRevolutTrades = parseRevolutCSV(text);
+    showCSVPreview(_pendingRevolutTrades);
+  };
+  reader.readAsText(file);
+}
+
+function parseRevolutCSV(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  if (!lines.length) return [];
+  // Detect header row
+  const headerIdx = lines.findIndex(l => /date|ticker|type|quantity/i.test(l));
+  const dataLines = headerIdx >= 0 ? lines.slice(headerIdx + 1) : lines.slice(1);
+  const trades = [];
+  dataLines.forEach(line => {
+    // Handle quoted CSV fields
+    const fields = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      if (line[i] === '"') { inQ = !inQ; }
+      else if (line[i] === ',' && !inQ) { fields.push(cur.trim()); cur = ''; }
+      else cur += line[i];
+    }
+    fields.push(cur.trim());
+    if (fields.length < 5) return;
+    // Revolut format: Date, Ticker, Type, Quantity, Price per share, Total Amount, Currency
+    const [dateStr, ticker, type, qty, price, total, currency] = fields;
+    if (!ticker || !type) return;
+    const typeLower = type.toLowerCase();
+    if (!['buy','sell','dividend','div'].some(t => typeLower.includes(t))) return;
+    const parsedQty = parseFloat(qty?.replace(/[^0-9.-]/g,'')) || 0;
+    const parsedPrice = parseFloat(price?.replace(/[^0-9.-]/g,'')) || 0;
+    const parsedTotal = parseFloat(total?.replace(/[^0-9.-]/g,'')) || 0;
+    // Parse date (various formats)
+    let date = dateStr;
+    try {
+      const d = new Date(dateStr);
+      if (!isNaN(d)) date = d.toISOString().slice(0, 10);
+    } catch(e) {}
+    trades.push({
+      date, ticker: ticker.toUpperCase(), type: typeLower.includes('div') ? 'dividend' : (typeLower.includes('buy') ? 'buy' : 'sell'),
+      qty: parsedQty, price: parsedPrice, total: parsedTotal, currency: currency || 'USD'
+    });
+  });
+  return trades;
+}
+
+function showCSVPreview(trades) {
+  const preview = document.getElementById('csv-preview');
+  const content = document.getElementById('csv-preview-content');
+  if (!preview || !content || !trades.length) return;
+  const buys = trades.filter(t => t.type === 'buy').length;
+  const sells = trades.filter(t => t.type === 'sell').length;
+  const divs = trades.filter(t => t.type === 'dividend').length;
+  const rows = trades.slice(0, 20).map(t => {
+    const col = t.type === 'buy' ? '#22c55e' : t.type === 'sell' ? '#ef4444' : '#f59e0b';
+    return `<tr style="border-bottom:1px solid #1e293b44">
+      <td style="padding:5px 4px;font-size:10px;color:#9ca3af">${t.date}</td>
+      <td style="padding:5px 4px;font-size:11px;font-weight:700;color:#d1d5db">${t.ticker}</td>
+      <td style="padding:5px 4px;font-size:10px;color:${col};font-weight:700">${t.type.toUpperCase()}</td>
+      <td style="padding:5px 4px;font-size:10px;color:#d1d5db;text-align:right">${t.qty}</td>
+      <td style="padding:5px 4px;font-size:10px;color:#d1d5db;text-align:right">$${t.price.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+  content.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:#f9fafb;margin-bottom:8px">
+      Nalezeno: <span style="color:#22c55e">${buys} nákupů</span>, <span style="color:#ef4444">${sells} prodejů</span>${divs?`, <span style="color:#f59e0b">${divs} dividends</span>`:''}
+      ${trades.length > 20 ? `<span style="color:#9ca3af"> (zobrazeno 20/${trades.length})</span>` : ''}
+    </div>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="color:#6b7280;font-size:9px">
+        <th style="text-align:left;padding:4px;border-bottom:1px solid #1e293b">DATUM</th>
+        <th style="text-align:left;padding:4px;border-bottom:1px solid #1e293b">TICKER</th>
+        <th style="text-align:left;padding:4px;border-bottom:1px solid #1e293b">TYP</th>
+        <th style="text-align:right;padding:4px;border-bottom:1px solid #1e293b">QTY</th>
+        <th style="text-align:right;padding:4px;border-bottom:1px solid #1e293b">CENA</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    </div>`;
+  preview.style.display = 'block';
+}
+
+function importRevolutTrades() {
+  if (!_pendingRevolutTrades.length) return;
+  loadWfJournal();
+  let imported = 0;
+  _pendingRevolutTrades.forEach(t => {
+    if (t.type === 'buy' || t.type === 'sell') {
+      const id = 'rv_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+      state.journal = state.journal || [];
+      state.journal.push({
+        id, sym: t.ticker,
+        direction: t.type === 'buy' ? 'long' : 'short',
+        entry: t.price,
+        shares: t.qty,
+        stop: null, target: null,
+        status: 'open',
+        date: t.date,
+        notes: `Imported from Revolut (${t.currency})`,
+        source: 'revolut'
+      });
+      // Add ticker to watchlist if not there
+      if (!state.tickers.includes(t.ticker)) {
+        state.tickers.push(t.ticker);
+      }
+      imported++;
+    }
+    // Dividends → could be stored but skip for now
+  });
+  saveWfJournal();
+  saveStateLight();
+  _pendingRevolutTrades = [];
+  document.getElementById('csv-preview').style.display = 'none';
+  // Show success toast
+  const toast = document.createElement('div');
+  toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#22c55e;color:#000;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;z-index:9999';
+  toast.textContent = `✓ Importováno ${imported} obchodů`;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+  switchJournalTab('trades');
 }
 
 function updateRRPreview() {
