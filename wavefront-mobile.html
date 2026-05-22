@@ -4385,7 +4385,7 @@ function redrawChart() {
 
   // ── Regression channel ────────────────────────────────────────────────────
   if (state.overlays.chan && bars.length >= 10) {
-    drawRegressionChannel(bars, px, py, cL, cR, cT, cB);
+    drawRegressionChannel(bars, px, py, cL, cR, cT, cB, _hlKey === 'chan');
   }
 
   // ── S/R levels ────────────────────────────────────────────────────────────
@@ -4575,8 +4575,12 @@ function redrawChart() {
   try {
   if (state.overlays.bb) {
     const bb = calcBollingerBands(bars);
+    const hlBB = _hlKey === 'bb';
     const drawBBLine = (arr, col, dash=[]) => {
-      ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.setLineDash(dash);
+      ctx.save(); ctx.strokeStyle = col;
+      ctx.lineWidth = hlBB ? 3 : 1;
+      ctx.globalAlpha = hlBB ? 1 : 0.8;
+      ctx.setLineDash(hlBB ? [] : dash);
       ctx.beginPath(); let first = true;
       arr.forEach((v, i) => {
         if (v == null) { first = true; return; }
@@ -4590,12 +4594,12 @@ function redrawChart() {
     bb.upper.forEach((v, i) => { if (v != null) { i === 0 || bb.upper[i-1] == null ? ctx.moveTo(px(i), py(v)) : ctx.lineTo(px(i), py(v)); }});
     for (let i = bars.length-1; i >= 0; i--) { const v = bb.lower[i]; if (v != null) ctx.lineTo(px(i), py(v)); }
     ctx.closePath();
-    ctx.fillStyle = 'rgba(6,182,212,0.05)';
+    ctx.fillStyle = hlBB ? 'rgba(6,182,212,0.12)' : 'rgba(6,182,212,0.05)';
     ctx.fill();
     ctx.restore();
-    drawBBLine(bb.upper, 'rgba(6,182,212,0.5)', [3,3]);
-    drawBBLine(bb.lower, 'rgba(6,182,212,0.5)', [3,3]);
-    drawBBLine(bb.mid,   'rgba(6,182,212,0.3)');
+    drawBBLine(bb.upper, hlBB ? '#06b6d4' : 'rgba(6,182,212,0.5)', [3,3]);
+    drawBBLine(bb.lower, hlBB ? '#06b6d4' : 'rgba(6,182,212,0.5)', [3,3]);
+    drawBBLine(bb.mid,   hlBB ? 'rgba(6,182,212,0.7)' : 'rgba(6,182,212,0.3)');
     // BB Squeeze indicator
     const bbWidth = bars.map((b,i) => bb.upper[i] != null ? (bb.upper[i]-bb.lower[i])/bb.mid[i] : null).filter(v=>v!=null);
     if (bbWidth.length > 20) {
@@ -4619,11 +4623,13 @@ function redrawChart() {
 
   // VWAP
   if (state.overlays.vwap && bars.length > 0) {
+    const hlVWAP = _hlKey === 'vwap';
     let cumTPV = 0, cumVol = 0;
     ctx.beginPath();
-    ctx.strokeStyle = '#8b5cf6';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = hlVWAP ? '#a78bfa' : '#8b5cf6';
+    ctx.lineWidth = hlVWAP ? 3 : 1.5;
+    ctx.globalAlpha = hlVWAP ? 1 : 0.85;
+    ctx.setLineDash(hlVWAP ? [] : [4, 3]);
     let vwapStarted = false;
     bars.forEach((b, idx) => {
       const tp = (b.h + b.l + b.c) / 3;
@@ -4637,6 +4643,7 @@ function redrawChart() {
     });
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
   }
 
   // Pivot Points
@@ -4726,20 +4733,23 @@ function redrawChart() {
         { val: S3, color: 'rgba(34,197,94,0.3)',   label: 'S3' },
       ];
 
+      const hlPivot = _hlKey === 'pivot';
       ctx.save();
-      ctx.font = 'bold 9px JetBrains Mono';
+      ctx.font = (hlPivot ? 'bold ' : '') + '9px JetBrains Mono';
       ctx.textAlign = 'left';
       levels.forEach(lv => {
         const y = py(lv.val);
         if (y < cT || y > cB) return;
         ctx.strokeStyle = lv.color;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 4]);
+        ctx.lineWidth = hlPivot ? 2.5 : 1;
+        ctx.globalAlpha = hlPivot ? 1 : 0.8;
+        ctx.setLineDash(hlPivot ? [] : [4, 4]);
         ctx.beginPath();
         ctx.moveTo(cL, y);
         ctx.lineTo(cR, y);
         ctx.stroke();
         ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
         ctx.fillStyle = lv.color;
         ctx.fillText(lv.label, cR + 2, y + 3);
       });
@@ -5526,7 +5536,7 @@ function redrawChart() {
   }
 }
 
-function drawRegressionChannel(bars, px, py, cL, cR, cT, cB) {
+function drawRegressionChannel(bars, px, py, cL, cR, cT, cB, hl=false) {
   const n = bars.length;
   let sumX=0,sumY=0,sumXY=0,sumX2=0;
   bars.forEach((b,i)=>{ sumX+=i; sumY+=b.c; sumXY+=i*b.c; sumX2+=i*i; });
@@ -5536,15 +5546,18 @@ function drawRegressionChannel(bars, px, py, cL, cR, cT, cB) {
   const std=Math.sqrt(residuals.reduce((s,r)=>s+r*r,0)/n);
   const regY=i=>slope*i+intercept;
   function drawLine(offset, col, dash=[]) {
-    ctx.save(); ctx.strokeStyle=col; ctx.lineWidth=1; ctx.setLineDash(dash);
+    ctx.save(); ctx.strokeStyle=col;
+    ctx.lineWidth = hl ? 3 : 1;
+    ctx.globalAlpha = hl ? 1 : 0.85;
+    ctx.setLineDash(hl ? [] : dash);
     ctx.beginPath();
     ctx.moveTo(px(0),py(regY(0)+offset));
     ctx.lineTo(px(n-1),py(regY(n-1)+offset));
     ctx.stroke(); ctx.restore();
   }
-  drawLine(0,'rgba(68,138,255,0.6)',[]);
-  drawLine(std,'rgba(68,138,255,0.3)',[3,3]);
-  drawLine(-std,'rgba(68,138,255,0.3)',[3,3]);
+  drawLine(0,  hl ? '#4488ff' : 'rgba(68,138,255,0.6)',[]);
+  drawLine(std, hl ? 'rgba(68,138,255,0.6)' : 'rgba(68,138,255,0.3)',[3,3]);
+  drawLine(-std,hl ? 'rgba(68,138,255,0.6)' : 'rgba(68,138,255,0.3)',[3,3]);
 }
 
 function drawVolumeProfile(bars, px, py, cL, cR, cT, cB, cW, cH) {
