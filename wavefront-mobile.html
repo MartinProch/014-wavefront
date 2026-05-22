@@ -2174,7 +2174,8 @@ function getThreshold(bars) {
     sum += Math.abs(bars[i].c - bars[i-1].c) / bars[i-1].c;
   }
   const avgDailyMove = sum / n;
-  const multiplier = bars.length > 400 ? 9 : bars.length > 150 ? 6 : bars.length > 40 ? 4 : 3;
+  // Snížené multiplikátory pro delší TF — jinak zigzag najde jen 2-3 pivoty
+  const multiplier = bars.length > 800 ? 7 : bars.length > 400 ? 5 : bars.length > 150 ? 4 : bars.length > 40 ? 3 : 2.5;
   return avgDailyMove * multiplier;
 }
 
@@ -2221,8 +2222,13 @@ const WAVE_COLORS = {
 
 function detectWaves(bars) {
   if (!bars || bars.length < 20) return null;
-  const threshold = getThreshold(bars);
-  const pivots = zigzag(bars, threshold);
+  let threshold = getThreshold(bars);
+  let pivots = zigzag(bars, threshold);
+  // Adaptive fallback — if too few pivots, halve threshold up to 3 times
+  for (let attempt = 0; attempt < 3 && pivots.length < 6; attempt++) {
+    threshold *= 0.65;
+    pivots = zigzag(bars, threshold);
+  }
   if (pivots.length < 4) return null;
   const candidates = [];
   for (let start = 0; start <= pivots.length - 6; start++) {
