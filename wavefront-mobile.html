@@ -1347,6 +1347,7 @@ strong { font-weight: 600; }
       </button>
       <button class="hdr-btn" onclick="openThesisModal(state.ticker||state.selected)" id="thesis-hdr-btn" title="Thesis">📝</button>
       <button class="hdr-btn" onclick="openHelp()" title="Help">?</button>
+      <button class="hdr-btn" id="whats-new-btn" onclick="showWhatsNew()" title="Co je nového" style="display:none;font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:0.5px;color:#3b82f6;padding:2px 5px;border:1px solid #3b82f644;border-radius:4px;background:#3b82f611">NEW</button>
       <button class="hdr-btn" id="theme-toggle" onclick="toggleTheme()" title="Toggle theme">☀</button>
     </div>
   </div>
@@ -1843,6 +1844,36 @@ const IS_LOCAL   = !IS_CAPACITOR && ['localhost','127.0.0.1'].includes(location.
 
 function haptic(ms = 20) {
   try { navigator.vibrate?.(ms); } catch(e) {}
+}
+function hapticSuccess() {
+  // Dvojitá krátká vibrace = úspěch
+  if (!navigator.vibrate) return;
+  navigator.vibrate([30, 60, 30]);
+}
+function hapticError() {
+  // Dlouhá vibrace = chyba
+  if (!navigator.vibrate) return;
+  navigator.vibrate([100, 50, 100]);
+}
+function hapticWarning() {
+  // Tři krátké = varování
+  if (!navigator.vibrate) return;
+  navigator.vibrate([20, 40, 20, 40, 20]);
+}
+function hapticLight() {
+  // Velmi krátká = jemné potvrzení
+  if (!navigator.vibrate) return;
+  navigator.vibrate(15);
+}
+function hapticHeavy() {
+  // Dlouhá jednorázová = důležitá akce
+  if (!navigator.vibrate) return;
+  navigator.vibrate(80);
+}
+function hapticSelect() {
+  // Krátká + pauza + krátká = výběr
+  if (!navigator.vibrate) return;
+  navigator.vibrate([20, 30, 20]);
 }
 const IS_RAILWAY = location.hostname.includes('railway.app');
 const API_BASE   = (IS_LOCAL || IS_RAILWAY) ? '' : RAILWAY_BASE;
@@ -5581,6 +5612,7 @@ async function loadTicker(sym, addToList=true) {
         const _waPrice = _waBars.length ? _waBars[_waBars.length-1].c : null;
         if (_waPrice) localStorage.setItem(_waKey, JSON.stringify({ date: new Date().toISOString().slice(0,10), price: _waPrice }));
       }
+      hapticSuccess();
       saveState();
     }
 
@@ -5804,6 +5836,7 @@ function setTagFilter(tagId) {
 
 // ─── WATCHLIST ────────────────────────────────────────────────────────────────
 function removeTicker(sym) {
+  hapticWarning();
   state.tickers = state.tickers.filter(s => s !== sym);
   if (state.selected === sym) state.selected = state.tickers[0] || null;
   saveState();
@@ -5928,7 +5961,7 @@ function wireWatchlistDnD() {
         isDragging = true;
         dragSrc = row.dataset.sym;
         row.classList.add('dragging');
-        haptic(40);
+        hapticHeavy();
       }, 500);
     }, { passive: true });
 
@@ -5963,7 +5996,7 @@ function wireWatchlistDnD() {
           state.tickers.splice(fromIdx, 1);
           state.tickers.splice(toIdx, 0, dragSrc);
           saveState();
-          haptic(20);
+          hapticSuccess();
           renderWatchlist();
         }
       }
@@ -5980,7 +6013,7 @@ function wireRowLongPress(row, sym) {
     if (e.touches && e.touches.length > 1) return;
     timer = setTimeout(() => {
       timer = null;
-      haptic(40);
+      hapticHeavy();
       openWatchlistActionSheet(sym);
     }, THRESHOLD);
   }
@@ -6080,6 +6113,7 @@ function triggerSpotlight(sym) {
 }
 
 function selectTicker(sym) {
+  hapticLight();
   state.selected = sym;
   saveState();
   updateHeader();
@@ -8311,6 +8345,7 @@ function selectHeatmapSector(sym) {
 
 // ─── COMPARE OVERLAY ──────────────────────────────────────────────────────────
 function openCompareInput() {
+  hapticLight();
   const s = prompt('Compare with ticker:');
   if (!s) return;
   const sym = s.toUpperCase().trim();
@@ -11922,6 +11957,7 @@ function checkAlerts() {
   });
   saveAlerts(alerts);
   triggered.forEach(t => {
+    hapticError();
     showToast(`🔔 ALERT: ${t.sym} hit $${fmtPrice(t.price)}! (now $${fmtPrice(t.cur)})`, 5000);
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
@@ -12177,6 +12213,7 @@ function evaluateSmartAlerts() {
     if (triggered) {
       alerts[idx].triggered = true;
       changed = true;
+      hapticError();
       showToast(`⚡ SMART ALERT: ${a.sym} — ${a.name}`, 6000);
       if ('Notification' in window && Notification.permission === 'granted') {
         try {
@@ -12604,6 +12641,8 @@ function renderBacktest() {
 }
 
 // ─── ONBOARDING ───────────────────────────────────────────────────────────────
+const ONBOARDING_VERSION = 2;
+
 const ONBOARDING_SLIDES = [
   { icon: '🌊', title: 'Vítej ve Wavefront', desc: 'Mobilní terminál pro Elliott Wave analýzu akcií. Sleduj vlny, plánuj obchody a sleduj trh v reálném čase.' },
   { icon: '📈', title: 'Graf & Overlays', desc: 'Přepínej timeframe pilulkami (1W–5Y). Zapni WAVES, FIB, BB nebo MACD. Pinch pro zoom, swipe pro přechod na další ticker.' },
@@ -12612,10 +12651,37 @@ const ONBOARDING_SLIDES = [
   { icon: '⭐', title: 'Watchlist & Tagy', desc: 'Přidej tickery přes + ADD. Přiřaď barevné skupiny (TECH, ENERGY, ETF…). Drag & drop pro změnu pořadí.' },
 ];
 
+const WHATS_NEW_SLIDES = [
+  { icon: '⭐', title: 'Watchlist — nové funkce', desc: 'Seřaď watchlist dle 1D%/1M%/YTD/Wave. Long-press na ticker → Compare, Tag, Remove. 52W High/Low badge.', isNew: true },
+  { icon: '🔬', title: 'Pokročilá analýza', desc: 'WYCKOFF fáze (Accumulation→Markup→Distribution→Markdown), ADX síla trendu, Pattern Completion %, Short Squeeze Score.', isNew: true },
+  { icon: '📱', title: 'Landscape mód', desc: 'Otoč telefon pro fullscreen graf. Spodní toolbar s TF pilulkami a overlay togglemi bez nutnosti opustit graf.', isNew: true },
+  { icon: '💼', title: 'Portfolio v headeru', desc: 'P&L badge v headeru ukazuje unrealized P&L z Journal pozic. Klik → Journal. News sentiment 🟢🔴⚪ u každého tickeru.', isNew: true },
+  { icon: '📊', title: 'Compare tickerů', desc: 'Porovnej dva tickery v grafu — fialová normalizovaná čára + % výkonnost obou. Long-press na watchlist ticker → Compare.', isNew: true },
+];
+
 let _onboardingIdx = 0;
+let _onboardingSlides = ONBOARDING_SLIDES;
+let _onboardingIsWhatsNew = false;
 
 function showOnboarding() {
-  if (localStorage.getItem('wf_onboarded')) return;
+  const seenVersion = parseInt(localStorage.getItem('wfm_onboarding_ver') || '0');
+  const alreadyOnboarded = localStorage.getItem('wf_onboarded');
+  if (alreadyOnboarded && seenVersion >= ONBOARDING_VERSION) return;
+  if (alreadyOnboarded && seenVersion < ONBOARDING_VERSION) {
+    showWhatsNew();
+    return;
+  }
+  _onboardingIsWhatsNew = false;
+  _onboardingSlides = ONBOARDING_SLIDES;
+  _onboardingIdx = 0;
+  const ov = document.getElementById('onboarding-overlay');
+  ov.style.display = 'flex';
+  renderOnboardingSlide();
+}
+
+function showWhatsNew() {
+  _onboardingIsWhatsNew = true;
+  _onboardingSlides = WHATS_NEW_SLIDES;
   _onboardingIdx = 0;
   const ov = document.getElementById('onboarding-overlay');
   ov.style.display = 'flex';
@@ -12623,23 +12689,33 @@ function showOnboarding() {
 }
 
 function renderOnboardingSlide() {
-  const s = ONBOARDING_SLIDES[_onboardingIdx];
-  const total = ONBOARDING_SLIDES.length;
+  const s = _onboardingSlides[_onboardingIdx];
+  const total = _onboardingSlides.length;
+  const label = _onboardingIsWhatsNew
+    ? `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;color:#3b82f6;margin-bottom:16px;text-transform:uppercase">Co je nového v Wavefront</div>`
+    : '';
+  const newBadge = s.isNew
+    ? `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;color:#22c55e;border:1px solid #22c55e44;background:#22c55e11;padding:2px 6px;border-radius:4px;margin-bottom:8px">NEW</span>`
+    : '';
   document.getElementById('onboarding-slides').innerHTML = `
-    <div style="font-size:64px;margin-bottom:20px">${s.icon}</div>
+    ${label}
+    <div style="font-size:64px;margin-bottom:12px">${s.icon}</div>
+    ${newBadge}
     <div style="font-size:22px;font-weight:700;color:#f9fafb;margin-bottom:12px">${s.title}</div>
     <div style="font-size:15px;color:#9ca3af;line-height:1.6">${s.desc}</div>
   `;
   document.getElementById('onboarding-dots').innerHTML =
-    ONBOARDING_SLIDES.map((_, i) =>
+    _onboardingSlides.map((_, i) =>
       `<div style="width:${i===_onboardingIdx?20:8}px;height:8px;border-radius:4px;background:${i===_onboardingIdx?'#3b82f6':'#374151'};transition:width 0.3s"></div>`
     ).join('');
   const btn = document.getElementById('onboarding-next');
-  btn.textContent = _onboardingIdx === total-1 ? 'Začít →' : 'Další →';
+  btn.textContent = _onboardingIdx === total-1 ? (_onboardingIsWhatsNew ? 'Super! →' : 'Začít →') : 'Další →';
+  const skipBtn = document.getElementById('onboarding-skip');
+  if (skipBtn) skipBtn.textContent = _onboardingIsWhatsNew ? 'Zavřít' : 'Přeskočit';
 }
 
 function nextOnboardingSlide() {
-  if (_onboardingIdx < ONBOARDING_SLIDES.length - 1) {
+  if (_onboardingIdx < _onboardingSlides.length - 1) {
     _onboardingIdx++;
     renderOnboardingSlide();
   } else {
@@ -12649,7 +12725,11 @@ function nextOnboardingSlide() {
 
 function skipOnboarding() {
   localStorage.setItem('wf_onboarded', '1');
+  localStorage.setItem('wfm_onboarding_ver', String(ONBOARDING_VERSION));
   document.getElementById('onboarding-overlay').style.display = 'none';
+  // Hide the "NEW" badge button if present
+  const wnBtn = document.getElementById('whats-new-btn');
+  if (wnBtn) wnBtn.style.display = 'none';
 }
 
 // ─── QUICK STATS ──────────────────────────────────────────────────────────────
@@ -12806,6 +12886,91 @@ async function checkEarningsReminders() {
   renderWatchlist();
 }
 
+// ─── PULL TO REFRESH ──────────────────────────────────────────────────────────
+let _ptrStartY = 0, _ptrDelta = 0, _ptrActive = false;
+const PTR_THRESHOLD = 65; // px needed to trigger
+
+function initPullToRefresh() {
+  const targets = [
+    document.getElementById('wl-list'),
+    document.getElementById('chart-wrap'),
+  ].filter(Boolean);
+
+  targets.forEach(el => {
+    el.addEventListener('touchstart', e => {
+      // Only when scrolled to the very top
+      if (el.scrollTop > 0) return;
+      _ptrStartY = e.touches[0].clientY;
+      _ptrActive = true;
+    }, { passive: true });
+
+    el.addEventListener('touchmove', e => {
+      if (!_ptrActive) return;
+      _ptrDelta = e.touches[0].clientY - _ptrStartY;
+      if (_ptrDelta < 0) { _ptrActive = false; return; }
+      showPTRIndicator(_ptrDelta);
+    }, { passive: true });
+
+    el.addEventListener('touchend', () => {
+      if (!_ptrActive) return;
+      _ptrActive = false;
+      if (_ptrDelta >= PTR_THRESHOLD) {
+        triggerRefresh();
+      } else {
+        hidePTRIndicator();
+      }
+      _ptrDelta = 0;
+    }, { passive: true });
+  });
+}
+
+function showPTRIndicator(delta) {
+  let ind = document.getElementById('ptr-indicator');
+  if (!ind) {
+    ind = document.createElement('div');
+    ind.id = 'ptr-indicator';
+    ind.style.cssText = `position:fixed;top:calc(56px + var(--safe-top));left:0;right:0;z-index:200;
+      display:flex;align-items:center;justify-content:center;
+      font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:1px;
+      color:var(--cyan);pointer-events:none;transition:opacity 0.2s;
+      padding:6px 0;`;
+    document.body.appendChild(ind);
+  }
+  const pct = Math.min(delta / PTR_THRESHOLD, 1);
+  const ready = pct >= 1;
+  ind.style.opacity = pct.toString();
+  ind.innerHTML = ready
+    ? `<span style="animation:spin 0.6s linear infinite;display:inline-block">↻</span>&nbsp; RELEASE TO REFRESH`
+    : `↓&nbsp; PULL TO REFRESH`;
+}
+
+function hidePTRIndicator() {
+  const ind = document.getElementById('ptr-indicator');
+  if (ind) { ind.style.opacity = '0'; setTimeout(() => ind.remove(), 200); }
+}
+
+async function triggerRefresh() {
+  haptic(40);
+  const ind = document.getElementById('ptr-indicator');
+  if (ind) ind.innerHTML = `<span style="animation:spin 0.6s linear infinite;display:inline-block">↻</span>&nbsp; REFRESHING…`;
+
+  // Reload all tickers
+  const promises = state.tickers.map(sym =>
+    fetchTicker(sym).then(bars => {
+      if (bars?.length) state.data[sym] = { bars, fetchedAt: Date.now() };
+    }).catch(() => {})
+  );
+  await Promise.allSettled(promises);
+
+  // Refresh UI
+  renderWatchlist();
+  redrawChart();
+  updateHeader();
+  hapticSuccess();
+  hidePTRIndicator();
+  showToast('Watchlist refreshed ✓');
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 async function init() {
   loadState();
@@ -12853,8 +13018,20 @@ async function init() {
   // Earnings reminders (delayed so initial render is not blocked)
   setTimeout(checkEarningsReminders, 3000);
 
-  // Onboarding tour on first launch
+  // Onboarding tour on first launch / What's New badge
   showOnboarding();
+  // Show "NEW" badge in header if user has seen old onboarding but not v2
+  (function checkWhatsNewBadge() {
+    const seenVersion = parseInt(localStorage.getItem('wfm_onboarding_ver') || '0');
+    const alreadyOnboarded = localStorage.getItem('wf_onboarded');
+    const btn = document.getElementById('whats-new-btn');
+    if (btn && alreadyOnboarded && seenVersion < ONBOARDING_VERSION) {
+      btn.style.display = 'flex';
+    }
+  })();
+
+  // Pull-to-refresh on watchlist and chart
+  initPullToRefresh();
 }
 
 // ─── EARN HISTORY ─────────────────────────────────────────────────────────────
@@ -13951,6 +14128,7 @@ function saveWfJournalTrade() {
   if (!state.journal) state.journal = [];
   state.journal.push(trade);
   saveWfJournal();
+  hapticSuccess();
   showToast(`✅ Obchod ${sym} uložen`);
   switchJournalTab('trades');
 }
