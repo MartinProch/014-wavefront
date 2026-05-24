@@ -1424,6 +1424,7 @@ strong { font-weight: 600; }
         <button class="ov-btn"       data-key="div"    data-color="green">DIV</button>
         <button class="ov-btn"       data-key="smc"    data-color="gold">SMC</button>
         <button class="ov-btn"       data-key="pivot"  data-color="cyan" id="pivot-ov-btn">PIVOT</button>
+        <button class="ov-btn"       data-key="gaps"   data-color="yellow" id="gaps-ov-btn">GAPS</button>
         <button class="ov-btn"       data-key="valuation" data-color="purple">VALU</button>
         <button class="ov-btn"       data-key="buyzone" data-color="green">🎯 ZONE</button>
         <span id="pivot-period-toggle" style="display:none;align-items:center;gap:0;border:1px solid rgba(6,182,212,0.4);border-radius:6px;overflow:hidden;flex-shrink:0">
@@ -1907,7 +1908,7 @@ let state = {
   fundamentals: {},
   fundLoading: {},
   peHistory: {},      // sym → {min, avg, max, currentPE}
-  overlays: { waves:true, fibs:true, sr:true, zones:true, vol:true, ma50:true, ma200:true, ema20:true, wma50:false, wma200:false, bb:false, macd:false, econ:false, chan:false, vp:false, subwaves:false, vwap:false, smc:false, pivot:false, valuation:false, buyzone:false },
+  overlays: { waves:true, fibs:true, sr:true, zones:true, vol:true, ma50:true, ma200:true, ema20:true, wma50:false, wma200:false, bb:false, macd:false, econ:false, chan:false, vp:false, subwaves:false, vwap:false, smc:false, pivot:false, valuation:false, buyzone:false, gaps:false },
   showCandlePatterns: true,
   forecastView: false,
   econEvents: [],
@@ -2842,6 +2843,92 @@ function calcRSIFromCloses(closes, period = 14) {
   }
   const rs = losses === 0 ? 100 : gains / losses;
   return 100 - 100 / (1 + rs);
+}
+
+// ── MTF (Multi-Timeframe) Signals ─────────────────────────────────────────────
+function getMTFSignals(sym) {
+  const bars = state.data[sym]?.bars;
+  if (!bars || bars.length < 30) return [];
+
+  // Aggregate a set of bars into a single synthetic bar
+  function aggregateBars(subset) {
+    if (!subset.length) return null;
+    return {
+      o: subset[0].o,
+      h: Math.max(...subset.map(b => b.h)),
+      l: Math.min(...subset.map(b => b.l)),
+      c: subset[subset.length - 1].c,
+      v: subset.reduce((s, b) => s + (b.v || 0), 0),
+    };
+  }
+
+  // For a given window size, build synthetic OHLCV bars by grouping raw bars
+  function buildSyntheticBars(rawBars, groupSize) {
+    const result = [];
+    for (let i = 0; i + groupSize <= rawBars.length; i += groupSize) {
+      const agg = aggregateBars(rawBars.slice(i, i + groupSize));
+      if (agg) result.push(agg);
+    }
+    return result;
+  }
+
+  // SMA of close prices from an array of bars
+  function smaClose(synBars, period) {
+    if (synBars.length < period) return null;
+    const slice = synBars.slice(-period);
+    return slice.reduce((s, b) => s + b.c, 0) / period;
+  }
+
+  const timeframes = [
+    { tf: '1W', groupSize: 5,  minBars: 6  },
+    { tf: '1M', groupSize: 21, minBars: 6  },
+    { tf: '3M', groupSize: 63, minBars: 4  },
+  ];
+
+  return timeframes.map(({ tf, groupSize, minBars }) => {
+    const needed = groupSize * minBars;
+    if (bars.length < needed) {
+      return { tf, signal: 'neutral', rsi: null, trend: 'flat' };
+    }
+
+    const synBars = buildSyntheticBars(bars, groupSize);
+    if (synBars.length < 2) {
+      return { tf, signal: 'neutral', rsi: null, trend: 'flat' };
+    }
+
+    // Trend: last close vs SMA(20) of synthetic bars (or all if fewer)
+    const smaPeriod = Math.min(20, synBars.length - 1);
+    const sma = smaClose(synBars, smaPeriod);
+    const lastClose = synBars[synBars.length - 1].c;
+    const trend = sma !== null ? (lastClose > sma ? 'up' : 'down') : 'flat';
+
+    // RSI(14) on synthetic bar closes
+    const closes = synBars.map(b => b.c);
+    const rsi = calcRSIFromCloses(closes, 14);
+
+    // Wave phase via detectWaves on synthetic bars (needs at least 10 bars)
+    let waveSignal = 'neutral';
+    if (synBars.length >= 10) {
+      try {
+        const w = detectWaves(synBars);
+        if (w) waveSignal = w.direction === 'up' ? 'bull' : 'bear';
+      } catch(e) { /* ignore */ }
+    }
+
+    // Combine signals: trend + RSI + wave
+    let bullVotes = 0, bearVotes = 0;
+    if (trend === 'up') bullVotes++; else if (trend === 'down') bearVotes++;
+    if (rsi !== null) {
+      if (rsi > 55) bullVotes++; else if (rsi < 45) bearVotes++;
+    }
+    if (waveSignal === 'bull') bullVotes++; else if (waveSignal === 'bear') bearVotes++;
+
+    let signal = 'neutral';
+    if (bullVotes >= 2) signal = 'bull';
+    else if (bearVotes >= 2) signal = 'bear';
+
+    return { tf, signal, rsi: rsi ? Math.round(rsi) : null, trend };
+  });
 }
 
 function calcMACDFromCloses(closes) {
@@ -4283,6 +4370,7 @@ function redrawChart() {
   const cL = PAD_L, cR = w - PAD_R, cT = PAD_T;
   const cB = h - PAD_B - VOL_H - MACD_H;
   const cW = cR - cL, cH = cB - cT;
+  let _badgeOffsetY = cT + 6;
 
   let minP = Math.min(...bars.map(b=>b.l??b.c));
   let maxP = Math.max(...bars.map(b=>b.h??b.c));
@@ -4618,12 +4706,37 @@ function redrawChart() {
         ctx.font = 'bold 9px system-ui';
         const tw = ctx.measureText(label).width;
         ctx.fillStyle = 'rgba(6,182,212,0.15)';
-        ctx.beginPath(); ctx.roundRect(cL+6, cT+20, tw+14, 16, 4); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(cL+6, _badgeOffsetY, tw+14, 16, 4); ctx.fill();
         ctx.fillStyle = '#06b6d4';
-        ctx.fillText(label, cL+13, cT+32);
+        ctx.fillText(label, cL+13, _badgeOffsetY+12);
         ctx.restore();
+        _badgeOffsetY += 20;
       }
     }
+  }
+  // ── Vol Dry-Up Detector ────────────────────────────────────────────────────
+  if (state.overlays.vol && bars.length >= 25) {
+    (function detectVolDryUp() {
+      const last10 = bars.slice(-10);
+      const last5  = bars.slice(-5);
+      const prev20 = bars.slice(-25, -5);
+      const inUptrend = last10[last10.length-1].c > last10[0].c * 1.02;
+      const avgVol20  = prev20.reduce((s,b) => s+(b.v||0), 0) / prev20.length;
+      const avgVol5   = last5.reduce((s,b)  => s+(b.v||0), 0) / last5.length;
+      const isDryUp   = avgVol20 > 0 && avgVol5 < avgVol20 * 0.70;
+      if (inUptrend && isDryUp) {
+        ctx.save();
+        ctx.font = 'bold 9px JetBrains Mono';
+        const label = '⚠ VOL DRY-UP';
+        const tw = ctx.measureText(label).width;
+        ctx.fillStyle = 'rgba(249,115,22,0.15)';
+        ctx.beginPath(); ctx.roundRect(cL+6, _badgeOffsetY, tw+14, 16, 4); ctx.fill();
+        ctx.fillStyle = '#f97316';
+        ctx.fillText(label, cL+13, _badgeOffsetY+12);
+        ctx.restore();
+        _badgeOffsetY += 20;
+      }
+    })();
   }
   } catch(e) { ctx.restore(); }
 
@@ -4763,6 +4876,50 @@ function redrawChart() {
     })();
   }
   } catch(e) { ctx.restore(); }
+
+  // ── Gap Detector ──────────────────────────────────────────────────────────
+  if (state.overlays.gaps && bars.length > 1) {
+    (function drawGaps() {
+      const hlGaps = _hlKey === 'gaps';
+      const MIN_GAP_PCT = 0.005; // 0.5%
+      let gapCount = 0;
+      for (let i = bars.length - 1; i > 0 && gapCount < 10; i--) {
+        const cur = bars[i], prev = bars[i-1];
+        if (!cur.o || !prev.h || !prev.l) continue;
+        const isGapUp   = cur.o > prev.h * (1 + MIN_GAP_PCT);
+        const isGapDown = cur.o < prev.l * (1 - MIN_GAP_PCT);
+        if (!isGapUp && !isGapDown) continue;
+        gapCount++;
+        const x1 = px(i-1), x2 = px(i);
+        const y1 = py(isGapUp ? prev.h : cur.o);
+        const y2 = py(isGapUp ? cur.o  : prev.l);
+        const gapH = Math.abs(y2 - y1);
+        if (gapH < 2) continue;
+        ctx.save();
+        ctx.fillStyle = isGapUp
+          ? (hlGaps ? 'rgba(34,197,94,0.22)' : 'rgba(34,197,94,0.12)')
+          : (hlGaps ? 'rgba(239,68,68,0.22)'  : 'rgba(239,68,68,0.12)');
+        ctx.strokeStyle = isGapUp
+          ? (hlGaps ? 'rgba(34,197,94,0.7)' : 'rgba(34,197,94,0.35)')
+          : (hlGaps ? 'rgba(239,68,68,0.7)'  : 'rgba(239,68,68,0.35)');
+        ctx.lineWidth = hlGaps ? 2 : 0.5;
+        ctx.setLineDash([2,2]);
+        const rectX = Math.min(x1, x2) - 2;
+        const rectW = Math.abs(x2 - x1) + 4;
+        const rectY = Math.min(y1, y2);
+        ctx.fillRect(rectX, rectY, rectW, gapH);
+        ctx.strokeRect(rectX, rectY, rectW, gapH);
+        ctx.setLineDash([]);
+        ctx.font = 'bold 8px JetBrains Mono';
+        ctx.fillStyle = isGapUp ? '#22c55e' : '#ef4444';
+        ctx.textAlign = 'center';
+        const pct = Math.abs((cur.o - (isGapUp ? prev.h : prev.l)) / (isGapUp ? prev.h : prev.l) * 100);
+        ctx.fillText((isGapUp ? '↑' : '↓') + pct.toFixed(1) + '%', (x1+x2)/2, Math.min(y1,y2) - 3);
+        ctx.textAlign = 'left';
+        ctx.restore();
+      }
+    })();
+  }
 
   // ── Valuation P/E Band ──────────────────────────────────────────────────────
   if (state.overlays.valuation && state.peHistory[sym]) {
@@ -6261,6 +6418,24 @@ function renderAnalysis() {
       scenarioHtml += `</div>`;
     }
 
+    // MTF Signals badge strip
+    const mtfSignals = getMTFSignals(sym);
+    if (mtfSignals.length > 0) {
+      const emojiMap = { bull: '🟢', bear: '🔴', neutral: '🟡' };
+      const colorMap = { bull: { bg: '#15803d22', fg: '#22c55e' }, bear: { bg: '#dc26261a', fg: '#ef4444' }, neutral: { bg: '#f59e0b1a', fg: '#f59e0b' } };
+      let badgesHtml = '';
+      mtfSignals.forEach(({ tf, signal, rsi }) => {
+        const c = colorMap[signal] || colorMap.neutral;
+        const em = emojiMap[signal] || '🟡';
+        const rsiTip = rsi !== null ? ` title="RSI ${rsi}"` : '';
+        badgesHtml += `<span${rsiTip} style="background:${c.bg};color:${c.fg};padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer" onclick="switchToMTFTab()">${tf} ${em}</span>`;
+      });
+      html += `<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;padding:8px 10px;background:#1e293b;border-radius:8px;flex-wrap:wrap">
+        <span style="color:#94a3b8;font-size:11px;font-weight:600;letter-spacing:0.5px">MTF</span>
+        ${badgesHtml}
+      </div>`;
+    }
+
     // RSI Divergence alert (above the card)
     const diverg = detectRSIDivergence(bars, wave);
     if (diverg) {
@@ -6313,9 +6488,13 @@ function renderAnalysis() {
       if (interp.levels.length) {
         html += `<div class="levels-list">`;
         interp.levels.forEach(lv => {
+          const pctToTarget = ((lv.price - last.c) / last.c * 100);
+          const pctStr = (pctToTarget >= 0 ? '+' : '') + pctToTarget.toFixed(1) + '%';
+          const pctCol = pctToTarget >= 0 ? '#22c55e' : '#ef4444';
           html += `<div class="level-row">
             <div class="level-key-dot" style="background:${lv.color}${lv.key?'':'66'}"></div>
             <div class="level-label">${lv.label}</div>
+            <span style="margin-left:auto;color:${pctCol};font-size:11px;margin-right:8px">${pctStr}</span>
             <div class="level-price" style="color:${lv.color}">$${fmtPrice(lv.price)}</div>
           </div>`;
         });
@@ -7190,6 +7369,12 @@ function switchWavesSubtab(sub) {
   if (sub === 'rrg') renderRRG();
   if (sub === 'wyckoff') renderWyckoff(state.selected);
   if (sub === 'squeeze') renderSqueezeScore(state.selected);
+}
+
+function switchToMTFTab() {
+  // Scrolls the analysis content to the top where the MTF confluence card lives
+  const el = document.getElementById('analysis-content');
+  if (el) el.scrollTop = 0;
 }
 
 function switchToolsSubtab(sub) {
