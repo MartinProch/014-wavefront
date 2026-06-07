@@ -5836,7 +5836,7 @@ async function loadTicker(sym, addToList=true) {
 
     checkVolumeSpike();
     checkWaveAlert();
-    fireTechnicalAlerts(sym, bars);
+    try { fireTechnicalAlerts(sym, bars); } catch(e) { console.warn('fireTechnicalAlerts error:', e); }
 
     updateHeader();
     renderWatchlist();
@@ -6446,13 +6446,24 @@ function selectScenario(sym, idx) {
 // ─── ANALYSIS ─────────────────────────────────────────────────────────────────
 function renderAnalysis() {
   const el = document.getElementById('analysis-content');
+  if (!el) return;
   const sym = state.selected;
   if (!sym || !state.data[sym]) {
     el.innerHTML = `<div class="empty-state"><div class="empty-icon">🌊</div><div class="empty-text">SELECT A TICKER</div></div>`;
     return;
   }
+  try { _renderAnalysisInner(el, sym); } catch(e) {
+    console.error('renderAnalysis error:', e);
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">ANALYSIS ERROR<br><span style="font-size:10px;color:#6b7280">${e.message}</span></div></div>`;
+  }
+}
+function _renderAnalysisInner(el, sym) {
 
   const bars = getDisplayBars();
+  if (!bars.length) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🌊</div><div class="empty-text">NO DATA<br>TRY LONGER TIMEFRAME</div></div>`;
+    return;
+  }
   const wave = getActiveWave(sym);
   const rsi  = calcRSI(bars);
   const sr   = detectSupportResistance(bars);
