@@ -6956,8 +6956,55 @@ async function loadAndRenderFund(sym) {
     const data = await fetchFundamentals(sym);
     renderFund(sym, data);
   } catch(e) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">FAILED TO LOAD<br>${e.message}</div></div>`;
+    const isNetwork = e.message === 'Failed to fetch' || e.message.includes('NetworkError') || e.message.includes('network');
+    const hint = isNetwork
+      ? 'Server nedostupný — zkus znovu nebo zkontroluj připojení.'
+      : e.message;
+    el.innerHTML = `<div class="empty-state" style="padding:24px 16px">
+      <div class="empty-icon">⚠️</div>
+      <div class="empty-text" style="margin-bottom:14px">FAILED TO LOAD<br><span style="font-size:10px;color:#6b7280">${hint}</span></div>
+      <button onclick="loadAndRenderFund('${sym}')" style="padding:9px 20px;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.35);border-radius:8px;color:var(--blue);font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:0.5px">🔄 ZKUSIT ZNOVU</button>
+    </div>`;
+    // Try FMP fallback for basic overview
+    loadFundFmpFallback(sym);
   }
+}
+
+async function loadFundFmpFallback(sym) {
+  // Lightweight FMP fallback when Railway backend is down
+  try {
+    const [profileRes, ratioRes] = await Promise.all([
+      fetch(`https://financialmodelingprep.com/api/v3/profile/${sym}?apikey=${FMP_KEY}`),
+      fetch(`https://financialmodelingprep.com/api/v3/ratios-ttm/${sym}?apikey=${FMP_KEY}`)
+    ]);
+    const [profile, ratio] = await Promise.all([profileRes.json(), ratioRes.json()]);
+    const p = Array.isArray(profile) ? profile[0] : null;
+    const r = Array.isArray(ratio) ? ratio[0] : null;
+    if (!p) return;
+    const el = document.getElementById('fund-content');
+    if (!el || !el.querySelector('.empty-state')) return; // already loaded
+    const pe   = r?.peRatioTTM?.toFixed(1) ?? '—';
+    const ps   = r?.priceToSalesRatioTTM?.toFixed(2) ?? '—';
+    const pb   = r?.pbRatioTTM?.toFixed(2) ?? '—';
+    const roe  = r?.returnOnEquityTTM != null ? (r.returnOnEquityTTM*100).toFixed(1)+'%' : '—';
+    const mktCap = p.mktCap ? (p.mktCap >= 1e12 ? (p.mktCap/1e12).toFixed(2)+'T' : p.mktCap >= 1e9 ? (p.mktCap/1e9).toFixed(1)+'B' : (p.mktCap/1e6).toFixed(0)+'M') : '—';
+    el.innerHTML = `
+      <div style="padding:12px 14px">
+        <div style="background:#1e293b;border-radius:8px;padding:10px 14px;margin-bottom:10px">
+          <div style="font-size:11px;color:#64748b;margin-bottom:6px;font-weight:700">⚡ FMP FALLBACK — server nedostupný</div>
+          <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:2px">${p.companyName || sym}</div>
+          <div style="font-size:11px;color:#94a3b8">${p.sector || ''} · ${p.exchange || ''}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+          ${[['P/E',pe],['P/S',ps],['P/B',pb],['ROE',roe],['Mkt Cap',mktCap],['Beta',(p.beta||'—')]].map(([l,v])=>`
+          <div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:8px 10px">
+            <div style="font-size:9px;color:#64748b;font-weight:700;letter-spacing:0.5px">${l}</div>
+            <div style="font-size:13px;color:#e2e8f0;font-weight:700;margin-top:2px">${v}</div>
+          </div>`).join('')}
+        </div>
+        <div style="font-size:10px;color:#475569;text-align:center;padding:6px">Základní data z FMP · Pro plné fundamentály oprav připojení a klikni ZKUSIT ZNOVU</div>
+      </div>`;
+  } catch(e2) { /* silent — fallback failed too */ }
 }
 
 function renderFund(sym, data) {
