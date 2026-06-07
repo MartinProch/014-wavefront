@@ -1742,8 +1742,13 @@ strong { font-weight: 600; }
           <button onclick="runScreener()" style="width:100%;margin-top:10px;padding:10px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600">▶ SPUSTIT SCAN</button>
           <button onclick="runMagicFormula()" style="width:100%;margin-top:8px;padding:10px;background:linear-gradient(135deg,#7c3aed,#4fc3f7);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;letter-spacing:0.5px">⚡ MAGIC FORMULA</button>
         </div>
-        <div id="screen-results" style="flex:1;overflow-y:auto;padding:12px">
-          <div style="color:#9ca3af;text-align:center;padding:30px;font-size:13px">Nastav filtry a spusť scan.</div>
+        <div style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+          <div style="padding:12px 12px 0">
+            <div id="screen-custom-filters"></div>
+          </div>
+          <div id="screen-results" style="padding:0 12px 12px">
+            <div style="color:#9ca3af;text-align:center;padding:30px;font-size:13px">Nastav filtry a spusť scan.</div>
+          </div>
         </div>
       </div>
     </div>
@@ -1760,6 +1765,7 @@ strong { font-weight: 600; }
         <button onclick="switchJournalTab('watchperf')" id="jst-watchperf" style="flex:1;padding:10px;font-size:11px;font-weight:600;color:var(--muted);background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer">WATCH PERF</button>
         <button onclick="switchJournalTab('sizing')" id="jst-sizing" style="flex:1;padding:10px;font-size:11px;font-weight:600;color:var(--muted);background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer">SIZING</button>
         <button onclick="switchJournalTab('import')" id="jst-import" style="flex:1;padding:10px;font-size:11px;font-weight:600;color:var(--muted);background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer">📥 IMPORT</button>
+        <button onclick="switchJournalTab('backup')" id="jst-backup" style="flex:1;padding:10px;font-size:11px;font-weight:600;color:var(--muted);background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer">💾 BACKUP</button>
       </div>
       <div id="journal-trades-view" style="flex:1;overflow-y:auto;padding:12px"></div>
       <div id="journal-add-view" style="display:none;flex:1;overflow-y:auto;padding:12px"></div>
@@ -1772,6 +1778,7 @@ strong { font-weight: 600; }
       <div id="journal-import-view" style="display:none;padding:16px;overflow-y:auto;-webkit-overflow-scrolling:touch">
         <div id="journal-import-content"></div>
       </div>
+      <div id="journal-backup-view" style="display:none;flex:1;overflow-y:auto;padding:12px"></div>
     </div>
 
     <!-- DASHBOARD TAB -->
@@ -1931,7 +1938,21 @@ let state = {
   annotations: {},     // sym → [{date, text}]
   newsSentiment: {},   // sym → {sentiment: 'positive'|'negative'|'neutral', timestamp}
   watchlistSortBy: 'default', // 'default'|'1d'|'1m'|'ytd'|'wave'|'alpha'
+  watchlistView: 'list',       // 'list' | 'heatmap'
+  customFilters: {             // Custom screener filters
+    rsiMin: null,
+    rsiMax: null,
+    maFilter: null,    // 'above200' | 'below200' | null
+    minMomentum: null,
+    minVolChg: null,   // e.g. 150 = 1.5x average volume
+    priceMin: null,
+    priceMax: null,
+  },
   rrgHistory: {},      // {date, sectors: [{name, etf, x, y, perf, vol}, ...]}
+  techAlertsFired: {},     // keyed by `${sym}_${type}_${date}` — prevents duplicate firing
+  techAlertsHistory: [],   // [{sym, type, msg, date}] last 50 entries
+  techAlertSettings: { maCross: true, rsiExtreme: true },
+  rebalTargets: {},    // sym → target % (e.g. { AAPL: 20, MSFT: 15 })
 };
 
 // ─── PERSISTENCE ─────────────────────────────────────────────────────────────
@@ -1946,6 +1967,8 @@ function saveStateLight() {
     localStorage.setItem('wfm_ticker_tags',  JSON.stringify(state.tickerTags));
     localStorage.setItem('wfm_annotations',  JSON.stringify(state.annotations));
     localStorage.setItem('wfm_sort_by',      state.watchlistSortBy || 'default');
+    localStorage.setItem('wfm_wl_view',      state.watchlistView || 'list');
+    if (state.customFilters) localStorage.setItem('wf_custom_filters', JSON.stringify(state.customFilters));
   } catch(e) {}
 }
 
@@ -1998,6 +2021,22 @@ function loadState() {
     // Load watchlist sort preference
     const sortBy = localStorage.getItem('wfm_sort_by');
     if (sortBy) state.watchlistSortBy = sortBy;
+    // Load watchlist view mode (list | heatmap)
+    const wlView = localStorage.getItem('wfm_wl_view');
+    if (wlView) state.watchlistView = wlView;
+    // Load custom screener filters
+    const cfRaw = localStorage.getItem('wf_custom_filters');
+    if (cfRaw) try { state.customFilters = { ...state.customFilters, ...JSON.parse(cfRaw) }; } catch(e2) {}
+    // Load technical alert state
+    const taf = localStorage.getItem('wf_tech_alerts_fired');
+    if (taf) state.techAlertsFired = JSON.parse(taf);
+    const tah = localStorage.getItem('wf_tech_alerts_history');
+    if (tah) state.techAlertsHistory = JSON.parse(tah);
+    const tas = localStorage.getItem('wf_tech_alerts_settings');
+    if (tas) state.techAlertSettings = { ...state.techAlertSettings, ...JSON.parse(tas) };
+    // Load rebalancing targets
+    const rbt = localStorage.getItem('wf_rebal_targets');
+    if (rbt) state.rebalTargets = JSON.parse(rbt);
   } catch(e) {}
   const savedTheme = localStorage.getItem('wfm_theme');
   if (savedTheme === 'light') {
@@ -5797,6 +5836,7 @@ async function loadTicker(sym, addToList=true) {
 
     checkVolumeSpike();
     checkWaveAlert();
+    fireTechnicalAlerts(sym, bars);
 
     updateHeader();
     renderWatchlist();
@@ -5993,13 +6033,28 @@ function renderWatchlistSortBar() {
     { id: 'wave', label: '🌊 Wave' },
     { id: 'alpha', label: '🔤 A–Z' },
   ];
-  bar.innerHTML = sorts.map(s => `<button class="tag-filter-pill ${s.id === active ? 'active' : ''}"
-    style="${s.id === active ? 'background:var(--blue);border-color:var(--blue)' : 'color:var(--muted);border-color:var(--border)'}"
-    onclick="setWatchlistSort('${s.id}')">${s.label}</button>`).join('');
+  const view = state.watchlistView || 'list';
+  const listActive = view === 'list';
+  const mapActive = view === 'heatmap';
+  const sortPills = sorts.map(s => '<button class="tag-filter-pill ' + (s.id === active ? 'active' : '') + '" style="' + (s.id === active ? 'background:var(--blue);border-color:var(--blue)' : 'color:var(--muted);border-color:var(--border)') + '" onclick="setWatchlistSort(\'' + s.id + '\')">' + s.label + '</button>').join('');
+  const viewToggle = '<div style="display:flex;gap:3px;margin-left:6px;flex-shrink:0;">'
+    + '<button onclick="setWatchlistView(\'list\')" title="List view" style="padding:4px 9px;border-radius:6px;border:1px solid ' + (listActive ? 'var(--blue)' : 'var(--border)') + ';background:' + (listActive ? 'var(--blue)' : 'transparent') + ';color:' + (listActive ? '#fff' : 'var(--muted)') + ';font-size:14px;cursor:pointer;line-height:1;-webkit-tap-highlight-color:transparent;">≡</button>'
+    + '<button onclick="setWatchlistView(\'heatmap\')" title="Heatmap view" style="padding:4px 9px;border-radius:6px;border:1px solid ' + (mapActive ? 'var(--blue)' : 'var(--border)') + ';background:' + (mapActive ? 'var(--blue)' : 'transparent') + ';color:' + (mapActive ? '#fff' : 'var(--muted)') + ';font-size:14px;cursor:pointer;line-height:1;-webkit-tap-highlight-color:transparent;">▦</button>'
+    + '</div>';
+  bar.style.display = 'flex';
+  bar.style.flexWrap = 'nowrap';
+  bar.style.alignItems = 'center';
+  bar.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:4px;flex:1;overflow-x:auto;min-width:0;">' + sortPills + '</div>' + viewToggle;
 }
 
 function setWatchlistSort(sortBy) {
   state.watchlistSortBy = sortBy;
+  saveStateLight();
+  renderWatchlist();
+}
+
+function setWatchlistView(viewMode) {
+  state.watchlistView = viewMode;
   saveStateLight();
   renderWatchlist();
 }
@@ -6021,11 +6076,66 @@ function removeTicker(sym) {
   redrawChart();
 }
 
+function renderWatchlistHeatmap() {
+  const el = document.getElementById('wl-list');
+  if (!el) return;
+  const tickers = getSortedWatchlist();
+  if (!tickers.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">⭐</div><div class="empty-text">NO TICKERS YET<br>TAP + ADD</div></div>';
+    return;
+  }
+  let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:4px;padding:8px;">';
+  tickers.forEach(function(sym) {
+    const bars = state.data[sym] && state.data[sym].bars;
+    if (!bars || bars.length < 2) {
+      html += '<div style="background:#1e293b;border-radius:6px;padding:8px 4px;text-align:center;min-height:64px;display:flex;flex-direction:column;justify-content:center;align-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent;" onclick="selectTicker(\'' + sym + '\')">'
+        + '<div style="font-size:11px;font-weight:700;color:#e2e8f0">' + sym + '</div>'
+        + '<div style="font-size:10px;color:#64748b">—</div>'
+        + '</div>';
+      return;
+    }
+    const last = bars[bars.length - 1];
+    const prev = bars[bars.length - 2];
+    const chg = (last.c - prev.c) / prev.c * 100;
+    const intensity = Math.min(Math.abs(chg) / 3, 1);
+    let bg, textCol;
+    if (chg > 0) {
+      const r = Math.round(15 + (34 - 15) * intensity);
+      const g = Math.round(23 + (197 - 23) * intensity);
+      const b = Math.round(42 + (94 - 42) * intensity);
+      bg = 'rgb(' + r + ',' + g + ',' + b + ')';
+      textCol = intensity > 0.5 ? '#fff' : '#22c55e';
+    } else if (chg < 0) {
+      const r = Math.round(15 + (239 - 15) * intensity);
+      const g = Math.round(23 + (68 - 23) * intensity);
+      const b = Math.round(42 + (68 - 42) * intensity);
+      bg = 'rgb(' + r + ',' + g + ',' + b + ')';
+      textCol = intensity > 0.5 ? '#fff' : '#ef4444';
+    } else {
+      bg = '#1e293b';
+      textCol = '#94a3b8';
+    }
+    const chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
+    html += '<div style="background:' + bg + ';border-radius:6px;padding:8px 4px;text-align:center;min-height:64px;display:flex;flex-direction:column;justify-content:center;align-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent;" onclick="selectTicker(\'' + sym + '\')">'
+      + '<div style="font-size:11px;font-weight:700;color:#e2e8f0;letter-spacing:0.5px">' + sym + '</div>'
+      + '<div style="font-size:10px;color:' + textCol + ';font-weight:600;margin-top:2px">' + chgStr + '</div>'
+      + '<div style="font-size:9px;color:rgba(255,255,255,0.6);margin-top:1px">$' + fmtPrice(last.c) + '</div>'
+      + '</div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 function renderWatchlist() {
   renderTagFilterBar();
   renderWatchlistSortBar();
   const list = document.getElementById('wl-list');
   const visible = getSortedWatchlist();
+
+  if ((state.watchlistView || 'list') === 'heatmap') {
+    renderWatchlistHeatmap();
+    return;
+  }
 
   if (!state.tickers.length) {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">⭐</div><div class="empty-text">NO TICKERS YET<br>TAP + ADD</div></div>`;
@@ -7322,6 +7432,7 @@ function switchTab(tab) {
   }
   if (tab === 'screen') {
     renderScreenFilters();
+    renderCustomFiltersCard();
   }
   if (tab === 'journal') {
     switchJournalTab('trades');
@@ -12101,7 +12212,8 @@ function renderAlerts() {
     }).join('')}</div>`;
 
   const smartSection = buildSmartAlertSection(sym);
-  el.innerHTML = formHtml + `<div class="section-header">ACTIVE ALERTS (${alerts.length})</div>` + listHtml + smartSection;
+  const techSection  = buildTechAlertSection();
+  el.innerHTML = formHtml + `<div class="section-header">ACTIVE ALERTS (${alerts.length})</div>` + listHtml + smartSection + techSection;
   renderSmartAlertForm();
   renderSmartAlertList();
   evaluateSmartAlerts();
@@ -12126,6 +12238,57 @@ function buildSmartAlertSection(sym) {
     <button onclick="createSmartAlert()" style="width:100%;padding:9px;background:rgba(79,195,247,0.12);border:1px solid rgba(79,195,247,0.35);border-radius:8px;color:var(--blue);font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">⚡ ULOŽIT ALERT</button>
   </div>
   <div id="sa-list"></div>`;
+}
+
+function buildTechAlertSection() {
+  const s = state.techAlertSettings;
+  const history = state.techAlertsHistory.slice(0, 10);
+
+  const typeLabels = {
+    golden_cross:  '🌟 Golden Cross',
+    death_cross:   '💀 Death Cross',
+    rsi_overbought:'🔴 RSI Overbought',
+    rsi_oversold:  '🟢 RSI Oversold',
+  };
+  const typeColors = {
+    golden_cross:  'var(--gold)',
+    death_cross:   'var(--red)',
+    rsi_overbought:'var(--red)',
+    rsi_oversold:  'var(--green)',
+  };
+
+  const historyHtml = !history.length
+    ? `<div style="padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);text-align:center">Žádné technické alerty</div>`
+    : history.map(a => {
+        const label = typeLabels[a.type] || a.type;
+        const col   = typeColors[a.type] || 'var(--text)';
+        const dt    = a.date ? new Date(a.date).toLocaleString('cs-CZ', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+        return `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border)">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);font-weight:700;min-width:48px">${a.sym}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${col};flex:1">${label}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted)">${dt}</span>
+        </div>`;
+      }).join('');
+
+  return `
+  <div class="section-header" style="margin-top:8px">📡 TECHNICKÉ ALERTY</div>
+  <div style="background:var(--bg2);border-radius:10px;overflow:hidden;margin-bottom:8px">
+    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:10px">
+      <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text)">Golden / Death Cross</span>
+        <input type="checkbox" ${s.maCross ? 'checked' : ''}
+          onchange="state.techAlertSettings.maCross=this.checked;try{localStorage.setItem('wf_tech_alerts_settings',JSON.stringify(state.techAlertSettings))}catch(e){}"
+          style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer">
+      </label>
+      <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text)">RSI Extremy (70 / 30)</span>
+        <input type="checkbox" ${s.rsiExtreme ? 'checked' : ''}
+          onchange="state.techAlertSettings.rsiExtreme=this.checked;try{localStorage.setItem('wf_tech_alerts_settings',JSON.stringify(state.techAlertSettings))}catch(e){}"
+          style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer">
+      </label>
+    </div>
+    ${historyHtml}
+  </div>`;
 }
 
 function addAlert() {
@@ -13056,6 +13219,71 @@ function checkWaveAlert() {
   }
 }
 
+// ─── TECHNICAL ALERTS (MA CROSSOVER + RSI EXTREMES) ──────────────────────────
+function checkTechnicalAlerts(sym, bars) {
+  if (!bars || bars.length < 205) return [];
+  const results = [];
+
+  // MA Crossover (Golden Cross / Death Cross)
+  if (state.techAlertSettings.maCross) {
+    const sma50  = calcSMA(bars, 50);
+    const sma200 = calcSMA(bars, 200);
+    const i = bars.length - 1;
+    if (sma50[i] !== null && sma200[i] !== null && sma50[i-1] !== null && sma200[i-1] !== null) {
+      if (sma50[i-1] < sma200[i-1] && sma50[i] >= sma200[i]) {
+        results.push({ type: 'golden_cross', sym, msg: `🌟 ${sym}: Golden Cross (MA50 > MA200)` });
+      } else if (sma50[i-1] > sma200[i-1] && sma50[i] <= sma200[i]) {
+        results.push({ type: 'death_cross', sym, msg: `💀 ${sym}: Death Cross (MA50 < MA200)` });
+      }
+    }
+  }
+
+  // RSI Extremes (overbought / oversold crossings)
+  if (state.techAlertSettings.rsiExtreme) {
+    const rsiSeries = calcRSISeries(bars, 14);
+    const rsiCur  = rsiSeries[rsiSeries.length - 1];
+    const rsiPrev = rsiSeries[rsiSeries.length - 2];
+    if (rsiCur !== null && rsiPrev !== null) {
+      if (rsiPrev < 70 && rsiCur >= 70) {
+        results.push({ type: 'rsi_overbought', sym, msg: `🔴 ${sym}: RSI Overbought (${rsiCur.toFixed(0)})` });
+      } else if (rsiPrev > 30 && rsiCur <= 30) {
+        results.push({ type: 'rsi_oversold', sym, msg: `🟢 ${sym}: RSI Oversold (${rsiCur.toFixed(0)})` });
+      }
+    }
+  }
+
+  return results;
+}
+
+function fireTechnicalAlerts(sym, bars) {
+  const today = new Date().toISOString().slice(0, 10);
+  const found = checkTechnicalAlerts(sym, bars);
+  if (!found.length) return;
+
+  found.forEach(alert => {
+    const key = `${sym}_${alert.type}_${today}`;
+    if (state.techAlertsFired[key]) return; // already fired today
+
+    // Toast + haptic
+    showToast(alert.msg, 4000);
+    hapticWarning();
+
+    // Web Notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try { new Notification(`Wavefront: ${sym}`, { body: alert.msg }); } catch(e) {}
+    }
+
+    // Mark as fired
+    state.techAlertsFired[key] = true;
+    try { localStorage.setItem('wf_tech_alerts_fired', JSON.stringify(state.techAlertsFired)); } catch(e) {}
+
+    // Append to history (cap at 50)
+    state.techAlertsHistory.unshift({ sym: alert.sym, type: alert.type, msg: alert.msg, date: new Date().toISOString() });
+    if (state.techAlertsHistory.length > 50) state.techAlertsHistory.length = 50;
+    try { localStorage.setItem('wf_tech_alerts_history', JSON.stringify(state.techAlertsHistory)); } catch(e) {}
+  });
+}
+
 // ─── EARNINGS REMINDER ────────────────────────────────────────────────────────
 async function checkEarningsReminders() {
   const tickers = (state.tickers || []).slice(0, 10);
@@ -13615,6 +13843,146 @@ async function computeFScore(sym) {
   } catch(e) { return null; }
 }
 
+// ─── CUSTOM SCREENER FILTERS ─────────────────────────────────────────────────
+function applyCustomFilters(tickers) {
+  if (!state.customFilters) return tickers;
+  const cf = state.customFilters;
+  const hasAny = cf.rsiMin !== null || cf.rsiMax !== null || cf.maFilter ||
+                 cf.minMomentum !== null || cf.minVolChg !== null ||
+                 cf.priceMin !== null || cf.priceMax !== null;
+  if (!hasAny) return tickers;
+
+  return tickers.filter(function(sym) {
+    const bars = state.data[sym] && state.data[sym].bars;
+    if (!bars || bars.length < 20) return true; // pass if no data
+
+    const last = bars[bars.length - 1];
+    const closes = bars.map(function(b) { return b.c; });
+    const n = closes.length;
+
+    // Price filter
+    if (cf.priceMin !== null && last.c < cf.priceMin) return false;
+    if (cf.priceMax !== null && last.c > cf.priceMax) return false;
+
+    // RSI filter
+    if (cf.rsiMin !== null || cf.rsiMax !== null) {
+      const rsi = calcRSI(bars, 14);
+      if (rsi !== null && rsi !== undefined) {
+        if (cf.rsiMin !== null && rsi < cf.rsiMin) return false;
+        if (cf.rsiMax !== null && rsi > cf.rsiMax) return false;
+      }
+    }
+
+    // MA200 filter
+    if (cf.maFilter) {
+      if (bars.length >= 200) {
+        const ma200 = closes.slice(-200).reduce(function(a,b){return a+b;},0)/200;
+        if (cf.maFilter === 'above200' && last.c < ma200) return false;
+        if (cf.maFilter === 'below200' && last.c > ma200) return false;
+      }
+    }
+
+    // Momentum score filter
+    if (cf.minMomentum !== null) {
+      const cur = closes[n-1];
+      const ma20 = closes.slice(-20).reduce(function(a,b){return a+b;},0)/20;
+      const ma50 = n>=50 ? closes.slice(-50).reduce(function(a,b){return a+b;},0)/50 : ma20;
+      const ma200val = n>=200 ? closes.slice(-200).reduce(function(a,b){return a+b;},0)/200 : ma50;
+      let maScore=50;
+      if(cur>ma20)maScore+=15; if(cur>ma50)maScore+=20; if(cur>ma200val)maScore+=15;
+      const ret1m=n>=21?(cur-closes[n-21])/closes[n-21]*100:0;
+      const ret3m=n>=63?(cur-closes[n-64])/closes[n-64]*100:0;
+      const momScore=Math.max(0,Math.min(100,maScore*0.5+(50+ret1m*2+ret3m*0.5)*0.5));
+      if (momScore < cf.minMomentum) return false;
+    }
+
+    // Volume filter (minVolChg is a multiplier ×100, e.g. 150 = 1.5x)
+    if (cf.minVolChg !== null) {
+      const avgVol = bars.slice(-21, -1).reduce(function(s,b){return s+(b.v||0);},0) / 20;
+      const curVol = last.v || 0;
+      const multiplier = cf.minVolChg / 100;
+      if (avgVol > 0 && curVol < avgVol * multiplier) return false;
+    }
+
+    return true;
+  });
+}
+
+function renderCustomFiltersCard() {
+  const el = document.getElementById('screen-custom-filters');
+  if (!el) return;
+  const cf = state.customFilters || {};
+  const inputStyle = 'width:60px;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:4px 6px;color:#e2e8f0;font-size:12px;font-family:\'JetBrains Mono\',monospace;text-align:center;';
+  const labelStyle = 'font-size:11px;color:#9ca3af;min-width:72px;';
+  const rowStyle = 'display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #1e293b;';
+  el.innerHTML = '<div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:10px;padding:12px 14px;margin-bottom:10px;">'
+    + '<div style="font-size:11px;font-weight:700;color:#4fc3f7;letter-spacing:1px;margin-bottom:10px;">VLASTNÍ FILTRY</div>'
+    + '<div style="' + rowStyle + '">'
+    +   '<span style="' + labelStyle + '">RSI:</span>'
+    +   '<input id="cf-rsi-min" type="number" min="0" max="100" placeholder="min" value="' + (cf.rsiMin !== null && cf.rsiMin !== undefined ? cf.rsiMin : '') + '" style="' + inputStyle + '">'
+    +   '<span style="font-size:11px;color:#64748b;">—</span>'
+    +   '<input id="cf-rsi-max" type="number" min="0" max="100" placeholder="max" value="' + (cf.rsiMax !== null && cf.rsiMax !== undefined ? cf.rsiMax : '') + '" style="' + inputStyle + '">'
+    + '</div>'
+    + '<div style="' + rowStyle + '">'
+    +   '<span style="' + labelStyle + '">MA200:</span>'
+    +   '<select id="cf-ma-filter" style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:4px 6px;color:#e2e8f0;font-size:12px;font-family:\'JetBrains Mono\',monospace;flex:1;">'
+    +     '<option value="" ' + (!cf.maFilter ? 'selected' : '') + '>Vše</option>'
+    +     '<option value="above200" ' + (cf.maFilter === 'above200' ? 'selected' : '') + '>Nad MA200</option>'
+    +     '<option value="below200" ' + (cf.maFilter === 'below200' ? 'selected' : '') + '>Pod MA200</option>'
+    +   '</select>'
+    + '</div>'
+    + '<div style="' + rowStyle + '">'
+    +   '<span style="' + labelStyle + '">Momentum ≥:</span>'
+    +   '<input id="cf-momentum" type="number" min="0" max="100" placeholder="0–100" value="' + (cf.minMomentum !== null && cf.minMomentum !== undefined ? cf.minMomentum : '') + '" style="' + inputStyle + '">'
+    + '</div>'
+    + '<div style="' + rowStyle + '">'
+    +   '<span style="' + labelStyle + '">Volume ≥:</span>'
+    +   '<input id="cf-vol" type="number" min="0" step="0.1" placeholder="1.5" value="' + (cf.minVolChg !== null && cf.minVolChg !== undefined ? (cf.minVolChg/100).toFixed(1) : '') + '" style="' + inputStyle + '">'
+    +   '<span style="font-size:11px;color:#64748b;">× průměru</span>'
+    + '</div>'
+    + '<div style="' + rowStyle + 'border-bottom:none;">'
+    +   '<span style="' + labelStyle + '">Cena:</span>'
+    +   '<input id="cf-price-min" type="number" min="0" placeholder="$min" value="' + (cf.priceMin !== null && cf.priceMin !== undefined ? cf.priceMin : '') + '" style="' + inputStyle + '">'
+    +   '<span style="font-size:11px;color:#64748b;">—</span>'
+    +   '<input id="cf-price-max" type="number" min="0" placeholder="$max" value="' + (cf.priceMax !== null && cf.priceMax !== undefined ? cf.priceMax : '') + '" style="' + inputStyle + '">'
+    + '</div>'
+    + '<div style="display:flex;gap:8px;margin-top:12px;">'
+    +   '<button onclick="applyCustomFiltersFromUI()" style="flex:1;padding:8px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">APLIKOVAT</button>'
+    +   '<button onclick="resetCustomFilters()" style="padding:8px 14px;background:transparent;color:#9ca3af;border:1px solid #334155;border-radius:8px;font-size:12px;cursor:pointer;">RESET</button>'
+    + '</div>'
+    + '</div>';
+}
+
+function applyCustomFiltersFromUI() {
+  const parseNum = function(id) {
+    const el = document.getElementById(id);
+    if (!el || el.value.trim() === '') return null;
+    const v = parseFloat(el.value);
+    return isNaN(v) ? null : v;
+  };
+  const maEl = document.getElementById('cf-ma-filter');
+  const volRaw = parseNum('cf-vol');
+  state.customFilters = {
+    rsiMin: parseNum('cf-rsi-min'),
+    rsiMax: parseNum('cf-rsi-max'),
+    maFilter: maEl && maEl.value ? maEl.value : null,
+    minMomentum: parseNum('cf-momentum'),
+    minVolChg: volRaw !== null ? Math.round(volRaw * 100) : null, // store as ×100
+    priceMin: parseNum('cf-price-min'),
+    priceMax: parseNum('cf-price-max'),
+  };
+  saveStateLight();
+  showToast('Filtry aplikovány');
+  runScreener();
+}
+
+function resetCustomFilters() {
+  state.customFilters = { rsiMin:null, rsiMax:null, maFilter:null, minMomentum:null, minVolChg:null, priceMin:null, priceMax:null };
+  saveStateLight();
+  renderCustomFiltersCard();
+  showToast('Filtry resetovány');
+}
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 function renderDashboard() {
   const el = document.getElementById('dash-content');
@@ -13905,19 +14273,25 @@ async function runScreener() {
     el.innerHTML = `<div style="color:#9ca3af;text-align:center;padding:20px">Scanuji… (${results.length} nalezeno)</div>`;
   }
 
-  if (!results.length) {
+  // Apply custom filters (uses state.data bars if available)
+  const filteredSyms = applyCustomFilters(results.map(r => r.sym));
+  const filteredSet = new Set(filteredSyms);
+  const filteredResults = results.filter(r => filteredSet.has(r.sym));
+
+  if (!filteredResults.length) {
     el.innerHTML = '<div style="color:#9ca3af;text-align:center;padding:30px">Žádný ticker nesplňuje filtry.</div>';
     return;
   }
 
-  results.sort((a,b) => b.momScore - a.momScore);
+  filteredResults.sort((a,b) => b.momScore - a.momScore);
+  const results_final = filteredResults;
 
   const scoreCol = s => s>=65?'#22c55e':s>=45?'#f59e0b':'#ef4444';
   const chgCol = c => c>=0?'#22c55e':'#ef4444';
 
   el.innerHTML = `
-    <div style="font-size:11px;color:#9ca3af;margin-bottom:10px">${results.length} tickerů splňuje filtry — seřazeno podle Momentum Score</div>
-    ${results.map(r => `
+    <div style="font-size:11px;color:#9ca3af;margin-bottom:10px">${results_final.length} tickerů splňuje filtry — seřazeno podle Momentum Score</div>
+    ${results_final.map(r => `
       <div onclick="loadTicker('${r.sym}')" style="background:#1f2937;border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;gap:10px">
         <div style="flex:1">
           <div style="display:flex;align-items:center;gap:6px">
@@ -14017,7 +14391,7 @@ function saveWfJournal() {
 }
 
 function switchJournalTab(name) {
-  ['trades','add','stats','alloc','dca','perf','watchperf','sizing','import'].forEach(t => {
+  ['trades','add','stats','alloc','dca','perf','watchperf','sizing','import','backup'].forEach(t => {
     const v = document.getElementById(`journal-${t}-view`);
     if (v) v.style.display = t===name ? 'block' : 'none';
     const btn = document.getElementById(`jst-${t}`);
@@ -14032,6 +14406,7 @@ function switchJournalTab(name) {
   if (name==='watchperf') renderWatchPerf();
   if (name==='sizing') renderSizing();
   if (name==='import') renderJournalImport();
+  if (name==='backup') renderJournalBackup();
 }
 
 function renderJournalTrades() {
@@ -14122,6 +14497,96 @@ function renderJournalAdd() {
   });
 
   state._journalDir = 'long';
+}
+
+// ─── BACKUP EXPORT / IMPORT ───────────────────────────────────────────────────
+function renderJournalBackup() {
+  const el = document.getElementById('journal-backup-view');
+  if (!el) return;
+  el.innerHTML = `
+    <div style="max-width:480px;margin:0 auto">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:#6b7280;margin-bottom:16px">ZÁLOHA DAT</div>
+
+      <div style="background:#1f2937;border-radius:12px;padding:16px;margin-bottom:14px">
+        <button onclick="exportWatchlistBackup()"
+          style="width:100%;padding:14px;background:#22c55e;color:#0a0a1a;border:none;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:1px;cursor:pointer;margin-bottom:12px">
+          &#11015; EXPORTOVAT ZÁLOHU
+        </button>
+        <div style="font-size:11px;color:#9ca3af;text-align:center;line-height:1.6">
+          Záloha obsahuje watchlist, journal, alerty a nastavení.
+        </div>
+      </div>
+
+      <div style="background:#1f2937;border-radius:12px;padding:16px;margin-bottom:14px">
+        <button onclick="document.getElementById('backup-import-input').click()"
+          style="width:100%;padding:14px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:1px;cursor:pointer;margin-bottom:12px">
+          &#11014; IMPORTOVAT ZÁLOHU
+        </button>
+        <input type="file" id="backup-import-input" accept=".json" style="display:none" onchange="importWatchlistBackup(this)">
+        <div style="background:#78350f22;border:1px solid #f59e0b55;border-radius:8px;padding:10px;font-size:11px;color:#fcd34d;text-align:center">
+          &#9888; Import přepíše aktuální data.
+        </div>
+      </div>
+    </div>`;
+}
+
+function exportWatchlistBackup() {
+  const backup = {
+    version: 1,
+    date: new Date().toISOString(),
+    tickers: state.tickers,
+    tickerTags: state.tickerTags || {},
+    tickerColors: state.tickerColors || {},
+    journal: state.journal || [],
+    alerts: (function() { try { return JSON.parse(localStorage.getItem('wfm_alerts') || '[]'); } catch(e) { return []; } })(),
+    rebalTargets: state.rebalTargets || {},
+    annotations: (function() { try { return JSON.parse(localStorage.getItem('wfm_annotations') || '{}'); } catch(e) { return {}; } })(),
+  };
+  const json = JSON.stringify(backup, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'wavefront-backup-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Záloha exportována');
+}
+
+function importWatchlistBackup(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const backup = JSON.parse(ev.target.result);
+      if (backup.version !== 1) { showToast('Neplatný formát zálohy'); return; }
+      const dateStr = backup.date ? new Date(backup.date).toLocaleString('cs-CZ') : '?';
+      if (!confirm('Importovat zálohu z ' + dateStr + '? Přepíše aktuální data.')) {
+        input.value = ''; return;
+      }
+      if (backup.tickers) state.tickers = backup.tickers;
+      if (backup.tickerTags) state.tickerTags = backup.tickerTags;
+      if (backup.tickerColors) state.tickerColors = backup.tickerColors;
+      if (backup.journal) { state.journal = backup.journal; saveWfJournal(); }
+      if (backup.rebalTargets) {
+        state.rebalTargets = backup.rebalTargets;
+        localStorage.setItem('wf_rebal_targets', JSON.stringify(backup.rebalTargets));
+      }
+      if (backup.alerts) localStorage.setItem('wfm_alerts', JSON.stringify(backup.alerts));
+      if (backup.annotations) {
+        state.annotations = backup.annotations;
+        localStorage.setItem('wfm_annotations', JSON.stringify(backup.annotations));
+      }
+      saveStateLight();
+      renderWatchlist();
+      input.value = '';
+      showToast('Záloha importována');
+    } catch(err) {
+      showToast('Chyba při importu: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
 }
 
 function renderJournalImport() {
@@ -14423,6 +14888,58 @@ function getTargetAlloc() {
   try { return JSON.parse(localStorage.getItem('wf_target_alloc') || '{}'); } catch(e) { return {}; }
 }
 
+// ─── REBALANCING TARGETS (state.rebalTargets) ─────────────────────────────────
+function setRebalTarget(sym, value) {
+  if (!state.rebalTargets) state.rebalTargets = {};
+  const v = parseFloat(value);
+  if (isNaN(v) || value === '') {
+    delete state.rebalTargets[sym];
+  } else {
+    state.rebalTargets[sym] = v;
+  }
+  localStorage.setItem('wf_rebal_targets', JSON.stringify(state.rebalTargets));
+  saveStateLight();
+  // Re-render the section in-place (just refresh badge, not full redraw)
+  renderPortfolioAlloc();
+}
+
+function checkRebalancingTargets() {
+  if (!state.rebalTargets) return;
+  const openTrades = (state.journal || []).filter(t => t.status === 'open' && t.shares > 0);
+  const byTicker = {};
+  openTrades.forEach(t => {
+    if (!byTicker[t.sym]) byTicker[t.sym] = { sym: t.sym, shares: 0, totalCost: 0 };
+    byTicker[t.sym].shares += t.shares;
+    byTicker[t.sym].totalCost += t.shares * t.entry;
+  });
+  const positions = Object.values(byTicker).map(p => {
+    const bars = state.data?.[p.sym]?.bars;
+    const price = (bars && bars.length) ? bars[bars.length - 1].c : (p.totalCost / p.shares);
+    return { sym: p.sym, value: p.shares * price };
+  }).filter(p => p.value > 0);
+  const totalValue = positions.reduce((s, p) => s + p.value, 0);
+  positions.forEach(p => { p.pct = p.value / totalValue * 100; });
+
+  const deviations = [];
+  positions.forEach(p => {
+    const tgt = state.rebalTargets[p.sym];
+    if (tgt === undefined) return;
+    const drift = p.pct - tgt;
+    if (Math.abs(drift) > 5) {
+      deviations.push(`⚠ ${p.sym}: ${drift > 0 ? '+' : ''}${drift.toFixed(1)}% ${drift > 0 ? 'nad cílem' : 'pod cílem'}`);
+    }
+  });
+
+  if (deviations.length) {
+    hapticWarning();
+    deviations.forEach((msg, i) => {
+      setTimeout(() => showToast(msg, 3500), i * 600);
+    });
+  } else {
+    showToast('✓ Všechny pozice v cílovém rozsahu', 2500);
+  }
+}
+
 function renderRebalancingBanner(positions) {
   const targets = getTargetAlloc();
   if (!Object.keys(targets).length) return '';
@@ -14657,6 +15174,38 @@ function renderPortfolioAlloc() {
     <div style="font-size:10px;color:#9ca3af;letter-spacing:1px;font-weight:600;margin-bottom:8px">REBALANCING</div>
     <div id="rebalancing-card" style="background:#1f2937;border-radius:10px;padding:14px;margin-bottom:14px">
       ${renderRebalancingView(positions)}
+    </div>
+
+    <div style="font-size:10px;color:#9ca3af;letter-spacing:1px;font-weight:600;margin-bottom:8px">REBALANCING TARGETS</div>
+    <div style="background:#1f2937;border-radius:10px;padding:14px;margin-bottom:14px">
+      ${positions.map(p => {
+        const tgt = state.rebalTargets?.[p.sym];
+        const hasTgt = tgt !== undefined && tgt !== '';
+        const tgtVal = hasTgt ? parseFloat(tgt) : null;
+        const drift = hasTgt ? p.pct - tgtVal : null;
+        const absDrift = drift !== null ? Math.abs(drift) : null;
+        const badge = drift === null
+          ? ''
+          : absDrift > 5
+            ? `<span style="background:#ef444422;color:#ef4444;border:1px solid #ef4444;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:700">⚠ ${drift>0?'+':''}${drift.toFixed(1)}%</span>`
+            : `<span style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:700">✓</span>`;
+        return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #374151">
+          <span style="font-weight:700;color:#f9fafb;font-size:13px;min-width:52px">${p.sym}</span>
+          <span style="font-size:11px;color:#9ca3af;min-width:44px">${p.pct.toFixed(1)}%</span>
+          <div style="display:flex;align-items:center;gap:4px;flex:1">
+            <input type="number" min="0" max="100" step="0.1" placeholder="0"
+              value="${hasTgt ? tgtVal : ''}"
+              onchange="setRebalTarget('${p.sym}', this.value)"
+              style="width:62px;background:#111827;color:#f9fafb;border:1px solid #374151;border-radius:6px;padding:5px 8px;font-size:13px;outline:none;text-align:right">
+            <span style="font-size:11px;color:#6b7280">%</span>
+          </div>
+          ${badge}
+        </div>`;
+      }).join('')}
+      <button onclick="checkRebalancingTargets()"
+        style="margin-top:12px;width:100%;padding:10px;background:transparent;border:1px solid #f59e0b;border-radius:8px;color:#f59e0b;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">
+        ZKONTROLOVAT
+      </button>
     </div>
   </div>`;
 
