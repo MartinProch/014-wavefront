@@ -2125,6 +2125,28 @@ async function fetchTicker(sym) {
   } catch(e2) {
     console.warn('[chart] Railway fallback failed:', e2.message);
   }
+  // 3. FMP historical price fallback
+  try {
+    const to   = new Date().toISOString().slice(0, 10);
+    const from = new Date(Date.now() - 5 * 365.25 * 86400000).toISOString().slice(0, 10);
+    const res = await fetchWithTimeout(
+      `https://financialmodelingprep.com/api/v3/historical-price-full/${sym}?from=${from}&to=${to}&apikey=${FMP_KEY}`,
+      15000
+    );
+    if (!res.ok) throw new Error(`FMP HTTP ${res.status}`);
+    const j = await res.json();
+    const hist = j?.historical;
+    if (!hist?.length) throw new Error('FMP: no data');
+    // FMP returns newest first, reverse to oldest first
+    const bars = hist.reverse().map(d => ({
+      date: new Date(d.date),
+      o: d.open, h: d.high, l: d.low, c: d.close, v: d.volume,
+    }));
+    if (bars.length) { setCached(sym, bars); return bars; }
+  } catch(e3) {
+    console.warn('[chart] FMP fallback failed:', e3.message);
+  }
+
   // Offline fallback: use cached bars if available
   try {
     const cached = JSON.parse(localStorage.getItem('wfm_bars_cache') || '{}');
@@ -2132,7 +2154,7 @@ async function fetchTicker(sym) {
       showToast(`${sym}: showing cached data`);
       return cached[sym];
     }
-  } catch(e3) {}
+  } catch(e4) {}
   throw new Error('No data available');
 }
 
@@ -2178,21 +2200,123 @@ async function fetchEarningsDividends(sym) {
   if (state.overlays.earn || state.overlays.div) redrawChart();
 }
 
+function fmpToYahooFormat(profile, quote, metrics, ratios, income, sym) {
+  const p = Array.isArray(profile) ? profile[0] : profile || {};
+  const q = Array.isArray(quote) ? quote[0] : quote || {};
+  const m = Array.isArray(metrics) ? metrics[0] : metrics || {};
+  const r = Array.isArray(ratios) ? ratios[0] : ratios || {};
+  const inc = Array.isArray(income) ? income[0] : income || {};
+
+  return {
+    _source: 'fmp',
+    defaultKeyStatistics: {
+      trailingEps:         { raw: q.eps },
+      forwardEps:          { raw: q.epsForward },
+      trailingPE:          { raw: q.pe },
+      forwardPE:           { raw: q.priceEarningsRatioTTM || m.peRatioTTM },
+      priceToBook:         { raw: r.pbRatioTTM },
+      enterpriseValue:     { raw: q.marketCap },
+      floatShares:         { raw: p.floatShares },
+      sharesOutstanding:   { raw: p.sharesOutstanding },
+      shortPercentOfFloat: { raw: null },
+      beta:                { raw: p.beta },
+    },
+    summaryDetail: {
+      marketCap:            { raw: q.marketCap || p.mktCap },
+      trailingPE:           { raw: q.pe },
+      forwardPE:            { raw: q.priceEarningsRatioTTM },
+      dividendYield:        { raw: p.lastDiv && q.price ? p.lastDiv / q.price : null },
+      dividendRate:         { raw: p.lastDiv },
+      fiveYearAvgDividendYield: { raw: null },
+      payoutRatio:          { raw: r.dividendPayoutRatioTTM },
+      beta:                 { raw: p.beta },
+      volume:               { raw: q.volume },
+      averageVolume:        { raw: q.avgVolume },
+      fiftyTwoWeekHigh:     { raw: q.yearHigh },
+      fiftyTwoWeekLow:      { raw: q.yearLow },
+      regularMarketPrice:   { raw: q.price },
+    },
+    financialData: {
+      currentPrice:           { raw: q.price },
+      targetMeanPrice:        { raw: q.priceAvg200 },
+      targetHighPrice:        { raw: q.yearHigh },
+      targetLowPrice:         { raw: q.yearLow },
+      recommendationKey:      (q.pe && q.pe < 15) ? 'buy' : (q.pe && q.pe > 30) ? 'hold' : 'hold',
+      numberOfAnalystOpinions:{ raw: null },
+      totalRevenue:           { raw: inc.revenue },
+      grossProfits:           { raw: inc.grossProfit },
+      totalCash:              { raw: null },
+      totalDebt:              { raw: null },
+      currentRatio:           { raw: r.currentRatioTTM },
+      returnOnAssets:         { raw: r.returnOnAssetsTTM },
+      returnOnEquity:         { raw: r.returnOnEquityTTM },
+      earningsGrowth:         { raw: null },
+      revenueGrowth:          { raw: null },
+      grossMargins:           { raw: r.grossProfitMarginTTM },
+      operatingMargins:       { raw: r.operatingProfitMarginTTM },
+      profitMargins:          { raw: r.netProfitMarginTTM },
+      freeCashflow:           { raw: null },
+      operatingCashflow:      { raw: null },
+    },
+    price: {
+      regularMarketPrice:         { raw: q.price },
+      regularMarketChange:        { raw: q.change },
+      regularMarketChangePercent: { raw: q.changesPercentage / 100 },
+      shortName:  p.companyName,
+      symbol:     sym,
+      sector:     p.sector,
+      industry:   p.industry,
+    },
+    assetProfile: {
+      longBusinessSummary: p.description,
+      sector:              p.sector,
+      industry:            p.industry,
+      website:             p.website,
+      fullTimeEmployees:   p.fullTimeEmployees,
+      country:             p.country,
+    }
+  };
+}
+
 async function fetchFundamentals(sym) {
   if (state.fundamentals[sym] && !state.fundamentals[sym].error) return state.fundamentals[sym].data;
   const cached = getCachedFund(sym);
   if (cached) { state.fundamentals[sym] = { data: cached }; return cached; }
   if (state.fundLoading[sym]) return state.fundLoading[sym];
+
   const p = (async () => {
-    const r = await fetch(FUND_API(sym));
-    const j = await r.json();
-    if (!r.ok || j.error) throw new Error(j.error || `HTTP ${r.status}`);
-    const result = j?.quoteSummary?.result?.[0];
-    if (!result) throw new Error('Empty');
+    // Try Railway first (8s timeout)
+    try {
+      const r = await fetchWithTimeout(FUND_API(sym), 8000);
+      const j = await r.json();
+      if (!r.ok || j.error) throw new Error(j.error || `HTTP ${r.status}`);
+      const result = j?.quoteSummary?.result?.[0];
+      if (!result) throw new Error('Empty');
+      state.fundamentals[sym] = { data: result };
+      setCachedFund(sym, result);
+      return result;
+    } catch(railwayErr) {
+      console.warn('[fund] Railway failed, trying FMP fallback:', railwayErr.message);
+    }
+
+    // FMP fallback
+    const [profileRes, quoteRes, metricsRes, ratiosRes, incomeRes] = await Promise.all([
+      fetch(`https://financialmodelingprep.com/api/v3/profile/${sym}?apikey=${FMP_KEY}`),
+      fetch(`https://financialmodelingprep.com/api/v3/quote/${sym}?apikey=${FMP_KEY}`),
+      fetch(`https://financialmodelingprep.com/api/v3/key-metrics-ttm/${sym}?apikey=${FMP_KEY}`),
+      fetch(`https://financialmodelingprep.com/api/v3/ratios-ttm/${sym}?apikey=${FMP_KEY}`),
+      fetch(`https://financialmodelingprep.com/api/v3/income-statement/${sym}?limit=1&apikey=${FMP_KEY}`)
+    ]);
+    const [profile, quote, metrics, ratios, income] = await Promise.all([
+      profileRes.json(), quoteRes.json(), metricsRes.json(), ratiosRes.json(), incomeRes.json()
+    ]);
+
+    const result = fmpToYahooFormat(profile, quote, metrics, ratios, income, sym);
     state.fundamentals[sym] = { data: result };
     setCachedFund(sym, result);
     return result;
   })();
+
   state.fundLoading[sym] = p;
   try { return await p; } finally { delete state.fundLoading[sym]; }
 }
