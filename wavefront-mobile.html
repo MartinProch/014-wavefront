@@ -3034,7 +3034,7 @@ function renderWaveCountdown(wave) {
 }
 
 function renderConfidence(conf) {
-  if (!conf) return '';
+  if (!conf || typeof conf !== 'object' || !Array.isArray(conf.rules)) return '';
   const { score, rules } = conf;
   const col = score >= 70 ? 'var(--green)' : score >= 45 ? 'var(--gold)' : 'var(--red)';
   const tier = score >= 70 ? 'HIGH' : score >= 45 ? 'MEDIUM' : 'LOW';
@@ -5573,6 +5573,15 @@ function redrawChart() {
 
   // ── Wave pivots ───────────────────────────────────────────────────────────
   try {
+    if (state.overlays.waves && !state.waves[state.selected]) {
+      // Debug: waves ON but no detection result
+      ctx.save();
+      ctx.font = '10px JetBrains Mono';
+      ctx.fillStyle = 'rgba(255,100,100,0.7)';
+      ctx.textAlign = 'left';
+      ctx.fillText('WAVES: no detection (bars=' + bars.length + ')', cL + 4, cT + 14);
+      ctx.restore();
+    }
     if (state.overlays.waves && state.waves[state.selected]) {
       const hlW = _hlKey === 'waves';
       const wave = state.waves[state.selected]?.primary || state.waves[state.selected];
@@ -5775,7 +5784,7 @@ function redrawChart() {
 
       ctx.restore();
     }
-  } catch(e) { ctx.restore(); }
+  } catch(e) { console.error('[waves draw]', e); ctx.restore(); }
 
   // ── Sub-waves ──────────────────────────────────────────────────────────────
   try {
@@ -8769,8 +8778,11 @@ async function fetchVix() {
 }
 
 // ─── WAVE CONFIDENCE ─────────────────────────────────────────────────────────
-function computeWaveConfidence(wave) {
+function _waveScoreSimple(wave) {
   if (!wave) return 0;
+  const conf = wave.confidence;
+  if (conf && typeof conf === 'object') return conf.score ?? 50;
+  if (typeof conf === 'number') return conf;
   let score = 50;
   if (wave.pattern === 'IMPULSE' && wave.waveData) {
     const { w1,w3,w5 } = wave.waveData;
@@ -9010,7 +9022,7 @@ function renderForecast() {
       <div style="display:grid;grid-template-columns:repeat(${tfResults.length},1fr);gap:4px">`;
     tfResults.forEach(({ tf, wave: w, active }) => {
       const col = w.direction === 'up' ? '#00e676' : '#ff5252';
-      const conf = computeWaveConfidence(w);
+      const conf = _waveScoreSimple(w);
       html += `<div style="background:${col}0f;border:1px solid ${col}${active?'88':'33'};border-radius:6px;padding:6px;text-align:center;cursor:pointer"
         onclick="state.timeframe='${tf}';state.waves[state.selected]=detectWaves(filterBars(state.data[state.selected].bars,'${tf}'));computeMTF(state.selected);redrawChart();renderForecast()">
         <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${active?col:'var(--muted)'}${active?';font-weight:700':''}">${tf}${active?' ●':''}</div>
@@ -9081,7 +9093,7 @@ function renderSignals() {
     const fd     = (state.fundamentals[sym] && !state.fundamentals[sym].error) ? state.fundamentals[sym].data : null;
     const fc     = wave ? buildForecast(wave, last.c, fd) : null;
     const isUp   = wave?.direction === 'up';
-    const conf   = computeWaveConfidence(wave);
+    const conf   = _waveScoreSimple(wave);
     const inBuyZone  = fc && fc.buyLow  != null && last.c >= fc.buyLow  && last.c <= fc.buyHigh;
     const inSellZone = fc && fc.sellLow != null && last.c >= fc.sellLow && last.c <= fc.sellHigh;
     const inZone = inBuyZone || inSellZone;
@@ -9158,7 +9170,7 @@ function renderScreener() {
   }
 
   const rows = results.map((r,i) => {
-    const confScore = r.wave?.confidence?.score ?? r.wave?.confidence ?? computeWaveConfidence(r.wave);
+    const confScore = r.wave?.confidence?.score ?? _waveScoreSimple(r.wave);
     const conf = confScore != null ? confScore+'%' : '—';
     const tgt = r.nextTarget != null ? '$'+fmtPrice(r.nextTarget) : '—';
     const scoreColor = r.score >= 85 ? 'var(--green)' : r.score >= 60 ? 'var(--gold)' : 'var(--muted)';
