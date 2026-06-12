@@ -14296,7 +14296,7 @@ async function renderEarnHistory() {
 
 // ─── SEASONALITY ─────────────────────────────────────────────────────────────
 async function renderSeasonality() {
-  const sym = state.ticker;
+  const sym = state.selected;
   const el = document.getElementById('season-content');
   if (!el) return;
   if (!sym) {
@@ -14305,14 +14305,14 @@ async function renderSeasonality() {
   }
   el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Načítám data…</div>';
 
-  let bars = state.bars || [];
+  let bars = state.data[sym]?.bars || [];
 
   const monthReturns = Array.from({length: 12}, () => []);
   const monthNames = ['Led','Úno','Bře','Dub','Kvě','Čer','Čvc','Srp','Zář','Říj','Lis','Pro'];
 
   const byYearMonth = {};
   bars.forEach(b => {
-    const d = new Date(b.t);
+    const d = b.date instanceof Date ? b.date : new Date(b.date);
     const key = `${d.getFullYear()}-${d.getMonth()}`;
     if (!byYearMonth[key]) byYearMonth[key] = [];
     byYearMonth[key].push(b);
