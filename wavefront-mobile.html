@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Wavefront</title>
+<title>u-markets</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -1333,7 +1333,7 @@ strong { font-weight: 600; }
   </div>
   <!-- HEADER -->
   <div id="header">
-    <div id="logo">WF</div>
+    <div id="logo">U</div>
     <div id="header-ticker" onclick="switchTab('chart')" ontouchend="switchTab('chart');event.preventDefault();" style="cursor:pointer">
       <div id="header-sym">—</div>
       <div id="header-price"></div>
@@ -9388,7 +9388,7 @@ async function shareChart() {
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({
-          title: `${sym} — Wavefront`,
+          title: `${sym} — u-markets`,
           text: `Elliott Wave analýza: ${sym}`,
           files: [file]
         });
@@ -13778,7 +13778,7 @@ function checkAlerts() {
     showToast(`🔔 ALERT: ${t.sym} hit $${fmtPrice(t.price)}! (now $${fmtPrice(t.cur)})`, 5000);
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
-        new Notification(`Wavefront Alert: ${t.sym}`, {
+        new Notification(`u-markets Alert: ${t.sym}`, {
           body: `Cena dosáhla $${fmtPrice(t.price)} (nyní $${fmtPrice(t.cur)})`,
           icon: '/icon.png'
         });
@@ -14461,7 +14461,7 @@ function renderBacktest() {
 const ONBOARDING_VERSION = 2;
 
 const ONBOARDING_SLIDES = [
-  { icon: '🌊', title: 'Vítej ve Wavefront', desc: 'Mobilní terminál pro Elliott Wave analýzu akcií. Sleduj vlny, plánuj obchody a sleduj trh v reálném čase.' },
+  { icon: '🌊', title: 'Vítej v u-markets', desc: 'Mobilní terminál pro Elliott Wave analýzu akcií. Sleduj vlny, plánuj obchody a sleduj trh v reálném čase.' },
   { icon: '📈', title: 'Graf & Overlays', desc: 'Přepínej timeframe pilulkami (1W–5Y). Zapni WAVES, FIB, BB nebo MACD. Pinch pro zoom, swipe pro přechod na další ticker.' },
   { icon: '🌊', title: 'Elliott Wave analýza', desc: 'Záložka Analysis → WAVE STRUCTURE. Confidence score, Fibonacci cíle, Wave Countdown a multi-timeframe potvrzení.' },
   { icon: '🔔', title: 'Price Alerty', desc: 'Klepni na 🔔 pod grafem → nastav cílovou cenu. Dostaneš notifikaci když cena dosáhne tvého cíle.' },
@@ -14511,7 +14511,7 @@ function renderOnboardingSlide() {
   const s = _onboardingSlides[_onboardingIdx];
   const total = _onboardingSlides.length;
   const label = _onboardingIsWhatsNew
-    ? `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;color:#3b82f6;margin-bottom:16px;text-transform:uppercase">Co je nového v Wavefront</div>`
+    ? `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;color:#3b82f6;margin-bottom:16px;text-transform:uppercase">Co je nového v u-markets</div>`
     : '';
   const newBadge = s.isNew
     ? `<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;color:#22c55e;border:1px solid #22c55e44;background:#22c55e11;padding:2px 6px;border-radius:4px;margin-bottom:8px">NEW</span>`
@@ -14722,7 +14722,7 @@ function fireTechnicalAlerts(sym, bars) {
 
     // Web Notification
     if ('Notification' in window && Notification.permission === 'granted') {
-      try { new Notification(`Wavefront: ${sym}`, { body: alert.msg }); } catch(e) {}
+      try { new Notification(`u-markets: ${sym}`, { body: alert.msg }); } catch(e) {}
     }
 
     // Mark as fired

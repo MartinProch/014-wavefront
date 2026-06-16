@@ -1,9 +1,5 @@
 {
   "appId": "com.wavefront.app",
-  "appName": "Wavefront",
-  "webDir": "www",
-  "server": {
-    "url": "https://wavefront-production.up.railway.app",
-    "cleartext": false
-  }
+  "appName": "u-markets",
+  "webDir": "www"
 }

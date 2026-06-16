@@ -2,6 +2,34 @@
 
 Single-file app: `wavefront-mobile.html` (~18 000 řádků), vanilla JS + Canvas 2D, Capacitor Android WebView.
 
+## Rebrand na "u-markets" (2026-06-16)
+
+App se navenek jmenuje **u-markets** (design od Claude Design, dodaný jako `udandu (2).zip`).
+Vnitřní identifikátory (`com.wavefront.app` applicationId, git repo název, JS proměnné/komentáře
+s "wavefront") se **NEMĚNILY** — jen user-facing branding, aby se nerozbilo signing/keystore
+existující instalace appky.
+
+**Co se změnilo:**
+- `capacitor.config.json` → `appName: "u-markets"`
+- `wavefront-mobile.html` → `<title>`, `#logo` badge (`WF`→`U`), onboarding text, notifikace
+- `android/app/src/main/res/` (ikony, splash, `strings.xml` app_name) — **POZOR: `android/` je
+  v `.gitignore`!** Tyto změny nejsou v gitu. Pokud se `android/` adresář někdy regeneruje
+  od nuly (`npx cap add android` apod.), branding se ztratí a musí se znovu aplikovat ze
+  zdrojových assetů.
+
+**Zdrojové assety jsou trvale uložené v `branding/u-markets/`** (tracked v gitu, kopie z
+`udandu (2).zip`) — `svg/icon.svg` (master vektor), `android/playstore-512.png` (master pro
+legacy ikony), `android/adaptive/ic_launcher_foreground.png` (transparentní pro adaptive icon),
+`splash/android-1440x2960.png` (zdroj pro splash). Barevné tokeny: ink `#1A1D24`, cream
+`#F4EFE6`, amber `#D99441`, amberDeep `#B8722A`, paper `#EBE4D4`.
+
+Pokud bude potřeba znovu vygenerovat `android/app/src/main/res/mipmap-*` a `drawable*/splash.png`
+z těchto zdrojů, postup byl: PIL resize `playstore-512.png` → `ic_launcher.png` per density,
+circle-crop stejného masteru → `ic_launcher_round.png`, resize `ic_launcher_foreground.png`
+→ adaptive foreground per density, `ic_launcher_background` color → `#F4EFE6`. Splash:
+crop logo+wordmark oblast ze zdrojového `android-1440x2960.png`, vycentrovat na ink (`#1A1D24`)
+canvas v cílové velikosti (~22 % výšky canvasu).
+
 ## Známé bug patterny — VŽDY zkontroluj před commitem
 
 ### 1. `state.ticker` neexistuje — NIKDY se nikde nepřiřazuje
