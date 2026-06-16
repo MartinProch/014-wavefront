@@ -171,16 +171,18 @@
     var res = await doFetch(url);
     var text = await res.text();
     var json;
-    try { json = JSON.parse(text); } catch (e) {
-      throw new Error('FMP: invalid JSON response (status ' + res.status + ')');
-    }
+    try { json = JSON.parse(text); } catch (e) { json = null; }
     // FMP signals rate-limit/quota issues via HTTP 429 ("Limit Reach") or
-    // HTTP 402 ("Premium Query Parameter" — param exceeds plan tier), both
-    // with an {"Error Message": "..."} body even though it's not a 2xx.
+    // HTTP 402 ("Premium Query Parameter" — param exceeds plan tier). Most
+    // endpoints wrap this in a {"Error Message": "..."} JSON body, but some
+    // (observed on /stable/analyst-estimates with period=quarter) return
+    // PLAIN TEXT instead — checking status BEFORE requiring valid JSON means
+    // those still trigger failover instead of bubbling as a generic parse error.
     if (res.status === 429 || res.status === 402) {
-      throw rateLimitError('FMP: ' + (json && json['Error Message'] ? json['Error Message'] : ('HTTP ' + res.status)));
+      throw rateLimitError('FMP: ' + (json && json['Error Message'] ? json['Error Message'] : (text || ('HTTP ' + res.status))));
     }
-    if (json && json['Error Message']) {
+    if (!json) throw new Error('FMP: invalid JSON response (status ' + res.status + ')');
+    if (json['Error Message']) {
       var msg = json['Error Message'];
       if (/limit|premium/i.test(msg)) throw rateLimitError('FMP: ' + msg);
       throw new Error('FMP error: ' + msg);
@@ -312,6 +314,39 @@
         var epsHistory = Array.isArray(is) ? is.map(function (x) { return x.eps; }) : [];
         return { roe: roe, debtEq: debtEq, opMargin: opMargin, netMargin: netMargin, fcfYield: fcfYield, currentRatio: currentRatio, peRatio: peRatio, epsHistory: epsHistory, source: 'FMP' };
       },
+      // FUND/VALHIST — up to 5 years of P/E, P/B, P/S, P/FCF for the
+      // valuation-history chart. Returns the raw key-metrics array (newest
+      // first, like FMP normally returns it) so callers can keep slicing/
+      // reversing exactly as before — only the data source changes.
+      getValuationHistory: async function (symbol) {
+        var json = await fmpRequest('https://financialmodelingprep.com/stable/key-metrics?symbol=' + symbol + '&limit=5&apikey=' + FMP_KEY);
+        if (!Array.isArray(json) || !json.length) throw new Error('FMP: no valuation history');
+        return json;
+      },
+      // FUND/EARNTREND — quarterly EPS/revenue history + forward analyst
+      // estimates. Same 2 calls renderEarnTrend already made directly;
+      // moved here so Finnhub can stand in when FMP is rate-limited.
+      getEarningsTrend: async function (symbol) {
+        var BASE = 'https://financialmodelingprep.com/stable';
+        var settled = await Promise.allSettled([
+          fmpRequest(BASE + '/income-statement?symbol=' + symbol + '&period=quarter&limit=5&apikey=' + FMP_KEY),
+          fmpRequest(BASE + '/analyst-estimates?symbol=' + symbol + '&period=quarter&limit=3&apikey=' + FMP_KEY),
+        ]);
+        var rateLimited = settled.find(function (r) { return r.status === 'rejected' && r.reason && r.reason.isRateLimit; });
+        if (rateLimited) throw rateLimitError('FMP: ' + rateLimited.reason.message);
+        var otherFail = settled.find(function (r) { return r.status === 'rejected'; });
+        if (otherFail) throw otherFail.reason;
+        return { hist: Array.isArray(settled[0].value) ? settled[0].value : [], fwd: Array.isArray(settled[1].value) ? settled[1].value : [], source: 'FMP' };
+      },
+      // FUND/INSTITUTIONAL — ownership percentages. No Finnhub equivalent
+      // exists on the free tier (verified: /stock/ownership returns HTTP 403
+      // "no access to this resource" even outside rate-limit conditions), so
+      // this stays FMP-only; the orchestrator just clears the error sooner.
+      getInstitutionalOwnership: async function (symbol) {
+        var json = await fmpRequest('https://financialmodelingprep.com/stable/key-metrics?symbol=' + symbol + '&limit=1&apikey=' + FMP_KEY);
+        if (!Array.isArray(json) || !json.length) throw new Error('FMP: no institutional ownership data');
+        return { holders: [], stats: json };
+      },
     };
 
     var finnhubProvider = {
@@ -387,6 +422,42 @@
           epsHistory: [],
           source: 'Finnhub',
         };
+      },
+      // metric=all's series.annual carries multi-year pe/pb/ps/pfcf arrays
+      // (each {period, v}) — merge them by period into the same field names
+      // FMP's key-metrics uses (peRatio/pbRatio/priceToSalesRatio/
+      // priceToFreeCashFlowsRatio) so renderValHist needs no changes.
+      getValuationHistory: async function (symbol) {
+        var json = await finnhubRequest('https://finnhub.io/api/v1/stock/metric?symbol=' + symbol + '&metric=all&token=' + FINNHUB_API_KEY);
+        var ann = (json && json.series && json.series.annual) || {};
+        if (!ann.pe && !ann.pb && !ann.ps && !ann.pfcf) throw new Error('Finnhub: no annual valuation series');
+        var byPeriod = {};
+        function merge(arr, field) {
+          (arr || []).forEach(function (pt) {
+            if (!byPeriod[pt.period]) byPeriod[pt.period] = { date: pt.period };
+            byPeriod[pt.period][field] = pt.v;
+          });
+        }
+        merge(ann.pe, 'peRatio');
+        merge(ann.pb, 'pbRatio');
+        merge(ann.ps, 'priceToSalesRatio');
+        merge(ann.pfcf, 'priceToFreeCashFlowsRatio');
+        return Object.keys(byPeriod).map(function (k) { return byPeriod[k]; }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+      },
+      // Finnhub free tier has no forward analyst estimates (fwd stays empty)
+      // and no quarterly revenue/margin breakdown — only actual reported EPS
+      // per quarter via /stock/earnings. Degraded but real: the EPS bar chart
+      // still renders, revenue/margin sections show "No data" instead of crashing.
+      getEarningsTrend: async function (symbol) {
+        var json = await finnhubRequest('https://finnhub.io/api/v1/stock/earnings?symbol=' + symbol + '&token=' + FINNHUB_API_KEY);
+        if (!Array.isArray(json) || !json.length) throw new Error('Finnhub: no earnings history');
+        // Newest-first, matching FMP's raw income-statement order — the
+        // caller (renderEarnTrend) always does its own .reverse() afterward.
+        var hist = json
+          .filter(function (r) { return r.actual != null; })
+          .sort(function (a, b) { return a.period < b.period ? 1 : -1; })
+          .map(function (r) { return { date: r.period, eps: r.actual, revenue: null, grossProfit: null, operatingIncome: null }; });
+        return { hist: hist, fwd: [], source: 'Finnhub' };
       },
     };
 
@@ -488,6 +559,18 @@
   function fetchQualityMetricsWithFailover(symbol, providers) {
     return tryProvidersInOrder(providers, 'getQualityMetrics', [symbol]);
   }
+  function fetchValuationHistoryWithFailover(symbol, providers) {
+    return tryProvidersInOrder(providers, 'getValuationHistory', [symbol]);
+  }
+  function fetchEarningsTrendWithFailover(symbol, providers) {
+    return tryProvidersInOrder(providers, 'getEarningsTrend', [symbol]);
+  }
+  // Only FMP implements this (no Finnhub free-tier equivalent) — kept as a
+  // failover call anyway so the call site is consistent with the other FUND
+  // tabs and ready if a future provider adds ownership data.
+  function fetchInstitutionalOwnershipWithFailover(symbol, providers) {
+    return tryProvidersInOrder(providers, 'getInstitutionalOwnership', [symbol]);
+  }
 
   var api = {
     RateLimiter: RateLimiter,
@@ -500,6 +583,9 @@
     fetchHistoricalBarsWithFailover: fetchHistoricalBarsWithFailover,
     fetchFundamentalsWithFailover: fetchFundamentalsWithFailover,
     fetchQualityMetricsWithFailover: fetchQualityMetricsWithFailover,
+    fetchValuationHistoryWithFailover: fetchValuationHistoryWithFailover,
+    fetchEarningsTrendWithFailover: fetchEarningsTrendWithFailover,
+    fetchInstitutionalOwnershipWithFailover: fetchInstitutionalOwnershipWithFailover,
     setFailoverLogger: setFailoverLogger,
     setFetchImpl: setFetchImpl,
     clearHttpCache: clearHttpCache,

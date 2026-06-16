@@ -9,6 +9,9 @@ const {
   fetchHistoricalBarsWithFailover,
   fetchFundamentalsWithFailover,
   fetchQualityMetricsWithFailover,
+  fetchValuationHistoryWithFailover,
+  fetchEarningsTrendWithFailover,
+  fetchInstitutionalOwnershipWithFailover,
   setFailoverLogger,
   setFetchImpl,
   clearHttpCache,
@@ -37,6 +40,14 @@ function jsonResponse(status, body) {
     ok: status >= 200 && status < 300,
     json: async () => body,
     text: async () => JSON.stringify(body),
+  });
+}
+function textResponse(status, body) {
+  return Promise.resolve({
+    status,
+    ok: status >= 200 && status < 300,
+    json: async () => { throw new Error('not JSON'); },
+    text: async () => body,
   });
 }
 
@@ -100,6 +111,17 @@ async function main() {
     });
     const q = await fetchQuoteWithFailover('MSFT', freshProviders());
     assert.strictEqual(q.source, 'Finnhub');
+  });
+
+  await test('FMP HTTP 402 with a PLAIN TEXT body (not JSON) still triggers failover (real bug: /stable/analyst-estimates returns plain text on this plan)', async () => {
+    setFetchImpl(async (url) => {
+      if (url.includes('financialmodelingprep.com')) {
+        return textResponse(402, "Premium Query Parameter: 'Special Endpoint : This value set for 'period' is not available under your current subscription");
+      }
+      return jsonResponse(200, { c: 10, d: 0, dp: 0 });
+    });
+    const q = await fetchQuoteWithFailover('MSFT', freshProviders());
+    assert.strictEqual(q.source, 'Finnhub', 'a non-JSON 402 body must still be classified as a rate-limit, not bubble as a generic parse error');
   });
 
   await test('FMP and Finnhub both rate-limited → falls through to Twelve Data', async () => {
@@ -285,6 +307,55 @@ async function main() {
     assert.strictEqual(q.debtEq, 0.3);
     assert.strictEqual(q.currentRatio, 1.8);
     assert.strictEqual(q.fcfYield, 4); // 100 / 25
+  });
+
+  await test('Valuation History (FUND/VALHIST): FMP rate-limited → Finnhub series.annual merges pe/pb/ps/pfcf by period', async () => {
+    setFetchImpl(async (url) => {
+      if (url.includes('financialmodelingprep.com')) return jsonResponse(429, { 'Error Message': 'Limit Reach' });
+      if (url.includes('stock/metric')) {
+        return jsonResponse(200, { series: { annual: {
+          pe: [{ period: '2025-12-31', v: 30 }, { period: '2024-12-31', v: 28 }],
+          pb: [{ period: '2025-12-31', v: 40 }, { period: '2024-12-31', v: 38 }],
+          ps: [{ period: '2025-12-31', v: 8 }, { period: '2024-12-31', v: 7.5 }],
+          pfcf: [{ period: '2025-12-31', v: 25 }, { period: '2024-12-31', v: 24 }],
+        } } });
+      }
+      throw new Error('unexpected provider called: ' + url);
+    });
+    const rows = await fetchValuationHistoryWithFailover('AAPL', freshProviders());
+    assert.strictEqual(rows.length, 2);
+    assert.strictEqual(rows[0].date, '2025-12-31', 'must be sorted newest-first like FMP key-metrics');
+    assert.strictEqual(rows[0].peRatio, 30);
+    assert.strictEqual(rows[0].pbRatio, 40);
+    assert.strictEqual(rows[0].priceToSalesRatio, 8);
+    assert.strictEqual(rows[0].priceToFreeCashFlowsRatio, 25);
+  });
+
+  await test('Earnings Trend (FUND/EARNTREND): FMP rate-limited → Finnhub /stock/earnings fills actual EPS history (fwd stays empty, no forward estimates on free tier)', async () => {
+    setFetchImpl(async (url) => {
+      if (url.includes('financialmodelingprep.com')) return jsonResponse(429, { 'Error Message': 'Limit Reach' });
+      if (url.includes('stock/earnings')) {
+        return jsonResponse(200, [
+          { period: '2026-03-31', actual: 2.01, estimate: 1.98 },
+          { period: '2025-12-31', actual: 2.84, estimate: 2.73 },
+        ]);
+      }
+      throw new Error('unexpected provider called: ' + url);
+    });
+    const trend = await fetchEarningsTrendWithFailover('AAPL', freshProviders());
+    assert.strictEqual(trend.source, 'Finnhub');
+    assert.strictEqual(trend.hist.length, 2);
+    assert.strictEqual(trend.hist[0].date, '2026-03-31', 'hist must be sorted newest-first to match FMP raw shape (caller reverses itself)');
+    assert.strictEqual(trend.hist[0].eps, 2.01);
+    assert.deepStrictEqual(trend.fwd, []);
+  });
+
+  await test('Institutional Ownership (FUND/INSTITUTIONAL): no Finnhub equivalent on free tier → error bubbles instead of hanging', async () => {
+    setFetchImpl(async (url) => {
+      if (url.includes('financialmodelingprep.com')) return jsonResponse(429, { 'Error Message': 'Limit Reach' });
+      throw new Error('unexpected provider called: ' + url);
+    });
+    await assert.rejects(() => fetchInstitutionalOwnershipWithFailover('AAPL', freshProviders()), /Limit Reach/);
   });
 
   await test('Shared HTTP cache: identical URL within TTL is served from cache, not a fresh network call', async () => {
