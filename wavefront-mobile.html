@@ -1334,13 +1334,13 @@ strong { font-weight: 600; }
   <!-- HEADER -->
   <div id="header">
     <div id="logo">WF</div>
-    <div id="header-ticker" onclick="switchTab('watchlist')" ontouchend="switchTab('watchlist')" style="cursor:pointer">
+    <div id="header-ticker" onclick="switchTab('chart')" ontouchend="switchTab('chart');event.preventDefault();" style="cursor:pointer">
       <div id="header-sym">—</div>
       <div id="header-price"></div>
     </div>
     <div id="header-actions">
       <div id="portfolio-pnl-badge" style="display:flex;align-items:center;gap:2px;font-family:'JetBrains Mono',monospace;padding:2px 5px;border:1px solid var(--border);border-radius:4px;font-size:9px;flex-shrink:0"></div>
-      <div id="vix-badge" style="display:flex;align-items:center;gap:2px;font-family:'JetBrains Mono',monospace;padding:2px 5px;border:1px solid var(--border);border-radius:4px;font-size:9px;flex-shrink:0"></div>
+      <div id="vix-badge" ontouchend="switchTab('fund');switchFundSubtab('mktctx');event.preventDefault();" onclick="switchTab('fund');switchFundSubtab('mktctx');" style="display:flex;align-items:center;gap:2px;font-family:'JetBrains Mono',monospace;padding:2px 5px;border:1px solid var(--border);border-radius:4px;font-size:9px;flex-shrink:0;cursor:pointer"></div>
       <div id="live-badge" style="display:none">● LIVE</div>
       <button class="hdr-btn" onclick="openSearch()" title="Search ticker">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -1408,7 +1408,7 @@ strong { font-weight: 600; }
         <button class="ov-btn is-on" data-key="fibs"   data-color="purple">FIB</button>
         <button class="ov-btn is-on" data-key="sr"     data-color="green">S/R</button>
         <button class="ov-btn is-on" data-key="zones"  data-color="blue">ZONES</button>
-        <button class="ov-btn is-on" data-key="vol"    data-color="muted">VOL</button>
+        <button class="ov-btn is-on" data-key="vol"    data-color="blue">VOL</button>
         <button class="ov-btn is-on" data-key="ma50"   data-color="gold">MA50</button>
         <button class="ov-btn is-on" data-key="ma200"  data-color="orange">MA200</button>
         <button class="ov-btn is-on" data-key="ema20"  data-color="blue">EMA20</button>
@@ -1418,8 +1418,8 @@ strong { font-weight: 600; }
         <button class="ov-btn"       data-key="macd"   data-color="blue">MACD</button>
         <button class="ov-btn"       data-key="vwap"   data-color="purple">VWAP</button>
         <button class="ov-btn"       data-key="econ"   data-color="gold">ECON</button>
-        <button class="ov-btn"       data-key="chan"   data-color="muted">CHAN</button>
-        <button class="ov-btn"       data-key="vp"     data-color="muted">V.PROFILE</button>
+        <button class="ov-btn"       data-key="chan"   data-color="blue">CHAN</button>
+        <button class="ov-btn"       data-key="vp"     data-color="blue">V.PROFILE</button>
         <button class="ov-btn"       data-key="earn"   data-color="gold">EARN</button>
         <button class="ov-btn"       data-key="div"    data-color="green">DIV</button>
         <button class="ov-btn"       data-key="smc"    data-color="gold">SMC</button>
@@ -1499,6 +1499,7 @@ strong { font-weight: 600; }
     <div id="tab-analysis" class="tab-view">
       <div id="waves-subtab-bar" class="subtab-bar">
         <button class="subtab active" id="ast-analysis" onclick="switchWavesSubtab('analysis')">ANALYSIS</button>
+        <button class="subtab" id="ast-allwaves" onclick="switchWavesSubtab('allwaves')">ALL WAVES</button>
         <button class="subtab" id="ast-forecast" onclick="switchWavesSubtab('forecast')">FORECAST</button>
         <button class="subtab" id="ast-signals" onclick="switchWavesSubtab('signals')">SIGNALS</button>
         <button class="subtab" id="ast-sector" onclick="switchWavesSubtab('sector')">SECTOR</button>
@@ -1525,6 +1526,9 @@ strong { font-weight: 600; }
             <div class="empty-text">SELECT A TICKER<br>TO SEE ANALYSIS</div>
           </div>
         </div>
+      </div>
+      <div id="waves-allwaves-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+        <div id="allwaves-content"><div class="empty-state"><div class="empty-icon">🌊</div><div class="empty-text">LOADING…</div></div></div>
       </div>
       <div id="waves-forecast-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="forecast-content"><div class="empty-state"><div class="empty-icon">🎯</div><div class="empty-text">SELECT A TICKER<br>TO SEE FORECAST</div></div></div>
@@ -1847,8 +1851,494 @@ const RAILWAY_BASE  = 'https://wavefront-production.up.railway.app';
 const POLYGON_KEY   = 'EKXGdUstYgHPIJP47I8lr1i3n9YGLQ4N';
 const POLYGON_BASE  = 'https://api.polygon.io';
 const FMP_KEY       = 'Rfmle5Bf82SFSfcjnaMGciY7NXIfKWak';
+// Fallback data providers — used only when FMP returns a rate-limit/quota error.
+// See "DATA PROVIDER FAILOVER" section below + CLAUDE.md. Same key already used
+// server-side in server.js (.env FINNHUB_KEY) — reused here for the mobile app.
+const FINNHUB_API_KEY      = 'd7qug1hr01qudminibi0d7qug1hr01qudminibig';
+const TWELVE_DATA_API_KEY  = 'bcdb8e333a354847ae810c329e886fda'; // fallback #2 — historical OHLCV + quotes, 800 req/day free tier
+const ALPHA_VANTAGE_API_KEY = ''; // TODO: paste your Alpha Vantage key here (https://www.alphavantage.co/) — fallback #3 (last resort), disabled until filled in
 const IS_CAPACITOR = !!(window.Capacitor?.isNativePlatform?.());
 const IS_LOCAL   = !IS_CAPACITOR && ['localhost','127.0.0.1'].includes(location.hostname);
+
+// ─── DATA PROVIDER FAILOVER ────────────────────────────────────────────────
+// MIRRORS data-providers.js (canonical, tested via `node test-data-providers.js`).
+// Keep both copies in sync — see CLAUDE.md "Data provider failover" section.
+//
+// Order of providers (priority): FMP (primary) -> Finnhub -> Twelve Data -> Alpha Vantage.
+// Failover triggers ONLY on rate-limit / quota-exhausted responses (err.isRateLimit === true).
+// Any other error (network, timeout, malformed response) bubbles up immediately —
+// the caller's existing retry/fallback logic handles those, not this module.
+(function (global) {
+  'use strict';
+
+  function normalizeBar(b) {
+    return {
+      date: b.date instanceof Date ? b.date : new Date(b.date),
+      o: Number(b.o), h: Number(b.h), l: Number(b.l), c: Number(b.c),
+      v: Number(b.v) || 0,
+    };
+  }
+  function normalizeQuote(q) {
+    return {
+      symbol: q.symbol,
+      price: Number(q.price),
+      change: Number(q.change) || 0,
+      changePercent: Number(q.changePercent) || 0,
+      source: q.source,
+    };
+  }
+
+  function RateLimiter(max, windowMs) {
+    this.max = max;
+    this.windowMs = windowMs;
+    this.timestamps = [];
+  }
+  RateLimiter.prototype.tryAcquire = function (now) {
+    now = now || Date.now();
+    this.timestamps = this.timestamps.filter(function (t) { return now - t < this.windowMs; }, this);
+    if (this.timestamps.length >= this.max) return false;
+    this.timestamps.push(now);
+    return true;
+  };
+
+  function CompositeRateLimiter(limiters) {
+    this.limiters = limiters;
+  }
+  CompositeRateLimiter.prototype.tryAcquire = function (now) {
+    now = now || Date.now();
+    var allOk = this.limiters.every(function (l) {
+      l.timestamps = l.timestamps.filter(function (t) { return now - t < l.windowMs; });
+      return l.timestamps.length < l.max;
+    });
+    if (!allOk) return false;
+    this.limiters.forEach(function (l) { l.timestamps.push(now); });
+    return true;
+  };
+
+  var _log = function () {
+    var args = Array.prototype.slice.call(arguments);
+    console.log.apply(console, ['[failover]'].concat(args));
+  };
+  function setFailoverLogger(fn) { _log = fn; }
+
+  var _fetchImpl = (typeof fetch !== 'undefined') ? fetch : null;
+  function setFetchImpl(fn) { _fetchImpl = fn; }
+  function doFetch(url, opts) {
+    if (!_fetchImpl) throw new Error('No fetch implementation available — call setFetchImpl()');
+    return _fetchImpl(url, opts);
+  }
+
+  function rateLimitError(message) {
+    var err = new Error(message);
+    err.isRateLimit = true;
+    return err;
+  }
+
+  // Distinct from a rate limit: provider's plan structurally excludes this
+  // operation (e.g. Finnhub free tier 403s on /stock/candle, always, forever).
+  // Orchestrator treats this the same as a rate limit — skip to next provider.
+  function providerUnavailableError(message) {
+    var err = new Error(message);
+    err.isProviderUnavailable = true;
+    return err;
+  }
+
+  // ── Shared short-TTL HTTP cache ───────────────────────────────────────────
+  // Many FUND sub-tabs (Buffett, Quality, EarnTrend, ValHist...) independently
+  // request OVERLAPPING data for the SAME ticker within minutes of each other
+  // as the user navigates between tabs. Caching successful responses by exact
+  // URL means the 2nd+ tab reuses the 1st tab's response instead of burning
+  // another request. Errors are NEVER cached — a rate-limit must be
+  // re-checked on the next call, not "stuck" for the whole TTL window.
+  var HTTP_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  var _httpCache = new Map();
+  function cached(url, requestFn) {
+    var hit = _httpCache.get(url);
+    if (hit && (Date.now() - hit.ts) < HTTP_CACHE_TTL) return Promise.resolve(hit.value);
+    return requestFn(url).then(function (value) {
+      _httpCache.set(url, { value: value, ts: Date.now() });
+      if (_httpCache.size > 300) _httpCache.delete(_httpCache.keys().next().value);
+      return value;
+    });
+  }
+  function clearHttpCache() { _httpCache.clear(); }
+
+  async function _fmpRequestRaw(url) {
+    var res = await doFetch(url);
+    var text = await res.text();
+    var json;
+    try { json = JSON.parse(text); } catch (e) {
+      throw new Error('FMP: invalid JSON response (status ' + res.status + ')');
+    }
+    if (res.status === 429 || res.status === 402) {
+      throw rateLimitError('FMP: ' + (json && json['Error Message'] ? json['Error Message'] : ('HTTP ' + res.status)));
+    }
+    if (json && json['Error Message']) {
+      var msg = json['Error Message'];
+      if (/limit|premium/i.test(msg)) throw rateLimitError('FMP: ' + msg);
+      throw new Error('FMP error: ' + msg);
+    }
+    if (!res.ok) throw new Error('FMP HTTP ' + res.status);
+    return json;
+  }
+  function fmpRequest(url) { return cached(url, _fmpRequestRaw); }
+
+  async function _finnhubRequestRaw(url) {
+    var res = await doFetch(url);
+    if (res.status === 429) throw rateLimitError('Finnhub: HTTP 429 (rate limited)');
+    // Free tier returns 403 for /stock/candle (historical OHLCV) — permanent
+    // plan restriction, not transient. Skip to next provider, don't dead-end.
+    if (res.status === 403) throw providerUnavailableError('Finnhub: HTTP 403 (not available on this plan)');
+    if (!res.ok) throw new Error('Finnhub HTTP ' + res.status);
+    return res.json();
+  }
+  function finnhubRequest(url) { return cached(url, _finnhubRequestRaw); }
+
+  async function _twelveDataRequestRaw(url) {
+    var res = await doFetch(url);
+    var json = null;
+    try { json = await res.json(); } catch (e) { /* ignore, handled below */ }
+    var quotaMsg = json && json.status === 'error' && /credit|limit/i.test(json.message || '') ? json.message : null;
+    if (res.status === 429 || (json && json.code === 429) || quotaMsg) {
+      throw rateLimitError('Twelve Data: ' + (quotaMsg || (json && json.message) || ('HTTP ' + res.status)));
+    }
+    if (!json) throw new Error('Twelve Data: invalid JSON response (status ' + res.status + ')');
+    if (json.status === 'error') throw new Error('Twelve Data error: ' + json.message);
+    if (!res.ok) throw new Error('Twelve Data HTTP ' + res.status);
+    return json;
+  }
+  function twelveDataRequest(url) { return cached(url, _twelveDataRequestRaw); }
+
+  async function _alphaVantageRequestRaw(url) {
+    var res = await doFetch(url);
+    var json = null;
+    try { json = await res.json(); } catch (e) { /* ignore, handled below */ }
+    if (res.status === 429) throw rateLimitError('Alpha Vantage: HTTP 429 (rate limited)');
+    if (json && (json['Note'] || (json['Information'] && /rate limit|frequency|premium/i.test(json['Information'])))) {
+      throw rateLimitError('Alpha Vantage: ' + (json['Note'] || json['Information']));
+    }
+    if (!json) throw new Error('Alpha Vantage: invalid JSON response (status ' + res.status + ')');
+    if (!res.ok) throw new Error('Alpha Vantage HTTP ' + res.status);
+    return json;
+  }
+  function alphaVantageRequest(url) { return cached(url, _alphaVantageRequestRaw); }
+
+  function makeProviders(keys) {
+    keys = keys || {};
+    // NOTE: unlike data-providers.js (Node), this copy runs inside the same
+    // <script> tag as `const FMP_KEY = ...` etc. — those consts are in this
+    // function's lexical (closure) scope, NOT on `window` (a top-level `const`
+    // never becomes a `window` property, unlike `var`), so we read them
+    // directly here rather than via `global.FMP_KEY`.
+    var _FMP_KEY = keys.FMP_KEY || FMP_KEY || '';
+    var _FINNHUB_API_KEY = keys.FINNHUB_API_KEY || FINNHUB_API_KEY || '';
+    var _TWELVE_DATA_API_KEY = keys.TWELVE_DATA_API_KEY || TWELVE_DATA_API_KEY || '';
+    var _ALPHA_VANTAGE_API_KEY = keys.ALPHA_VANTAGE_API_KEY || ALPHA_VANTAGE_API_KEY || '';
+
+    var fmpProvider = {
+      name: 'FMP',
+      rateLimiter: { tryAcquire: function () { return true; } },
+      isConfigured: function () { return !!_FMP_KEY; },
+      getQuote: async function (symbol) {
+        var json = await fmpRequest('https://financialmodelingprep.com/stable/quote?symbol=' + symbol + '&apikey=' + _FMP_KEY);
+        var q = Array.isArray(json) ? json[0] : json;
+        if (!q || q.price == null) throw new Error('FMP: empty quote response');
+        return normalizeQuote({ symbol: symbol, price: q.price, change: q.change, changePercent: q.changesPercentage, source: 'FMP' });
+      },
+      getHistoricalBars: async function (symbol, fromDate) {
+        var json = await fmpRequest('https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=' + symbol + '&from=' + fromDate + '&apikey=' + _FMP_KEY);
+        if (!Array.isArray(json) || !json.length) throw new Error('FMP: no historical data');
+        var sorted = json.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+        return sorted.map(function (d) {
+          return normalizeBar({ date: d.date, o: d.open, h: d.high, l: d.low, c: d.close, v: d.volume });
+        });
+      },
+      // 5 parallel FMP calls — same shape fetchFundamentals() used to call
+      // directly. If ANY is rate-limited, the whole fetch fails over as a
+      // unit (no partially-filled, inconsistent result). Uses fmpToYahooFormat
+      // (defined later in this file, but hoisted — same mapping as before).
+      getFundamentals: async function (symbol) {
+        var BASE = 'https://financialmodelingprep.com/stable';
+        var settled = await Promise.allSettled([
+          fmpRequest(BASE + '/profile?symbol=' + symbol + '&apikey=' + _FMP_KEY),
+          fmpRequest(BASE + '/quote?symbol=' + symbol + '&apikey=' + _FMP_KEY),
+          fmpRequest(BASE + '/key-metrics-ttm?symbol=' + symbol + '&apikey=' + _FMP_KEY),
+          fmpRequest(BASE + '/ratios-ttm?symbol=' + symbol + '&apikey=' + _FMP_KEY),
+          fmpRequest(BASE + '/income-statement?symbol=' + symbol + '&period=annual&limit=1&apikey=' + _FMP_KEY),
+        ]);
+        var rateLimited = settled.find(function (r) { return r.status === 'rejected' && r.reason && r.reason.isRateLimit; });
+        if (rateLimited) throw rateLimitError('FMP: ' + rateLimited.reason.message);
+        var otherFail = settled.find(function (r) { return r.status === 'rejected'; });
+        if (otherFail) throw otherFail.reason;
+        return fmpToYahooFormat(settled[0].value, settled[1].value, settled[2].value, settled[3].value, settled[4].value, symbol);
+      },
+      // Used by the Buffett Quality Score (FUND/BUFFETT) — ROE, D/E, margins,
+      // FCF yield, current ratio, P/E + 5Y EPS history for CAGR.
+      getQualityMetrics: async function (symbol) {
+        var BASE = 'https://financialmodelingprep.com/stable';
+        var settled = await Promise.allSettled([
+          fmpRequest(BASE + '/key-metrics?symbol=' + symbol + '&period=annual&limit=5&apikey=' + _FMP_KEY),
+          fmpRequest(BASE + '/income-statement?symbol=' + symbol + '&period=annual&limit=5&apikey=' + _FMP_KEY),
+          fmpRequest(BASE + '/balance-sheet-statement?symbol=' + symbol + '&period=annual&limit=5&apikey=' + _FMP_KEY),
+          fmpRequest(BASE + '/ratios?symbol=' + symbol + '&period=annual&limit=5&apikey=' + _FMP_KEY),
+        ]);
+        var rateLimited = settled.find(function (r) { return r.status === 'rejected' && r.reason && r.reason.isRateLimit; });
+        if (rateLimited) throw rateLimitError('FMP: ' + rateLimited.reason.message);
+        var otherFail = settled.find(function (r) { return r.status === 'rejected'; });
+        if (otherFail) throw otherFail.reason;
+        var km = settled[0].value, is = settled[1].value, bs = settled[2].value, rt = settled[3].value;
+        var k = Array.isArray(km) ? km[0] : {};
+        var i0 = Array.isArray(is) ? is[0] : {};
+        var b0 = Array.isArray(bs) ? bs[0] : {};
+        var r0 = Array.isArray(rt) ? rt[0] : {};
+        var roe = (k.returnOnEquity ?? r0.returnOnEquity) != null ? (k.returnOnEquity ?? r0.returnOnEquity) * 100 : null;
+        var debtEq = r0.debtToEquityRatio || (b0.totalDebt && b0.totalStockholdersEquity ? b0.totalDebt / b0.totalStockholdersEquity : null);
+        var opMargin = r0.operatingProfitMargin ? r0.operatingProfitMargin * 100 : (i0.operatingIncomeRatio ? i0.operatingIncomeRatio * 100 : null);
+        var netMargin = r0.netProfitMargin ? r0.netProfitMargin * 100 : (i0.netIncomeRatio ? i0.netIncomeRatio * 100 : null);
+        var fcfYield = k.freeCashFlowYield ? k.freeCashFlowYield * 100 : null;
+        var currentRatio = k.currentRatio || r0.currentRatio || null;
+        var peRatio = r0.priceToEarningsRatio || null;
+        var epsHistory = Array.isArray(is) ? is.map(function (x) { return x.eps; }) : [];
+        return { roe: roe, debtEq: debtEq, opMargin: opMargin, netMargin: netMargin, fcfYield: fcfYield, currentRatio: currentRatio, peRatio: peRatio, epsHistory: epsHistory, source: 'FMP' };
+      },
+    };
+
+    var finnhubProvider = {
+      name: 'Finnhub',
+      rateLimiter: new RateLimiter(60, 60 * 1000),
+      isConfigured: function () { return !!_FINNHUB_API_KEY; },
+      getQuote: async function (symbol) {
+        var json = await finnhubRequest('https://finnhub.io/api/v1/quote?symbol=' + symbol + '&token=' + _FINNHUB_API_KEY);
+        if (!json || json.c == null || json.c === 0) throw new Error('Finnhub: empty quote response');
+        return normalizeQuote({ symbol: symbol, price: json.c, change: json.d, changePercent: json.dp, source: 'Finnhub' });
+      },
+      getHistoricalBars: async function (symbol, fromDate) {
+        var fromUnix = Math.floor(new Date(fromDate).getTime() / 1000);
+        var toUnix = Math.floor(Date.now() / 1000);
+        var json = await finnhubRequest('https://finnhub.io/api/v1/stock/candle?symbol=' + symbol + '&resolution=D&from=' + fromUnix + '&to=' + toUnix + '&token=' + _FINNHUB_API_KEY);
+        if (!json || json.s !== 'ok' || !Array.isArray(json.c) || !json.c.length) {
+          throw new Error('Finnhub: no historical data (candles require a paid plan on the free tier)');
+        }
+        return json.t.map(function (t, i) {
+          return normalizeBar({ date: new Date(t * 1000), o: json.o[i], h: json.h[i], l: json.l[i], c: json.c[i], v: json.v[i] });
+        });
+      },
+      // Same field mapping as server.js's fetchFinnhubFundamentals (desktop
+      // proxy) — ported here so the mobile app can do it directly, no server
+      // needed. This is the ONLY fallback that derives forwardPE/forwardEps.
+      getFundamentals: async function (symbol) {
+        var base = 'https://finnhub.io/api/v1';
+        // profile2 + metric=all are REQUIRED (carry EPS/PE/forwardPE — the
+        // whole point of this fallback). recommendation + price-target are
+        // best-effort extras (analyst targets) — Finnhub's free tier 403s
+        // price-target specifically, but that must not blank out EPS/PE.
+        var required = await Promise.allSettled([
+          finnhubRequest(base + '/stock/profile2?symbol=' + symbol + '&token=' + _FINNHUB_API_KEY),
+          finnhubRequest(base + '/stock/metric?symbol=' + symbol + '&metric=all&token=' + _FINNHUB_API_KEY),
+        ]);
+        var rateLimited = required.find(function (r) { return r.status === 'rejected' && r.reason && r.reason.isRateLimit; });
+        if (rateLimited) throw rateLimitError('Finnhub: ' + rateLimited.reason.message);
+        var unavailable = required.find(function (r) { return r.status === 'rejected' && r.reason && r.reason.isProviderUnavailable; });
+        if (unavailable) throw providerUnavailableError('Finnhub: ' + unavailable.reason.message);
+        var otherFail = required.find(function (r) { return r.status === 'rejected'; });
+        if (otherFail) throw otherFail.reason;
+
+        var optional = await Promise.allSettled([
+          finnhubRequest(base + '/stock/recommendation?symbol=' + symbol + '&token=' + _FINNHUB_API_KEY),
+          finnhubRequest(base + '/stock/price-target?symbol=' + symbol + '&token=' + _FINNHUB_API_KEY),
+        ]);
+        var p = required[0].value || {};
+        var m = (required[1].value && required[1].value.metric) || {};
+        var rc = optional[0].status === 'fulfilled' ? optional[0].value : [];
+        var t = optional[1].status === 'fulfilled' ? optional[1].value : {};
+        if (!p.ticker) throw new Error('Finnhub: no profile for ' + symbol);
+        return finnhubToYahooFormat(p, m, rc, t, symbol);
+      },
+      // Single metric=all call covers everything the Buffett Quality Score
+      // needs (ROE, D/E, margins, FCF yield via P/FCF, current ratio, P/E) —
+      // simpler than FMP's 4-call version. No 5Y EPS history from one call,
+      // so epsHistory stays empty (CAGR row degrades to N/A, not a dead end).
+      getQualityMetrics: async function (symbol) {
+        var json = await finnhubRequest('https://finnhub.io/api/v1/stock/metric?symbol=' + symbol + '&metric=all&token=' + _FINNHUB_API_KEY);
+        var m = (json && json.metric) || {};
+        if (!Object.keys(m).length) throw new Error('Finnhub: empty metrics response');
+        var debtEq = m['totalDebt/totalEquityQuarterly'] ?? m['totalDebt/totalEquityAnnual'] ?? m['longTermDebt/equityQuarterly'] ?? m['longTermDebt/equityAnnual'] ?? null;
+        var fcfYield = m.pfcfShareTTM ? (100 / m.pfcfShareTTM) : null;
+        return {
+          roe: m.roeTTM ?? m.roeRfy ?? null,
+          debtEq: debtEq,
+          opMargin: m.operatingMarginTTM ?? null,
+          netMargin: m.netProfitMarginTTM ?? null,
+          fcfYield: fcfYield,
+          currentRatio: m.currentRatioQuarterly ?? m.currentRatioAnnual ?? null,
+          peRatio: m.peBasicExclExtraTTM ?? m.peTTM ?? null,
+          epsHistory: [],
+          source: 'Finnhub',
+        };
+      },
+    };
+
+    var twelveDataProvider = {
+      name: 'TwelveData',
+      rateLimiter: new RateLimiter(800, 24 * 60 * 60 * 1000),
+      isConfigured: function () { return !!_TWELVE_DATA_API_KEY; },
+      getQuote: async function (symbol) {
+        var json = await twelveDataRequest('https://api.twelvedata.com/quote?symbol=' + symbol + '&apikey=' + _TWELVE_DATA_API_KEY);
+        if (json.close == null) throw new Error('Twelve Data: empty quote response');
+        return normalizeQuote({ symbol: symbol, price: parseFloat(json.close), change: parseFloat(json.change), changePercent: parseFloat(json.percent_change), source: 'TwelveData' });
+      },
+      getHistoricalBars: async function (symbol, fromDate) {
+        var json = await twelveDataRequest('https://api.twelvedata.com/time_series?symbol=' + symbol + '&interval=1day&start_date=' + fromDate + '&outputsize=5000&apikey=' + _TWELVE_DATA_API_KEY);
+        if (!json.values || !Array.isArray(json.values) || !json.values.length) throw new Error('Twelve Data: no historical data');
+        var sorted = json.values.slice().sort(function (a, b) { return a.datetime < b.datetime ? -1 : 1; });
+        return sorted.map(function (d) {
+          return normalizeBar({ date: d.datetime, o: d.open, h: d.high, l: d.low, c: d.close, v: d.volume });
+        });
+      },
+    };
+
+    var alphaVantageProvider = {
+      name: 'AlphaVantage',
+      rateLimiter: new CompositeRateLimiter([new RateLimiter(5, 60 * 1000), new RateLimiter(25, 24 * 60 * 60 * 1000)]),
+      isConfigured: function () { return !!_ALPHA_VANTAGE_API_KEY; },
+      getQuote: async function (symbol) {
+        var json = await alphaVantageRequest('https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=' + symbol + '&apikey=' + _ALPHA_VANTAGE_API_KEY);
+        var q = json['Global Quote'];
+        if (!q || !q['05. price']) throw new Error('Alpha Vantage: empty quote response');
+        return normalizeQuote({
+          symbol: symbol,
+          price: parseFloat(q['05. price']),
+          change: parseFloat(q['09. change']),
+          changePercent: parseFloat((q['10. change percent'] || '0').replace('%', '')),
+          source: 'AlphaVantage',
+        });
+      },
+      getHistoricalBars: async function (symbol, fromDate) {
+        var json = await alphaVantageRequest('https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=' + symbol + '&outputsize=full&apikey=' + _ALPHA_VANTAGE_API_KEY);
+        var series = json['Time Series (Daily)'];
+        if (!series) throw new Error('Alpha Vantage: no historical data');
+        var dates = Object.keys(series).filter(function (d) { return d >= fromDate; }).sort();
+        return dates.map(function (d) {
+          var row = series[d];
+          return normalizeBar({ date: d, o: row['1. open'], h: row['2. high'], l: row['3. low'], c: row['4. close'], v: row['5. volume'] });
+        });
+      },
+    };
+
+    return [fmpProvider, finnhubProvider, twelveDataProvider, alphaVantageProvider];
+  }
+
+  async function tryProvidersInOrder(providers, methodName, args) {
+    var lastErr = null;
+    for (var i = 0; i < providers.length; i++) {
+      var provider = providers[i];
+      if (typeof provider[methodName] !== 'function') continue; // provider doesn't implement this operation
+      if (typeof provider.isConfigured === 'function' && !provider.isConfigured()) continue;
+      if (provider.rateLimiter && !provider.rateLimiter.tryAcquire()) {
+        _log(provider.name + ': skipped (client-side rate limit reached)');
+        continue;
+      }
+      try {
+        var result = await provider[methodName].apply(provider, args);
+        if (lastErr) _log(provider.name + ': used as fallback for ' + methodName + '(' + args[0] + ') after ' + lastErr.message);
+        return result;
+      } catch (err) {
+        if (err && err.isRateLimit) {
+          _log(provider.name + ': rate-limited — ' + err.message + ' — trying next provider');
+          lastErr = err;
+          continue;
+        }
+        if (err && err.isProviderUnavailable) {
+          _log(provider.name + ': unavailable for this operation — ' + err.message + ' — trying next provider');
+          lastErr = err;
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastErr || new Error('All configured providers failed or are unconfigured for ' + methodName);
+  }
+
+  function fetchQuoteWithFailover(symbol, providers) {
+    return tryProvidersInOrder(providers, 'getQuote', [symbol]);
+  }
+  function fetchHistoricalBarsWithFailover(symbol, fromDate, providers) {
+    return tryProvidersInOrder(providers, 'getHistoricalBars', [symbol, fromDate]);
+  }
+  // Only FMP and Finnhub implement getFundamentals — tryProvidersInOrder
+  // skips Twelve Data / Alpha Vantage automatically (no such method on them).
+  function fetchFundamentalsWithFailover(symbol, providers) {
+    return tryProvidersInOrder(providers, 'getFundamentals', [symbol]);
+  }
+  function fetchQualityMetricsWithFailover(symbol, providers) {
+    return tryProvidersInOrder(providers, 'getQualityMetrics', [symbol]);
+  }
+
+  var api = {
+    RateLimiter: RateLimiter,
+    CompositeRateLimiter: CompositeRateLimiter,
+    normalizeBar: normalizeBar,
+    normalizeQuote: normalizeQuote,
+    makeProviders: makeProviders,
+    tryProvidersInOrder: tryProvidersInOrder,
+    fetchQuoteWithFailover: fetchQuoteWithFailover,
+    fetchHistoricalBarsWithFailover: fetchHistoricalBarsWithFailover,
+    fetchFundamentalsWithFailover: fetchFundamentalsWithFailover,
+    fetchQualityMetricsWithFailover: fetchQualityMetricsWithFailover,
+    setFailoverLogger: setFailoverLogger,
+    setFetchImpl: setFetchImpl,
+    clearHttpCache: clearHttpCache,
+    // Exposed so render functions OUTSIDE this IIFE (renderQuality, renderDCF,
+    // renderEarnTrend, renderValHist, renderInstitutional, etc.) can route
+    // their own FMP calls through the same shared cache + rate-limit
+    // detection, without needing a dedicated provider method for every tab.
+    fmpRequest: fmpRequest,
+    finnhubRequest: finnhubRequest,
+  };
+
+  Object.assign(global, api);
+})(window);
+
+// Single shared provider chain instance for the whole app (holds per-provider
+// rate-limiter state across calls). Built lazily on first use so the API key
+// consts above are guaranteed to be defined first.
+let _dataProviders = null;
+function getDataProviders() {
+  if (!_dataProviders) _dataProviders = makeProviders();
+  return _dataProviders;
+}
+function fetchQuoteFailover(symbol) {
+  return fetchQuoteWithFailover(symbol, getDataProviders());
+}
+function fetchHistoricalBarsFailover(symbol, fromDate) {
+  return fetchHistoricalBarsWithFailover(symbol, fromDate, getDataProviders());
+}
+function fetchFundamentalsFailover(symbol) {
+  return fetchFundamentalsWithFailover(symbol, getDataProviders());
+}
+function fetchQualityMetricsFailover(symbol) {
+  return fetchQualityMetricsWithFailover(symbol, getDataProviders());
+}
+
+// FMP's /stable/quote accepts comma-separated symbols and returns ALL of them
+// in ONE request — used wherever the app needs quotes for many tickers at
+// once (Portfolio Performance) so it doesn't burn N requests for N positions.
+// Defensive: if the endpoint doesn't actually return multiple symbols (e.g.
+// this specific account tier doesn't support batch, or it silently returns
+// just the first symbol), this throws so the caller falls back to per-symbol
+// fetchQuoteFailover() instead of trusting a partial/wrong map.
+async function fetchBatchQuotesFmp(symbols) {
+  if (!symbols.length) return {};
+  const url = `https://financialmodelingprep.com/stable/quote?symbol=${symbols.join(',')}&apikey=${FMP_KEY}`;
+  const res = await fetchWithTimeout(url, 10000);
+  const json = await res.json();
+  if (!Array.isArray(json) || !json.length) throw new Error('FMP batch quote: empty or non-array response');
+  const map = {};
+  json.forEach(q => { if (q && q.symbol) map[q.symbol] = q.price; });
+  const coverage = symbols.filter(s => map[s] != null).length;
+  if (symbols.length > 1 && coverage <= 1) throw new Error('FMP batch quote: endpoint returned only 1 symbol for a multi-symbol request');
+  return map;
+}
 
 function haptic(ms = 20) {
   try { navigator.vibrate?.(ms); } catch(e) {}
@@ -1966,8 +2456,8 @@ function saveStateLight() {
     localStorage.setItem('wfm_pivotPeriod',  state.pivotPeriod || 'D');
     localStorage.setItem('wfm_ticker_tags',  JSON.stringify(state.tickerTags));
     localStorage.setItem('wfm_annotations',  JSON.stringify(state.annotations));
-    localStorage.setItem('wfm_sort_by',      state.watchlistSortBy || 'default');
-    localStorage.setItem('wfm_wl_view',      state.watchlistView || 'list');
+    localStorage.setItem('wfm_sort_by',      state.tickersSortBy || 'default');
+    localStorage.setItem('wfm_wl_view',      state.tickersView || 'list');
     if (state.customFilters) localStorage.setItem('wf_custom_filters', JSON.stringify(state.customFilters));
   } catch(e) {}
 }
@@ -2020,10 +2510,10 @@ function loadState() {
     });
     // Load watchlist sort preference
     const sortBy = localStorage.getItem('wfm_sort_by');
-    if (sortBy) state.watchlistSortBy = sortBy;
+    if (sortBy) state.tickersSortBy = sortBy;
     // Load watchlist view mode (list | heatmap)
     const wlView = localStorage.getItem('wfm_wl_view');
-    if (wlView) state.watchlistView = wlView;
+    if (wlView) state.tickersView = wlView;
     // Load custom screener filters
     const cfRaw = localStorage.getItem('wf_custom_filters');
     if (cfRaw) try { state.customFilters = { ...state.customFilters, ...JSON.parse(cfRaw) }; } catch(e2) {}
@@ -2125,28 +2615,15 @@ async function fetchTicker(sym) {
   } catch(e2) {
     console.warn('[chart] Railway fallback failed:', e2.message);
   }
-  // 3. FMP stable historical price fallback (v3 legacy endpoints replaced Aug 2025)
+  // 3. FMP stable historical price, with automatic failover to Finnhub /
+  //    Twelve Data / Alpha Vantage if FMP itself is rate-limited (HTTP 429/402).
+  //    See "DATA PROVIDER FAILOVER" section above + CLAUDE.md.
   try {
     const from = new Date(Date.now() - 5 * 365.25 * 86400000).toISOString().slice(0, 10);
-    const fmpUrl = `https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${sym}&from=${from}&apikey=${FMP_KEY}`;
-    const res = await fetchWithTimeout(fmpUrl, 15000);
-    if (!res.ok) throw new Error(`FMP HTTP ${res.status}`);
-    const j = await res.json();
-    // FMP returns {"Error Message":"..."} with HTTP 200 on errors
-    if (!Array.isArray(j)) {
-      if (j['Error Message']) throw new Error(`FMP: ${j['Error Message']}`);
-      throw new Error('FMP: unexpected response');
-    }
-    if (!j.length) throw new Error('FMP: no data');
-    // stable endpoint returns newest first → sort oldest first
-    const sorted = j.slice().sort((a, b) => a.date < b.date ? -1 : 1);
-    const bars = sorted.map(d => ({
-      date: new Date(d.date),
-      o: d.open, h: d.high, l: d.low, c: d.close, v: d.volume,
-    }));
+    const bars = await fetchHistoricalBarsFailover(sym, from);
     if (bars.length) { setCached(sym, bars); return bars; }
   } catch(e3) {
-    console.warn('[chart] FMP fallback failed:', e3.message);
+    console.warn('[chart] FMP+failover chain failed:', e3.message);
   }
 
   // Offline fallback: use cached bars if available
@@ -2299,10 +2776,112 @@ function fmpToYahooFormat(profile, quote, metrics, ratios, income, sym) {
   };
 }
 
+// Mirrors server.js's fetchFinnhubFundamentals mapping exactly (desktop proxy,
+// see "Finnhub fundamentals" section there) — used here as a FMP fallback when
+// FMP itself is rate-limited. Crucially this is the only fallback that derives
+// forwardPE/forwardEps (FMP stable doesn't expose those at all, see fmpToYahooFormat).
+function finnhubToYahooFormat(p, m, rc, t, sym) {
+  const wrap = v => (v == null || (typeof v === 'number' && isNaN(v)) ? undefined : { raw: v });
+  const latestRec = Array.isArray(rc) && rc.length ? rc[0] : null;
+  const recKey = latestRec
+    ? (latestRec.strongBuy > latestRec.buy && latestRec.strongBuy > latestRec.hold ? 'strongBuy'
+      : latestRec.buy > latestRec.hold ? 'buy'
+      : latestRec.sell > latestRec.hold ? 'sell' : 'hold')
+    : null;
+  const numAnalysts = latestRec
+    ? (latestRec.strongBuy + latestRec.buy + latestRec.hold + latestRec.sell + latestRec.strongSell)
+    : null;
+  const divYieldRaw = m.dividendYieldIndicatedAnnual != null ? m.dividendYieldIndicatedAnnual / 100 : null;
+  const high52 = m['52WeekHigh'] ?? m.weekHigh52;
+  const low52  = m['52WeekLow']  ?? m.weekLow52;
+  const pct = v => v != null ? v / 100 : null;
+  const debtEq = m['totalDebt/totalEquityQuarterly'] ?? m['totalDebt/totalEquityAnnual']
+               ?? m['longTermDebt/equityQuarterly']  ?? m['longTermDebt/equityAnnual'] ?? null;
+  const totalRev = (m.revenuePerShareTTM != null && p.shareOutstanding != null)
+    ? m.revenuePerShareTTM * p.shareOutstanding * 1e6 : null;
+  const trailingPeVal = m.peBasicExclExtraTTM ?? m.peTTM;
+  const trailingEpsVal = m.epsBasicExclExtraItemsTTM ?? m.epsTTM;
+  const derivedPrice = (trailingPeVal != null && trailingEpsVal != null)
+    ? trailingPeVal * trailingEpsVal
+    : (p.marketCapitalization != null && p.shareOutstanding != null && p.shareOutstanding > 0)
+      ? p.marketCapitalization / p.shareOutstanding
+      : null;
+  const fwdPeVal = m.forwardPE;
+  const derivedFwdEps = (derivedPrice != null && fwdPeVal != null && fwdPeVal > 0)
+    ? derivedPrice / fwdPeVal : null;
+
+  return {
+    _source: 'finnhub',
+    financialData: {
+      currentPrice:            wrap(derivedPrice),
+      targetMeanPrice:         wrap(t.targetMean ?? null),
+      targetHighPrice:         wrap(t.targetHigh ?? null),
+      targetLowPrice:          wrap(t.targetLow  ?? null),
+      recommendationKey:       recKey,
+      numberOfAnalystOpinions: wrap(numAnalysts),
+      totalRevenue:            wrap(totalRev),
+      revenueGrowth:           wrap(pct(m.revenueGrowthTTMYoy)),
+      earningsGrowth:          wrap(pct(m.epsGrowthTTMYoy)),
+      grossMargins:            wrap(pct(m.grossMarginTTM)),
+      operatingMargins:        wrap(pct(m.operatingMarginTTM)),
+      profitMargins:           wrap(pct(m.netProfitMarginTTM ?? m.netMarginTTM)),
+      returnOnAssets:          wrap(pct(m.roaTTM)),
+      returnOnEquity:          wrap(pct(m.roeTTM)),
+      debtToEquity:            wrap(debtEq),
+    },
+    defaultKeyStatistics: {
+      marketCap:     wrap(p.marketCapitalization ? p.marketCapitalization * 1e6 : null),
+      trailingPE:    wrap(trailingPeVal ?? null),
+      forwardPE:     wrap(fwdPeVal ?? null),
+      priceToBook:   wrap(m.pbQuarterly ?? m.pb ?? null),
+      trailingEps:   wrap(trailingEpsVal ?? null),
+      forwardEps:    wrap(derivedFwdEps),
+      pegRatio:      wrap(m.pegTTM ?? null),
+      beta:          wrap(p.beta ?? m.beta ?? null),
+      dividendYield: wrap(divYieldRaw),
+      profitMargins: wrap(pct(m.netProfitMarginTTM ?? m.netMarginTTM)),
+      returnOnEquity:wrap(pct(m.roeTTM)),
+      debtToEquity:  wrap(debtEq),
+    },
+    summaryDetail: {
+      previousClose:    wrap(null),
+      averageVolume:    wrap(m['10DayAverageTradingVolume'] ? m['10DayAverageTradingVolume'] * 1e6 : null),
+      fiftyTwoWeekHigh: wrap(high52 ?? null),
+      fiftyTwoWeekLow:  wrap(low52  ?? null),
+      dividendYield:    wrap(divYieldRaw),
+      beta:             wrap(p.beta ?? null),
+      currency:         p.currency || 'USD',
+    },
+    assetProfile: {
+      sector:              p.ggroup    || p.finnhubIndustry || undefined,
+      industry:            p.finnhubIndustry               || undefined,
+      website:             p.weburl                        || undefined,
+      longBusinessSummary: p.description                   || undefined,
+      country:             p.country                       || undefined,
+    },
+    incomeStatementHistory: { incomeStatementHistory: [] },
+  };
+}
+
+// True if a fundamentals object is missing its core numbers — happens when
+// it was cached during an FMP rate-limit window (every parallel call returned
+// an error-shaped JSON, fmpToYahooFormat then defaulted everything to null,
+// but no exception was thrown so it got cached as if it were valid data).
+// Treated as "no real cache" so fetchFundamentals retries instead of serving
+// stale nulls for up to 24h (wfm_f_ TTL).
+function isFundamentalsEmpty(data) {
+  if (!data) return true;
+  const eps = data.defaultKeyStatistics?.trailingEps?.raw;
+  const pe  = data.defaultKeyStatistics?.trailingPE?.raw;
+  return eps == null && pe == null;
+}
+
 async function fetchFundamentals(sym) {
-  if (state.fundamentals[sym] && !state.fundamentals[sym].error) return state.fundamentals[sym].data;
+  if (state.fundamentals[sym] && !state.fundamentals[sym].error && !isFundamentalsEmpty(state.fundamentals[sym].data)) {
+    return state.fundamentals[sym].data;
+  }
   const cached = getCachedFund(sym);
-  if (cached) { state.fundamentals[sym] = { data: cached }; return cached; }
+  if (cached && !isFundamentalsEmpty(cached)) { state.fundamentals[sym] = { data: cached }; return cached; }
   if (state.fundLoading[sym]) return state.fundLoading[sym];
 
   const p = (async () => {
@@ -2312,7 +2891,7 @@ async function fetchFundamentals(sym) {
       const j = await r.json();
       if (!r.ok || j.error) throw new Error(j.error || `HTTP ${r.status}`);
       const result = j?.quoteSummary?.result?.[0];
-      if (!result) throw new Error('Empty');
+      if (!result || isFundamentalsEmpty(result)) throw new Error('Empty or missing core fields');
       state.fundamentals[sym] = { data: result };
       setCachedFund(sym, result);
       return result;
@@ -2320,20 +2899,15 @@ async function fetchFundamentals(sym) {
       console.warn('[fund] Railway failed, trying FMP fallback:', railwayErr.message);
     }
 
-    // FMP stable fallback (v3 legacy endpoints replaced Aug 2025)
-    const FMP_BASE = 'https://financialmodelingprep.com/stable';
-    const [profileRes, quoteRes, metricsRes, ratiosRes, incomeRes] = await Promise.all([
-      fetch(`${FMP_BASE}/profile?symbol=${sym}&apikey=${FMP_KEY}`),
-      fetch(`${FMP_BASE}/quote?symbol=${sym}&apikey=${FMP_KEY}`),
-      fetch(`${FMP_BASE}/key-metrics-ttm?symbol=${sym}&apikey=${FMP_KEY}`),
-      fetch(`${FMP_BASE}/ratios-ttm?symbol=${sym}&apikey=${FMP_KEY}`),
-      fetch(`${FMP_BASE}/income-statement?symbol=${sym}&period=annual&limit=1&apikey=${FMP_KEY}`)
-    ]);
-    const [profile, quote, metrics, ratios, income] = await Promise.all([
-      profileRes.json(), quoteRes.json(), metricsRes.json(), ratiosRes.json(), incomeRes.json()
-    ]);
-
-    const result = fmpToYahooFormat(profile, quote, metrics, ratios, income, sym);
+    // FMP, with automatic failover to Finnhub if FMP is rate-limited.
+    // See "DATA PROVIDER FAILOVER" section above + CLAUDE.md.
+    const result = await fetchFundamentalsFailover(sym);
+    if (isFundamentalsEmpty(result)) {
+      // Don't cache nulls — next call should retry from scratch instead of
+      // serving stale emptiness for up to 24h.
+      state.fundamentals[sym] = { error: true, data: result };
+      return result;
+    }
     state.fundamentals[sym] = { data: result };
     setCachedFund(sym, result);
     return result;
@@ -2469,8 +3043,13 @@ function detectFormingWave(bars, pivots) {
   return null;
 }
 
+const _waveCache = new Map();
 function detectWaves(bars) {
   if (!bars || bars.length < 20) return null;
+  const _first = bars[0], _last = bars[bars.length - 1];
+  const _cacheKey = bars.length + '_' + (+_first.date) + '_' + (+_last.date) + '_' + _last.c;
+  if (_waveCache.has(_cacheKey)) return _waveCache.get(_cacheKey);
+
   let threshold = getThreshold(bars);
   let pivots = zigzag(bars, threshold);
   // Adaptive fallback — if too few pivots, halve threshold up to 3 times
@@ -2478,7 +3057,10 @@ function detectWaves(bars) {
     threshold *= 0.65;
     pivots = zigzag(bars, threshold);
   }
-  if (pivots.length < 4) return null;
+  if (pivots.length < 4) {
+    _waveCache.set(_cacheKey, null);
+    return null;
+  }
   const candidates = [];
   for (let start = 0; start <= pivots.length - 6; start++) {
     const pts = pivots.slice(start, start + 6);
@@ -2553,7 +3135,10 @@ function detectWaves(bars) {
       };
     }
   }
-  if (!primary) return null;
+  if (!primary) {
+    _waveCache.set(_cacheKey, null);
+    return null;
+  }
 
   // ── Forming wave detection: determine sub-wave position more precisely ──
   const _forming = detectFormingWave(bars, pivots);
@@ -2599,7 +3184,10 @@ function detectWaves(bars) {
     primary.currentBarDate  = bars[bars.length-1].date;
   }
 
-  return { primary, alternatives };
+  const _result = { primary, alternatives };
+  _waveCache.set(_cacheKey, _result);
+  if (_waveCache.size > 60) _waveCache.delete(_waveCache.keys().next().value);
+  return _result;
 }
 
 function detectSubwaves(bars, pivotA, pivotB) {
@@ -3311,7 +3899,7 @@ function renderCandlePatterns() {
   patterns.forEach(p => {
     const col = typeColor[p.type];
     const bar = bars[bars.length - 60 + p.i] || bars[bars.length-1];
-    const dateStr = bar ? new Date(bar.t).toLocaleDateString('cs-CZ', {day:'2-digit',month:'2-digit'}) : '';
+    const dateStr = bar ? new Date(bar.date).toLocaleDateString('cs-CZ', {day:'2-digit',month:'2-digit'}) : '';
     html += `<div style="background:#1f2937;border-radius:8px;padding:12px;margin-bottom:8px;border-left:3px solid ${col}">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <div style="display:flex;align-items:center;gap:8px">
@@ -3673,7 +4261,7 @@ async function getPEHistory(sym) {
 
   try {
     // Fetch historical P/E ratios from FMP stable/ratios endpoint
-    const resp = await fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${sym}&period=annual&limit=8&apikey=${FMP_KEY}`);
+    const resp = await fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`);
     const kmData = await resp.json();
 
     if (!Array.isArray(kmData) || kmData.length === 0) return null;
@@ -3686,7 +4274,7 @@ async function getPEHistory(sym) {
 
     if (peValues.length === 0) return null;
 
-    // Calculate min, avg, max for the 8-year period
+    // Calculate min, avg, max for the available period (FMP plan caps limit at 5)
     const minPE = Math.min(...peValues);
     const maxPE = Math.max(...peValues);
     const avgPE = peValues.reduce((a, b) => a + b, 0) / peValues.length;
@@ -3810,8 +4398,12 @@ function detectRSIDivergence(bars, wave) {
   return null;
 }
 
+const _srCache = new Map();
 function detectSupportResistance(bars, maxLevels=6) {
   if (bars.length<10) return [];
+  const _first = bars[0], _last = bars[bars.length-1];
+  const _key = bars.length + '_' + (+_first.date) + '_' + (+_last.date) + '_' + _last.c + '_' + maxLevels;
+  if (_srCache.has(_key)) return _srCache.get(_key);
   const win=4, pivots=[];
   for (let i=win;i<bars.length-win;i++) {
     const hi=bars[i].h, lo=bars[i].l;
@@ -3837,7 +4429,10 @@ function detectSupportResistance(bars, maxLevels=6) {
   });
   const curPrice=bars[bars.length-1].c;
   clusters.forEach(c=>{ c.score=c.touches*2+(c.lastTouchIdx/bars.length)*3; c.role=c.price<curPrice?'support':'resistance'; });
-  return clusters.sort((a,b)=>b.score-a.score).slice(0,maxLevels).sort((a,b)=>b.price-a.price);
+  const _result = clusters.sort((a,b)=>b.score-a.score).slice(0,maxLevels).sort((a,b)=>b.price-a.price);
+  _srCache.set(_key, _result);
+  if (_srCache.size > 60) _srCache.delete(_srCache.keys().next().value);
+  return _result;
 }
 
 // ─── BENCHMARK COMPARISON ────────────────────────────────────────────────────
@@ -4847,6 +5442,7 @@ function resetZoom() {
 }
 
 function redrawChart() {
+  let _srLevelsCache = null;
   const w = canvas.clientWidth, h = canvas.clientHeight;
   // Reset canvas state fully — prevents corrupted ctx from failed overlay draws
   ctx.setTransform(_dpr, 0, 0, _dpr, 0, 0);
@@ -4986,7 +5582,7 @@ function redrawChart() {
   try {
     if (state.overlays.sr) {
       const hlSR = _hlKey === 'sr';
-      const levels = detectSupportResistance(bars);
+      const levels = (_srLevelsCache = detectSupportResistance(bars));
       levels.forEach(lv => {
         const y = py(lv.price);
         const supColor = lv.role==='support' ? 'rgba(34,197,94,' : 'rgba(239,68,68,';
@@ -5157,12 +5753,13 @@ function redrawChart() {
     ctx.restore();
   }
 
+  let _maSMA50, _maSMA200, _maEMA20, _maWMA50, _maWMA200;
   try {
-    if (state.overlays.ma50)   drawMA(calcSMA(allBars,50),   'rgba(234,179,8,0.9)',   [],     'ma50');
-    if (state.overlays.ma200)  drawMA(calcSMA(allBars,200),  'rgba(249,115,22,0.9)',  [],     'ma200');
-    if (state.overlays.ema20)  drawMA(calcEMA(allBars,20),   'rgba(59,130,246,0.9)',  [],     'ema20');
-    if (state.overlays.wma50)  drawMA(calcWMA(allBars,50),   'rgba(167,139,250,0.9)', [4,3],  'wma50');
-    if (state.overlays.wma200) drawMA(calcWMA(allBars,200),  'rgba(6,182,212,0.9)',   [6,3],  'wma200');
+    if (state.overlays.ma50)   { _maSMA50  = calcSMA(allBars,50);  drawMA(_maSMA50,  'rgba(234,179,8,0.9)',   [],     'ma50'); }
+    if (state.overlays.ma200)  { _maSMA200 = calcSMA(allBars,200); drawMA(_maSMA200, 'rgba(249,115,22,0.9)',  [],     'ma200'); }
+    if (state.overlays.ema20)  { _maEMA20  = calcEMA(allBars,20);  drawMA(_maEMA20,  'rgba(59,130,246,0.9)',  [],     'ema20'); }
+    if (state.overlays.wma50)  { _maWMA50  = calcWMA(allBars,50);  drawMA(_maWMA50,  'rgba(167,139,250,0.9)', [4,3],  'wma50'); }
+    if (state.overlays.wma200) { _maWMA200 = calcWMA(allBars,200); drawMA(_maWMA200, 'rgba(6,182,212,0.9)',   [6,3],  'wma200'); }
   } catch(e) { ctx.restore(); }
 
   // ── Bollinger Bands ──────────────────────────────────────────────────────────
@@ -5528,11 +6125,11 @@ function redrawChart() {
       const v = [...vals].reverse().find(x=>x!=null);
       if (v != null) labels.push({v, color, tag});
     };
-    if (state.overlays.ma50)   add(calcSMA(allBars,50),  'rgba(234,179,8,1)',    'M50');
-    if (state.overlays.ma200)  add(calcSMA(allBars,200), 'rgba(249,115,22,1)',   'M200');
-    if (state.overlays.ema20)  add(calcEMA(allBars,20),  'rgba(59,130,246,1)',   'E20');
-    if (state.overlays.wma50)  add(calcWMA(allBars,50),  'rgba(167,139,250,1)',  'W50');
-    if (state.overlays.wma200) add(calcWMA(allBars,200), 'rgba(6,182,212,1)',    'W200');
+    if (state.overlays.ma50)   add(_maSMA50  || calcSMA(allBars,50),  'rgba(234,179,8,1)',    'M50');
+    if (state.overlays.ma200)  add(_maSMA200 || calcSMA(allBars,200), 'rgba(249,115,22,1)',   'M200');
+    if (state.overlays.ema20)  add(_maEMA20  || calcEMA(allBars,20),  'rgba(59,130,246,1)',   'E20');
+    if (state.overlays.wma50)  add(_maWMA50  || calcWMA(allBars,50),  'rgba(167,139,250,1)',  'W50');
+    if (state.overlays.wma200) add(_maWMA200 || calcWMA(allBars,200), 'rgba(6,182,212,1)',    'W200');
     ctx.save();
     ctx.font = 'bold 9px JetBrains Mono';
     ctx.textAlign = 'left';
@@ -5574,12 +6171,11 @@ function redrawChart() {
   // ── Wave pivots ───────────────────────────────────────────────────────────
   try {
     if (state.overlays.waves && !state.waves[state.selected]) {
-      // Debug: waves ON but no detection result
       ctx.save();
       ctx.font = '10px JetBrains Mono';
       ctx.fillStyle = 'rgba(255,100,100,0.7)';
       ctx.textAlign = 'left';
-      ctx.fillText('WAVES: no detection (bars=' + bars.length + ')', cL + 4, cT + 14);
+      ctx.fillText('WAVES: no pattern detected', cL + 4, cT + 14);
       ctx.restore();
     }
     if (state.overlays.waves && state.waves[state.selected]) {
@@ -5790,14 +6386,14 @@ function redrawChart() {
   try {
   if (state.overlays.subwaves && state.waves[state.selected]) {
     const wave = getActiveWave(state.selected);
-    if (wave?.pattern === 'IMPULSE' && wave.waveData) {
+    if (wave?.waveData) {
       const { p0, p1, p2, p3, p4, p5 } = wave.waveData;
       const legs = [
         { a: p0, b: p1, label: 'W1' },
         { a: p2, b: p3, label: 'W3' },
         { a: p4, b: p5, label: 'W5' },
       ].filter(l => l.a && l.b);
-      legs.sort((x, y) => Math.abs(y.b.price - y.a.price) - Math.abs(x.b.price - x.a.price));
+      legs.sort((x, y) => (y.b.date?.getTime?.() || 0) - (x.b.date?.getTime?.() || 0));
       const mainLeg = legs[0];
       if (mainLeg) {
         const subPivots = detectSubwaves(bars, mainLeg.a, mainLeg.b);
@@ -6089,7 +6685,7 @@ function redrawChart() {
   // ── Buy Zone overlay ───────────────────────────────────────────────────────
   try {
     if (state.overlays.buyzone && bars.length >= 10) {
-      const srLevels = detectSupportResistance(bars);
+      const srLevels = _srLevelsCache || detectSupportResistance(bars);
       const supports = srLevels.filter(l => l.role === 'support').sort((a,b) => b.price - a.price);
       if (supports.length >= 2) {
         const s1 = supports[0].price, s2 = supports[1].price;
@@ -6131,12 +6727,12 @@ function redrawChart() {
   // ── SMC overlay ────────────────────────────────────────────────────────────
   try {
   if (state.overlays && state.overlays.smc) {
-    const visibleBars = bars.slice(state.viewStart, state.viewEnd);
+    const visibleBars = bars;
     const smc = detectSMC(visibleBars);
 
     // Order Blocks
     smc.orderBlocks.forEach(ob => {
-      const x1 = px(state.viewStart + ob.i);
+      const x1 = px(ob.i);
       const x2 = cR;
       const y1 = py(ob.high);
       const y2 = py(ob.low);
@@ -6156,7 +6752,7 @@ function redrawChart() {
 
     // Fair Value Gaps
     smc.fvgs.forEach(fvg => {
-      const x1 = px(state.viewStart + fvg.i);
+      const x1 = px(fvg.i);
       const x2 = Math.min(cR, x1 + (cR-cL)*0.15);
       const y1 = py(fvg.top);
       const y2 = py(fvg.bottom);
@@ -6174,7 +6770,7 @@ function redrawChart() {
     // Break of Structure
     smc.bos.forEach(bosItem => {
       const y = py(bosItem.price);
-      const x = px(state.viewStart + bosItem.i);
+      const x = px(bosItem.i);
       const col = bosItem.type === 'bullish' ? '#22c55e' : '#ef4444';
       ctx.save();
       ctx.beginPath();
@@ -6324,11 +6920,11 @@ function redrawChart() {
 
   // ── Candlestick pattern badges ─────────────────────────────────────────────
   if (state.showCandlePatterns && bars.length > 2) {
-    const recentBars = bars.slice(state.viewStart, state.viewEnd);
+    const recentBars = bars;
     const cpats = detectCandlePatterns(recentBars);
     cpats.forEach(pat => {
-      const barIdx = state.viewStart + pat.i;
-      if (barIdx < state.viewStart || barIdx >= state.viewEnd) return;
+      const barIdx = pat.i;
+      if (barIdx < 0 || barIdx >= bars.length) return;
       const bar = bars[barIdx];
       if (!bar) return;
       const x = px(barIdx);
@@ -6603,7 +7199,7 @@ function getSortedWatchlist() {
     ? state.tickers.filter(s => state.tickerTags[s] === filter)
     : state.tickers.slice();
 
-  const sortBy = state.watchlistSortBy || 'default';
+  const sortBy = state.tickersSortBy || 'default';
   if (sortBy === 'default') return sorted;
 
   sorted.sort((a, b) => {
@@ -6650,7 +7246,7 @@ function getSortedWatchlist() {
 function renderWatchlistSortBar() {
   const bar = document.getElementById('wl-sort-bar');
   if (!bar) return;
-  const active = state.watchlistSortBy || 'default';
+  const active = state.tickersSortBy || 'default';
   const sorts = [
     { id: 'default', label: '→ Default' },
     { id: '1d', label: '📊 1D %' },
@@ -6659,7 +7255,7 @@ function renderWatchlistSortBar() {
     { id: 'wave', label: '🌊 Wave' },
     { id: 'alpha', label: '🔤 A–Z' },
   ];
-  const view = state.watchlistView || 'list';
+  const view = state.tickersView || 'list';
   const listActive = view === 'list';
   const mapActive = view === 'heatmap';
   const sortPills = sorts.map(s => '<button class="tag-filter-pill ' + (s.id === active ? 'active' : '') + '" style="' + (s.id === active ? 'background:var(--blue);border-color:var(--blue)' : 'color:var(--muted);border-color:var(--border)') + '" onclick="setWatchlistSort(\'' + s.id + '\')">' + s.label + '</button>').join('');
@@ -6674,13 +7270,13 @@ function renderWatchlistSortBar() {
 }
 
 function setWatchlistSort(sortBy) {
-  state.watchlistSortBy = sortBy;
+  state.tickersSortBy = sortBy;
   saveStateLight();
   renderWatchlist();
 }
 
 function setWatchlistView(viewMode) {
-  state.watchlistView = viewMode;
+  state.tickersView = viewMode;
   saveStateLight();
   renderWatchlist();
 }
@@ -6758,7 +7354,7 @@ function renderWatchlist() {
   const list = document.getElementById('wl-list');
   const visible = getSortedWatchlist();
 
-  if ((state.watchlistView || 'list') === 'heatmap') {
+  if ((state.tickersView || 'list') === 'heatmap') {
     renderWatchlistHeatmap();
     return;
   }
@@ -8161,11 +8757,12 @@ function switchWatchSubtab(sub) {
 function switchWavesSubtab(sub) {
   document.querySelectorAll('#waves-subtab-bar .subtab').forEach(b => b.classList.remove('active'));
   document.getElementById('ast-' + sub).classList.add('active');
-  ['analysis','forecast','signals','sector','patterns','backtest','earnhist','season','correl','options','candles','diverg','momentum','bench','recession','rotation','rrg','wyckoff','squeeze'].forEach(s => {
+  ['analysis','allwaves','forecast','signals','sector','patterns','backtest','earnhist','season','correl','options','candles','diverg','momentum','bench','recession','rotation','rrg','wyckoff','squeeze'].forEach(s => {
     const v = document.getElementById('waves-' + s + '-view');
     if (v) v.style.display = s === sub ? '' : 'none';
   });
   if (sub === 'analysis') renderAnalysis();
+  if (sub === 'allwaves') renderAllWaves();
   if (sub === 'forecast') renderForecast();
   if (sub === 'signals') renderSignals();
   if (sub === 'sector') renderSectorRotation();
@@ -8287,7 +8884,28 @@ function toggleOv(key, btn) {
     if (tog) tog.style.display = state.overlays.pivot ? 'flex' : 'none';
   }
   saveStateLight(); // fast — no bar cache serialization
-  if (key === 'econ' && state.overlays.econ) fetchEconCalendar();
+  if (key === 'valuation') {
+    if (state.overlays.valuation) {
+      if (state.peHistory[state.selected]) {
+        redrawChart();
+      } else {
+        showToast('VALU: načítám P/E data…');
+        getPEHistory(state.selected).then(r => {
+          if (r) redrawChart();
+          else showToast('VALU: P/E data nedostupná pro tento ticker');
+        }).catch(() => showToast('VALU: chyba načítání'));
+      }
+    } else {
+      redrawChart();
+    }
+  }
+  else if (key === 'econ' && state.overlays.econ) fetchEconCalendar();
+  else if (key === 'subwaves' && state.overlays.subwaves) {
+    const wave = getActiveWave(state.selected);
+    if (!state.waves[state.selected]) showToast('SUB: nejprve zapni WAVES');
+    else if (!wave?.waveData) showToast('SUB: wave data nedostupná');
+    else redrawChart();
+  }
   else redrawChart();
 }
 
@@ -8759,21 +9377,15 @@ function renderVixBadge() {
     <span style="color:${color};font-size:9px">${text}</span>`;
 }
 async function fetchVix() {
-  // Use Polygon snapshot for VIXY (VIX proxy ETF) — free tier doesn't support ^VIX index
   try {
-    const url = `${POLYGON_BASE}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=VIXY&apiKey=${POLYGON_KEY}`;
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=%5EVIX&apikey=${FMP_KEY}`;
     const r = await fetchWithTimeout(url, 8000);
     if (!r.ok) return;
     const j = await r.json();
-    const t = j.tickers?.[0];
-    if (!t) return;
-    const last = t.day?.c || t.lastTrade?.p;
-    const prev = t.prevDay?.c;
-    if (last) {
-      // VIXY price ≈ VIX/10 roughly — scale up for display
-      state.vix = { price: last, change: last - (prev||last), changePercent: prev ? (last-prev)/prev*100 : 0 };
-      renderVixBadge();
-    }
+    const q = Array.isArray(j) ? j[0] : j;
+    if (!q || !q.price) return;
+    state.vix = { price: q.price, change: q.change || 0, changePercent: q.changesPercentage || 0 };
+    renderVixBadge();
   } catch(e) {}
 }
 
@@ -9156,7 +9768,7 @@ function renderScreener() {
     if (!d?.bars?.length) continue;
     const bars = filterBars(d.bars, TF);
     if (bars.length < 10) continue;
-    const wave = getActiveWave(sym) || (detectWaves(bars)?.primary || detectWaves(bars));
+    const wave = getActiveWave(sym) || detectWaves(bars)?.primary;
     const last = bars[bars.length-1];
     const { score, label, nextTarget } = scoreWave(wave);
     results.push({ sym, score, label, wave, nextTarget, price: last.c });
@@ -9546,8 +10158,8 @@ async function loadShortInterest(sym) {
 async function renderDCF() {
   const el = document.getElementById('dcf-content');
   if (!el) return;
-  const sym = state.ticker || '';
-  const cur = state.bars && state.bars.length ? state.bars[state.bars.length-1].c : 0;
+  const sym = state.selected || '';
+  const cur = state.data[state.selected]?.bars?.length ? state.data[state.selected].bars[state.data[state.selected].bars.length-1].c : 0;
 
   el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Načítám data…</div>';
 
@@ -9555,8 +10167,8 @@ async function renderDCF() {
   let autoEPS = '', autoG1 = 12, autoG2 = 7, epsSource = '', g1Source = '';
   try {
     const [isResp, estResp] = await Promise.all([
-      fetch(`https://financialmodelingprep.com/stable/income-statement?symbol=${sym}&limit=5&apikey=${FMP_KEY}`).then(r=>r.json()),
-      fetch(`https://financialmodelingprep.com/stable/analyst-estimates?symbol=${sym}&limit=4&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fmpRequest(`https://financialmodelingprep.com/stable/income-statement?symbol=${sym}&limit=5&apikey=${FMP_KEY}`),
+      fmpRequest(`https://financialmodelingprep.com/stable/analyst-estimates?symbol=${sym}&limit=4&apikey=${FMP_KEY}`),
     ]);
 
     // EPS TTM from latest income statement
@@ -9657,7 +10269,7 @@ function calcDCF() {
   const dr = parseFloat(document.getElementById('dcf-dr')?.value) / 100;
   const tg = parseFloat(document.getElementById('dcf-tg')?.value) / 100;
   const mos = parseFloat(document.getElementById('dcf-mos')?.value) / 100;
-  const cur = state.bars && state.bars.length ? state.bars[state.bars.length-1].c : 0;
+  const cur = state.data[state.selected]?.bars?.length ? state.data[state.selected].bars[state.data[state.selected].bars.length-1].c : 0;
   if (!eps || eps <= 0) { showToast('Zadej EPS (TTM)'); return; }
   if (dr <= tg) { showToast('Discount rate musí být vyšší než terminal growth'); return; }
   let pv = 0;
@@ -9709,28 +10321,16 @@ async function renderBuffett() {
   const el = document.getElementById('buffett-content');
   if (!el) return;
   el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Načítám data…</div>';
-  const sym = state.ticker;
+  const sym = state.selected;
   try {
-    const [km, is, bs, rt] = await Promise.all([
-      fetch(`https://financialmodelingprep.com/stable/key-metrics?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`).then(r=>r.json()),
-      fetch(`https://financialmodelingprep.com/stable/income-statement?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`).then(r=>r.json()),
-      fetch(`https://financialmodelingprep.com/stable/balance-sheet-statement?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`).then(r=>r.json()),
-      fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`).then(r=>r.json()),
-    ]);
-    const k  = Array.isArray(km) ? km[0] : {};
-    const i0 = Array.isArray(is) ? is[0] : {};
-    const b0 = Array.isArray(bs) ? bs[0] : {};
-    const r0 = Array.isArray(rt) ? rt[0] : {};
-    // stable field names: returnOnEquity (was roe), debtToEquityRatio (was debtToEquity)
-    const roe = (k.returnOnEquity ?? r0.returnOnEquity) != null ? (k.returnOnEquity ?? r0.returnOnEquity) * 100 : null;
-    const debtEq = r0.debtToEquityRatio || (b0.totalDebt && b0.totalStockholdersEquity ? b0.totalDebt/b0.totalStockholdersEquity : null);
-    const opMargin = r0.operatingProfitMargin ? (r0.operatingProfitMargin*100) : (i0.operatingIncomeRatio ? i0.operatingIncomeRatio*100 : null);
-    const netMargin = r0.netProfitMargin ? (r0.netProfitMargin*100) : (i0.netIncomeRatio ? i0.netIncomeRatio*100 : null);
-    const fcfYield = k.freeCashFlowYield ? (k.freeCashFlowYield*100) : null;
-    const currentRatio = k.currentRatio || r0.currentRatio || null;
-    const peRatio = r0.priceToEarningsRatio || null;
-    const eps5y = Array.isArray(is) && is.length >= 5 ?
-      Math.pow(Math.max(0.01, is[0].eps) / Math.max(0.01, Math.abs(is[4].eps)), 1/4) - 1 : null;
+    // FMP, with automatic failover to Finnhub (single metric=all call) if
+    // FMP is rate-limited. See "DATA PROVIDER FAILOVER" section + CLAUDE.md.
+    const q = await fetchQualityMetricsFailover(sym);
+    const roe = q.roe, debtEq = q.debtEq, opMargin = q.opMargin, netMargin = q.netMargin,
+          fcfYield = q.fcfYield, currentRatio = q.currentRatio, peRatio = q.peRatio;
+    const epsHistory = q.epsHistory || [];
+    const eps5y = epsHistory.length >= 5 ?
+      Math.pow(Math.max(0.01, epsHistory[0]) / Math.max(0.01, Math.abs(epsHistory[4])), 1/4) - 1 : null;
     const score = (val, good, bad, higherIsBetter=true) => {
       if (val === null || val === undefined || isNaN(val)) return null;
       if (higherIsBetter) return val >= good ? 'green' : val >= bad ? 'yellow' : 'red';
@@ -9791,7 +10391,7 @@ async function renderDividends() {
   const el = document.getElementById('divid-content');
   if (!el) return;
   el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Načítám dividend data…</div>';
-  const sym = state.ticker;
+  const sym = state.selected;
   try {
     const [divResp, profileResp, kmResp] = await Promise.all([
       fetch(`https://financialmodelingprep.com/stable/dividends?symbol=${sym}&apikey=${FMP_KEY}`).then(r=>r.json()),
@@ -9801,7 +10401,7 @@ async function renderDividends() {
     const divHistory = Array.isArray(divResp) ? divResp : (divResp?.historical || []);
     const profile = Array.isArray(profileResp) ? profileResp[0] : {};
     const km = Array.isArray(kmResp) ? kmResp[0] : {};
-    const cur = state.bars && state.bars.length ? state.bars[state.bars.length-1].c : profile.price || 0;
+    const cur = state.data[sym]?.bars?.length ? state.data[sym].bars[state.data[sym].bars.length-1].c : profile.price || 0;
     if (!divHistory.length) {
       el.innerHTML = `<div style="padding:20px;text-align:center">
         <div style="font-size:32px;margin-bottom:12px">📭</div>
@@ -10038,7 +10638,7 @@ async function renderDivCalendar() {
   if (!el) return;
   el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Načítám dividend kalendář…</div>';
 
-  const tickers = state.watchlist || [];
+  const tickers = state.tickers || [];
   if (!tickers.length) {
     el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Watchlist je prázdný.</div>';
     return;
@@ -10143,7 +10743,7 @@ async function renderDivIncome() {
 
   const tickers = openPositions.length
     ? [...new Set(openPositions.map(t => t.sym))]
-    : (state.watchlist || []).slice(0, 10);
+    : (state.tickers || []).slice(0, 10);
 
   if (!tickers.length) {
     el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Žádné otevřené pozice v journalu. Přidej obchody přes 📓 JOURNAL.</div>';
@@ -10246,18 +10846,20 @@ async function renderDivIncome() {
 async function renderQuality() {
   const el = document.getElementById('quality-content');
   if (!el) return;
-  const sym = state.ticker;
+  const sym = state.selected;
   if (!sym) {
     el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">SELECT A TICKER FIRST</div>';
     return;
   }
   el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Načítám…</div>';
   try {
+    // fmpRequest = cached + rate-limit-aware (shared 5min cache — same URLs as
+    // Buffett's getQualityMetrics, so opening that tab first means this is free).
     const [km, is, ae, rtQ] = await Promise.all([
-      fetch(`https://financialmodelingprep.com/stable/key-metrics?symbol=${sym}&period=annual&limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
-      fetch(`https://financialmodelingprep.com/stable/income-statement?symbol=${sym}&period=annual&limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
-      fetch(`https://financialmodelingprep.com/stable/analyst-estimates?symbol=${sym}&period=annual&limit=1&apikey=${FMP_KEY}`).then(r=>r.json()),
-      fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${sym}&period=annual&limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fmpRequest(`https://financialmodelingprep.com/stable/key-metrics?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`),
+      fmpRequest(`https://financialmodelingprep.com/stable/income-statement?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`),
+      fmpRequest(`https://financialmodelingprep.com/stable/analyst-estimates?symbol=${sym}&period=annual&limit=1&apikey=${FMP_KEY}`),
+      fmpRequest(`https://financialmodelingprep.com/stable/ratios?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`),
     ]);
     const kmArr = Array.isArray(km) ? km : [];
     const isArr = Array.isArray(is) ? is : [];
@@ -10964,7 +11566,7 @@ async function renderQuality() {
 async function renderEarnTrend() {
   const el = document.getElementById('earntrend-content');
   if (!el) return;
-  const sym = state.ticker;
+  const sym = state.selected;
   if (!sym) {
     el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">SELECT A TICKER FIRST</div>';
     return;
@@ -10972,8 +11574,8 @@ async function renderEarnTrend() {
   el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Loading…</div>';
   try {
     const [isArr, aeArr] = await Promise.all([
-      fetch(`https://financialmodelingprep.com/stable/income-statement?symbol=${sym}&period=quarter&limit=9&apikey=${FMP_KEY}`).then(r=>r.json()),
-      fetch(`https://financialmodelingprep.com/stable/analyst-estimates?symbol=${sym}&period=quarter&limit=3&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fmpRequest(`https://financialmodelingprep.com/stable/income-statement?symbol=${sym}&period=quarter&limit=5&apikey=${FMP_KEY}`),
+      fmpRequest(`https://financialmodelingprep.com/stable/analyst-estimates?symbol=${sym}&period=quarter&limit=3&apikey=${FMP_KEY}`),
     ]);
     const hist = Array.isArray(isArr) ? isArr.slice().reverse() : [];
     const fwd  = Array.isArray(aeArr) ? aeArr.slice().reverse() : [];
@@ -11342,14 +11944,14 @@ async function renderMarketContext() {
 async function renderValHist() {
   const el = document.getElementById('valhist-content');
   if (!el) return;
-  const sym = state.ticker;
+  const sym = state.selected;
   if (!sym) {
     el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">SELECT A TICKER FIRST</div>';
     return;
   }
   el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Loading…</div>';
   try {
-    const data = await fetch(`https://financialmodelingprep.com/stable/key-metrics?symbol=${sym}&limit=40&apikey=${FMP_KEY}`).then(r => r.json());
+    const data = await fmpRequest(`https://financialmodelingprep.com/stable/key-metrics?symbol=${sym}&limit=5&apikey=${FMP_KEY}`);
     if (!Array.isArray(data) || !data.length) throw new Error('No data');
 
     // Take up to 8 annual entries, sorted oldest→newest
@@ -11705,7 +12307,7 @@ async function renderPtHist() {
 async function renderInstitutional() {
   const el = document.getElementById('inst-content');
   if (!el) return;
-  const sym = state.ticker;
+  const sym = state.selected;
   if (!sym) {
     el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">SELECT A TICKER FIRST</div>';
     return;
@@ -11714,7 +12316,7 @@ async function renderInstitutional() {
   try {
     const [holders, stats] = await Promise.all([
       Promise.resolve([]),
-      fetch(`https://financialmodelingprep.com/stable/key-metrics?symbol=${sym}&limit=1&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fmpRequest(`https://financialmodelingprep.com/stable/key-metrics?symbol=${sym}&limit=1&apikey=${FMP_KEY}`),
     ]);
 
     const holdersArr = Array.isArray(holders) ? holders : [];
@@ -11856,11 +12458,11 @@ async function renderSwan() {
   el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Počítám SWAN skóre…</div>';
   try {
     const [kmArr, incArr, divData, profArr, rtArr] = await Promise.all([
-      fetch(`https://financialmodelingprep.com/stable/key-metrics?symbol=${sym}&period=annual&limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
-      fetch(`https://financialmodelingprep.com/stable/income-statement?symbol=${sym}&period=annual&limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/stable/key-metrics?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/stable/income-statement?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`).then(r=>r.json()),
       fetch(`https://financialmodelingprep.com/stable/dividends?symbol=${sym}&apikey=${FMP_KEY}`).then(r=>r.json()),
       fetch(`https://financialmodelingprep.com/stable/profile?symbol=${sym}&apikey=${FMP_KEY}`).then(r=>r.json()),
-      fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${sym}&period=annual&limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`).then(r=>r.json()),
     ]);
 
     const km0 = Array.isArray(kmArr) && kmArr.length ? kmArr[0] : {};
@@ -12139,9 +12741,9 @@ async function renderChecklist() {
   _clAuto = {};
   try {
     const [kmArr, incArr, rtArrCL] = await Promise.all([
-      fetch(`https://financialmodelingprep.com/stable/key-metrics?symbol=${sym}&period=annual&limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
-      fetch(`https://financialmodelingprep.com/stable/income-statement?symbol=${sym}&period=annual&limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
-      fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${sym}&period=annual&limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/stable/key-metrics?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/stable/income-statement?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`).then(r=>r.json()),
     ]);
     const kms = Array.isArray(kmArr) ? kmArr : [];
     const incs = Array.isArray(incArr) ? incArr : [];
@@ -13912,7 +14514,7 @@ async function renderQuickStats() {
 
 // ─── VOLUME SPIKE ALERT ───────────────────────────────────────────────────────
 function checkVolumeSpike() {
-  const bars = state.bars || (state.selected && state.data[state.selected]?.bars) || [];
+  const bars = (state.selected && state.data[state.selected]?.bars) || [];
   if (!bars || bars.length < 21) return;
   const recent = bars.slice(-20);
   const avgVol = recent.slice(0, 19).reduce((s,b) => s+b.v, 0) / 19;
@@ -14358,12 +14960,77 @@ async function renderSeasonality() {
 }
 
 // ─── CORRELATION MATRIX ───────────────────────────────────────────────────────
+function renderAllWaves() {
+  const el = document.getElementById('allwaves-content');
+  if (!el) return;
+  const tickers = state.tickers || [];
+  if (!tickers.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🌊</div><div class="empty-text">PRÁZDNÝ WATCHLIST</div></div>';
+    return;
+  }
+
+  const WAVE_ORDER = { 'Ⅲ':0, 'Ⅴ':1, 'Ⅰ':2, 'Ⅱ':3, 'Ⅳ':4, 'C':5, 'B':6, 'A':7 };
+  const rows = [];
+  tickers.forEach(sym => {
+    const bars = state.data[sym]?.bars;
+    if (!bars?.length) { rows.push({ sym, missing: true }); return; }
+    const tfBars = filterBars(bars, state.timeframe || '3M');
+    if (tfBars.length < 10) { rows.push({ sym, missing: true }); return; }
+    const w = detectWaves(tfBars);
+    const wave = w?.primary;
+    const last = tfBars[tfBars.length - 1];
+    if (!wave) { rows.push({ sym, last, noWave: true }); return; }
+    rows.push({
+      sym, last,
+      pattern: wave.pattern,
+      currentWave: wave.currentWave,
+      forming: wave.formingWave?.currentWave || null,
+      direction: wave.direction,
+    });
+  });
+
+  rows.sort((a, b) => {
+    const ra = WAVE_ORDER[a.forming || a.currentWave] ?? 9;
+    const rb = WAVE_ORDER[b.forming || b.currentWave] ?? 9;
+    return ra - rb;
+  });
+
+  el.innerHTML = `<div class="section-header">ALL WAVES — ${state.timeframe || '3M'}</div>` + rows.map(r => {
+    if (r.missing) {
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);opacity:0.5">
+        <span style="font-family:'JetBrains Mono',monospace;font-weight:700">${r.sym}</span>
+        <span style="font-size:10px;color:var(--muted)">no data</span>
+      </div>`;
+    }
+    const price = r.last ? '$' + r.last.c.toFixed(2) : '';
+    if (r.noWave) {
+      return `<div onclick="selectTicker('${r.sym}');switchTab('chart')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer">
+        <span style="font-family:'JetBrains Mono',monospace;font-weight:700">${r.sym}</span>
+        <span style="font-size:10px;color:var(--muted)">${price} · no pattern</span>
+      </div>`;
+    }
+    const label = r.forming ? r.forming : r.currentWave;
+    const col = WAVE_COLORS[label] || '#888';
+    const arrow = r.direction === 'up' ? '▲' : '▼';
+    const formingTag = r.forming ? '<span style="font-size:8px;color:#888;margin-left:4px">forming</span>' : '';
+    return `<div onclick="selectTicker('${r.sym}');switchTab('chart')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer">
+      <span style="font-family:'JetBrains Mono',monospace;font-weight:700">${r.sym}</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;color:var(--muted)">${price}</span>
+        <span style="font-size:9px;color:${r.direction==='up'?'#00e676':'#ff1744'}">${arrow}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;color:${col};min-width:20px;text-align:center">${label}</span>
+        ${formingTag}
+      </div>
+    </div>`;
+  }).join('');
+}
+
 async function renderCorrelation() {
   const el = document.getElementById('correl-content');
   if (!el) return;
   el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Počítám korelace…</div>';
 
-  const tickers = (state.watchlist || []).slice(0, 8);
+  const tickers = (state.tickers || []).slice(0, 8);
   if (tickers.length < 2) {
     el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Přidej alespoň 2 tickery do watchlistu.</div>';
     return;
@@ -14446,7 +15113,7 @@ async function renderCorrelation() {
 
 // ─── OPTIONS DATA ─────────────────────────────────────────────────────────────
 async function renderOptions() {
-  const sym = state.ticker;
+  const sym = state.selected;
   const el = document.getElementById('options-content');
   if (!el) return;
   if (!sym) {
@@ -16762,18 +17429,26 @@ async function renderPortfolioPerf() {
         .then(r => r.json()).then(d => ({ sym, data: (Array.isArray(d) ? d : (d?.historical || [])).reverse() })).catch(() => ({ sym, data: [] }));
 
     const fetchQuote = sym =>
-      fetch(`https://financialmodelingprep.com/stable/quote?symbol=${sym}&apikey=${FMP_KEY}`)
-        .then(r => r.json()).then(d => ({ sym, price: (Array.isArray(d) ? d[0] : d)?.price || null })).catch(() => ({ sym, price: null }));
+      fetchQuoteFailover(sym).then(q => ({ sym, price: q.price })).catch(() => ({ sym, price: null }));
 
-    const [histResults, quoteResults] = await Promise.all([
+    // Try ONE batch FMP call for all positions' quotes first; only fall back
+    // to per-symbol fetchQuoteFailover() for whatever the batch didn't cover.
+    const [histResults, quoteMap] = await Promise.all([
       Promise.all(allSyms.map(fetchHist)),
-      Promise.all(syms.map(fetchQuote)),
+      (async () => {
+        let map = {};
+        try { map = await fetchBatchQuotesFmp(syms); } catch (e) { console.warn('[perf] batch quote failed, falling back per-symbol:', e.message); }
+        const missing = syms.filter(s => map[s] == null);
+        if (missing.length) {
+          const fallback = await Promise.all(missing.map(fetchQuote));
+          fallback.forEach(q => { map[q.sym] = q.price; });
+        }
+        return map;
+      })(),
     ]);
 
     const histMap = {};
     histResults.forEach(h => { histMap[h.sym] = h.data; });
-    const quoteMap = {};
-    quoteResults.forEach(q => { quoteMap[q.sym] = q.price; });
 
     positions.forEach(p => {
       const bars = state.data?.[p.sym]?.bars;
@@ -17719,7 +18394,7 @@ async function renderRevDCF() {
     var isList = Array.isArray(responses[1]) ? responses[1] : [];
     var kmList = Array.isArray(responses[2]) ? responses[2] : [];
     var mktCap = (prof && (prof.marketCap || prof.mktCap)) ? (prof.marketCap || prof.mktCap) : 0;
-    var price  = (prof && prof.price)  ? prof.price  : (state.bars && state.bars.length ? state.bars[state.bars.length-1].c : 0);
+    var price  = (prof && prof.price)  ? prof.price  : (state.data[sym]?.bars?.length ? state.data[sym].bars[state.data[sym].bars.length-1].c : 0);
     var shares = (mktCap && price) ? mktCap / price : 0;
     var fcf = 0;
     if (kmList.length && kmList[0].freeCashFlowPerShare && shares) {
@@ -18030,11 +18705,11 @@ async function sizingLoadSwan() {
   if (btn) btn.textContent = 'Načítám…';
   try {
     const [kmArr, incArr, divData, profArr, rtArr] = await Promise.all([
-      fetch(`https://financialmodelingprep.com/stable/key-metrics?symbol=${ticker}&period=annual&limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
-      fetch(`https://financialmodelingprep.com/stable/income-statement?symbol=${ticker}&period=annual&limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/stable/key-metrics?symbol=${ticker}&period=annual&limit=5&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/stable/income-statement?symbol=${ticker}&period=annual&limit=5&apikey=${FMP_KEY}`).then(r=>r.json()),
       fetch(`https://financialmodelingprep.com/stable/dividends?symbol=${ticker}&apikey=${FMP_KEY}`).then(r=>r.json()),
       fetch(`https://financialmodelingprep.com/stable/profile?symbol=${ticker}&apikey=${FMP_KEY}`).then(r=>r.json()),
-      fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${ticker}&period=annual&limit=6&apikey=${FMP_KEY}`).then(r=>r.json()),
+      fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${ticker}&period=annual&limit=5&apikey=${FMP_KEY}`).then(r=>r.json()),
     ]);
     const km0 = Array.isArray(kmArr) && kmArr.length ? kmArr[0] : {};
     const profile = Array.isArray(profArr) && profArr.length ? profArr[0] : {};
