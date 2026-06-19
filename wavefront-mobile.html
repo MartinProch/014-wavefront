@@ -1340,6 +1340,7 @@ strong { font-weight: 600; }
     </div>
     <div id="header-actions">
       <div id="portfolio-pnl-badge" style="display:flex;align-items:center;gap:2px;font-family:'JetBrains Mono',monospace;padding:2px 5px;border:1px solid var(--border);border-radius:4px;font-size:9px;flex-shrink:0"></div>
+      <div id="earn-badge" style="display:none;font-family:'JetBrains Mono',monospace;padding:2px 6px;border:1px solid #f59e0b55;border-radius:4px;font-size:9px;font-weight:700;color:#f59e0b;background:#f59e0b11;flex-shrink:0"></div>
       <div id="vix-badge" ontouchend="switchTab('fund');switchFundSubtab('mktctx');event.preventDefault();" onclick="switchTab('fund');switchFundSubtab('mktctx');" style="display:flex;align-items:center;gap:2px;font-family:'JetBrains Mono',monospace;padding:2px 5px;border:1px solid var(--border);border-radius:4px;font-size:9px;flex-shrink:0;cursor:pointer"></div>
       <div id="live-badge" style="display:none">● LIVE</div>
       <button class="hdr-btn" onclick="openSearch()" title="Search ticker">
@@ -1599,6 +1600,7 @@ strong { font-weight: 600; }
         <button class="fund-subtab subtab" id="fst-divcal" onclick="switchFundSubtab('divcal')">DIV CAL</button>
         <button class="fund-subtab subtab" id="fst-divinc" onclick="switchFundSubtab('divinc')">DIV INC</button>
         <button class="fund-subtab subtab" id="fst-quality" onclick="switchFundSubtab('quality')">QUALITY</button>
+        <button class="fund-subtab subtab" id="fst-earnq" onclick="switchFundSubtab('earnq')">EARN Q</button>
         <button class="fund-subtab subtab" id="fst-earntrend" onclick="switchFundSubtab('earntrend')">EARN TREND</button>
         <button class="fund-subtab subtab" id="fst-valhist" onclick="switchFundSubtab('valhist')">VAL HIST</button>
         <button class="fund-subtab subtab" id="fst-moat" onclick="switchFundSubtab('moat')">MOAT</button>
@@ -1672,6 +1674,10 @@ strong { font-weight: 600; }
       <div id="fund-quality-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="quality-content"></div>
       </div>
+      <!-- Earnings Quality view -->
+      <div id="fund-earnq-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
+        <div id="earnq-content"></div>
+      </div>
       <!-- Earn Trend view -->
       <div id="fund-earntrend-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="earntrend-content"></div>
@@ -1743,7 +1749,13 @@ strong { font-weight: 600; }
         <div style="padding:10px 12px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0">
           <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">🔍 WATCHLIST SCREENER</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px" id="screen-filters"></div>
-          <button onclick="runScreener()" style="width:100%;margin-top:10px;padding:10px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600">▶ SPUSTIT SCAN</button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px">
+            <button onclick="runScanPreset(['wave_w4','rsi_oversold'])" style="padding:9px 6px;background:#06b6d411;border:1px solid #06b6d444;border-radius:8px;color:#06b6d4;font-size:11px;font-weight:700;cursor:pointer">🌊 Wave 4 Buy</button>
+            <button onclick="runScanPreset(['momentum_high','vol_spike','above_ma200'])" style="padding:9px 6px;background:#f59e0b11;border:1px solid #f59e0b44;border-radius:8px;color:#f59e0b;font-size:11px;font-weight:700;cursor:pointer">⚡ Breakout</button>
+            <button onclick="runScanPreset(['rsi_oversold','near_support','above_ma200'])" style="padding:9px 6px;background:#22c55e11;border:1px solid #22c55e44;border-radius:8px;color:#22c55e;font-size:11px;font-weight:700;cursor:pointer">📌 Oversold Bounce</button>
+            <button onclick="runScanPreset(['momentum_high','above_ma200'])" style="padding:9px 6px;background:#3b82f611;border:1px solid #3b82f644;border-radius:8px;color:#3b82f6;font-size:11px;font-weight:700;cursor:pointer">🔥 Momentum</button>
+          </div>
+          <button onclick="runScreener()" style="width:100%;margin-top:8px;padding:10px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600">▶ VLASTNÍ SCAN</button>
           <button onclick="runMagicFormula()" style="width:100%;margin-top:8px;padding:10px;background:linear-gradient(135deg,#7c3aed,#4fc3f7);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;letter-spacing:0.5px">⚡ MAGIC FORMULA</button>
         </div>
         <div style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
@@ -7186,9 +7198,27 @@ async function loadTicker(sym, addToList=true) {
   }
 }
 
+// Returns human-readable earnings countdown: "📅 DNES", "📅 ZÍTRA", "📅 3d", "📅 7d"
+function earningsBadgeText(dateStr) {
+  if (!dateStr) return '';
+  const days = Math.round((new Date(dateStr) - new Date()) / (24*3600*1000));
+  if (days < 0)  return '';
+  if (days === 0) return '📅 DNES';
+  if (days === 1) return '📅 ZÍTRA';
+  return `📅 ${days}d`;
+}
+
 function updateHeader() {
   const sym = state.selected;
   document.getElementById('header-sym').textContent = sym || '—';
+  // Earnings badge in header
+  const earnBadge = document.getElementById('earn-badge');
+  if (earnBadge) {
+    const earnDate = state.upcomingEarnings?.[sym];
+    const earnText = earnDate ? earningsBadgeText(earnDate) : '';
+    earnBadge.textContent = earnText;
+    earnBadge.style.display = earnText ? 'block' : 'none';
+  }
   if (!sym || !state.data[sym]) { document.getElementById('header-price').textContent = ''; return; }
   const bars = state.data[sym].bars;
   if (!bars.length) return;
@@ -7529,7 +7559,7 @@ function renderWatchlist() {
         ${chgStr ? `<div class="wl-chg ${chgCls}">${chgStr}</div>` : ''}
         ${waveStr ? `<div class="wl-wave-badge">${waveStr}</div>` : ''}
         ${sentiment ? `<div style="font-size:10px" title="News sentiment: ${sentiment}">${sentimentEmoji}</div>` : ''}
-        ${state.upcomingEarnings?.[sym] ? `<div style="font-size:9px;color:#f59e0b;font-family:'JetBrains Mono',monospace">📅 EARN ${state.upcomingEarnings[sym]}</div>` : ''}
+        ${state.upcomingEarnings?.[sym] ? `<div style="font-size:9px;color:#f59e0b;font-family:'JetBrains Mono',monospace;font-weight:700">${earningsBadgeText(state.upcomingEarnings[sym])}</div>` : ''}
         ${watchPerfBadge}
         ${badge52}
       </div>
@@ -8483,7 +8513,7 @@ let compareState = { sortKey: 'pe', sortDir: 'asc', activeMetrics: ['pe','fwdPe'
 function switchFundSubtab(sub) {
   document.querySelectorAll('.fund-subtab').forEach(b => b.classList.remove('active'));
   document.getElementById('fst-' + sub).classList.add('active');
-  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval','pthist'].forEach(s => {
+  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earnq','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval','pthist'].forEach(s => {
     const v = document.getElementById('fund-' + s + '-view');
     if (v) v.style.display = s === sub ? '' : 'none';
   });
@@ -8499,6 +8529,7 @@ function switchFundSubtab(sub) {
   if (sub === 'divcal') renderDivCalendar();
   if (sub === 'divinc') renderDivIncome();
   if (sub === 'quality') renderQuality();
+  if (sub === 'earnq') renderEarnQuality();
   if (sub === 'earntrend') renderEarnTrend();
   if (sub === 'valhist') renderValHist();
   if (sub === 'moat') renderMoat();
@@ -8839,6 +8870,68 @@ function switchTab(tab) {
     renderDashboard();
   }
 }
+
+// Hardware back button (Android gesture/button) — by default Capacitor exits
+// the whole app on back, since this is a single-page tab UI with no browser
+// history. Instead: close an open modal first, else if we're on any tab other
+// than the chart, go back to the chart (the ticker the user was looking at
+// stays selected — switchTab('chart') only changes the active view), and
+// only let the OS exit-app default happen when already on the chart tab.
+function handleHardwareBack() {
+  const openModal = document.querySelector('.modal-overlay.open, #tag-modal-overlay.open')
+    || (document.getElementById('alert-modal-overlay')?.style.display === 'flex' ? document.getElementById('alert-modal-overlay') : null);
+  if (openModal) {
+    if (openModal.id === 'tag-modal-overlay') closeTagModal();
+    else if (openModal.id === 'alert-modal-overlay') closeAlertModal();
+    else openModal.classList.remove('open');
+    return;
+  }
+  if (state.activeTab && state.activeTab !== 'chart') {
+    switchTab('chart');
+    return;
+  }
+  window.Capacitor?.Plugins?.App?.exitApp?.();
+}
+// Registration happens inside init() after Capacitor bridge is guaranteed ready.
+
+// ─── SWIPE BETWEEN TABS ──────────────────────────────────────────────────────
+// Edge-swipe only (touch starts within 40px of screen edge) so it never
+// conflicts with scrollable content or the canvas's own swipe-to-ticker logic.
+(function initTabSwipe() {
+  const TAB_ORDER = ['chart','watchlist','analysis','fund','tools','screen','journal','dash'];
+  const EDGE_PX  = 40;   // px from left/right edge that activates the gesture
+  const MIN_DX   = 55;   // minimum horizontal travel to count as a swipe
+  const MAX_DY   = 45;   // maximum vertical drift (above = user is scrolling)
+  const MAX_MS   = 380;  // maximum gesture duration
+
+  let _sx = null, _sy = null, _st = null, _active = false;
+
+  document.getElementById('main').addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { _active = false; return; }
+    const t = e.touches[0];
+    const fromLeft  = t.clientX < EDGE_PX;
+    const fromRight = t.clientX > window.innerWidth - EDGE_PX;
+    if (!fromLeft && !fromRight) { _active = false; return; }
+    _sx = t.clientX; _sy = t.clientY; _st = Date.now(); _active = true;
+  }, { passive: true });
+
+  document.getElementById('main').addEventListener('touchend', e => {
+    if (!_active || e.changedTouches.length !== 1) { _active = false; return; }
+    const t  = e.changedTouches[0];
+    const dx = t.clientX - _sx;
+    const dy = Math.abs(t.clientY - _sy);
+    const dt = Date.now() - _st;
+    _active = false;
+    if (Math.abs(dx) < MIN_DX || dy > MAX_DY || dt > MAX_MS) return;
+    const dir   = dx < 0 ? 1 : -1;   // swipe left → next tab (+1), right → prev (-1)
+    const cur   = TAB_ORDER.indexOf(state.activeTab);
+    if (cur < 0) return;
+    const next  = cur + dir;
+    if (next < 0 || next >= TAB_ORDER.length) return;
+    haptic(20);
+    switchTab(TAB_ORDER[next]);
+  }, { passive: true });
+})();
 
 function switchWatchSubtab(sub) {
   document.querySelectorAll('#watch-subtab-bar .subtab').forEach(b => b.classList.remove('active'));
@@ -10203,48 +10296,90 @@ async function loadShortInterest(sym) {
   if (!el || !sym) return;
   el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-text">LOADING…</div></div>';
   try {
-    const res  = await fetch(`https://financialmodelingprep.com/api/v4/historical/shares_float?symbol=${sym}&apikey=${FMP_KEY}`);
+    const res  = await fetch(`https://financialmodelingprep.com/stable/shares-float?symbol=${sym}&apikey=${FMP_KEY}`);
     const data = await res.json();
-    if (!data?.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📉</div><div class="empty-text">NO SHORT DATA</div></div>'; return; }
+    if (!Array.isArray(data) || !data.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">📉</div><div class="empty-text">NO FLOAT DATA</div></div>';
+      return;
+    }
     const latest = data[0];
-    const shortPct = latest.shortPercentFloat ? (latest.shortPercentFloat * (latest.shortPercentFloat < 1 ? 100 : 1)).toFixed(1) : null;
-    const floatSh = latest.floatShares ? (latest.floatShares >= 1e9 ? (latest.floatShares/1e9).toFixed(2)+'B' : (latest.floatShares/1e6).toFixed(1)+'M') : '—';
-    const outSh   = latest.outstandingShares ? (latest.outstandingShares >= 1e9 ? (latest.outstandingShares/1e9).toFixed(2)+'B' : (latest.outstandingShares/1e6).toFixed(1)+'M') : '—';
-    const risk = !shortPct ? 'var(--muted)' : shortPct > 20 ? 'var(--red)' : shortPct > 10 ? 'var(--gold)' : 'var(--green)';
-    const riskLabel = !shortPct ? '—' : shortPct > 20 ? 'HIGH SHORT' : shortPct > 10 ? 'ELEVATED' : 'LOW SHORT';
-    let html = `<div style="padding:16px">`;
-    html += `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:3px;color:var(--muted);margin-bottom:12px">SHORT INTEREST · ${sym}</div>`;
-    if (shortPct) {
-      html += `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;text-align:center">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:36px;font-weight:700;color:${risk}">${shortPct}%</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">SHORT % OF FLOAT</div>
+    const floatSh   = latest.floatShares;
+    const outSh     = latest.outstandingShares;
+    const freeFloat = latest.freeFloat; // %
+    const fmt = n => n >= 1e9 ? (n/1e9).toFixed(2)+'B' : n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n ? String(n) : '—';
+
+    // ── Volume / institutional activity from local bars ──
+    const bars = state.data[sym]?.bars || [];
+    const recentBars = bars.slice(-63); // last 3 months
+    const vols = recentBars.map(b => b.v).filter(v => v > 0);
+    const avgVol = vols.length ? vols.reduce((s,v) => s+v, 0) / vols.length : 0;
+    const todayVol = bars.length ? bars[bars.length-1].v : 0;
+    const volRatio = avgVol > 0 ? todayVol / avgVol : null;
+
+    // Float rotation today = today's volume / float shares (% of float traded)
+    const floatRot = (floatSh && todayVol) ? (todayVol / floatSh * 100) : null;
+
+    // Block days = days in last 63 bars where volume ≥ 2.5× average
+    const blockDays = recentBars.filter(b => avgVol > 0 && b.v >= avgVol * 2.5);
+
+    // Institutional Activity Score (0–100):
+    // float rotation > 1% → high; block days count; vol ratio today
+    let instScore = 50;
+    if (floatRot != null) instScore += Math.min(25, floatRot * 10);
+    if (blockDays.length > 0) instScore += Math.min(20, blockDays.length * 4);
+    if (volRatio != null && volRatio > 1.5) instScore += Math.min(15, (volRatio - 1) * 10);
+    instScore = Math.min(100, Math.round(instScore));
+    const instColor = instScore >= 70 ? '#4fc3f7' : instScore >= 50 ? '#f59e0b' : '#6b7280';
+    const instLabel = instScore >= 70 ? 'HIGH ACTIVITY' : instScore >= 50 ? 'MODERATE' : 'LOW ACTIVITY';
+
+    const cell = (label, val, col) => `<div style="background:var(--bg2);padding:12px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:4px;letter-spacing:1px">${label}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:${col||'var(--fg)'}">${val}</div>
+    </div>`;
+
+    let html = `<div style="padding:16px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:3px;color:var(--muted);margin-bottom:12px">FLOAT & INSTITUTIONAL ACTIVITY · ${sym}</div>
+
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;text-align:center">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:36px;font-weight:700;color:${instColor}">${instScore}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">INSTITUTIONAL ACTIVITY SCORE</div>
         <div style="margin-top:8px">
-          <span style="font-family:'JetBrains Mono',monospace;font-size:9px;padding:3px 10px;border-radius:4px;border:1px solid ${risk}44;background:${risk}11;color:${risk}">${riskLabel}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:9px;padding:3px 10px;border-radius:4px;border:1px solid ${instColor}44;background:${instColor}11;color:${instColor}">${instLabel}</span>
         </div>
         <div style="background:var(--border);border-radius:4px;height:6px;margin-top:12px;overflow:hidden">
-          <div style="height:100%;border-radius:4px;background:${risk};width:${Math.min(shortPct,50)*2}%"></div>
+          <div style="height:100%;border-radius:4px;background:${instColor};width:${instScore}%"></div>
         </div>
+      </div>
+
+      <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:#64748b;line-height:1.6">
+        Skóre vychází z objemu obchodů vůči free floatu. Vysoké skóre = institucionální nebo dark pool aktivita (velcí hráči vstupují/vystupují). Není to short interest — FMP short data nejsou dostupná na free plánu.
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px">
+        ${cell('FREE FLOAT %', freeFloat != null ? freeFloat.toFixed(1)+'%' : '—')}
+        ${cell('FLOAT SHARES', fmt(floatSh))}
+        ${cell('OUTSTANDING', fmt(outSh))}
+        ${cell('FLOAT ROTATION', floatRot != null ? floatRot.toFixed(2)+'%' : '—', floatRot > 1 ? '#4fc3f7' : 'var(--fg)')}
+        ${cell('VOL / AVG VOL', volRatio != null ? volRatio.toFixed(2)+'×' : '—', volRatio > 2 ? '#f59e0b' : 'var(--fg)')}
+        ${cell('BLOCK DAYS (3M)', blockDays.length + (blockDays.length ? ' dni' : ''), blockDays.length >= 5 ? '#4fc3f7' : 'var(--fg)')}
       </div>`;
-    }
-    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-radius:12px;overflow:hidden">`;
-    const cell = (label, val) => `<div style="background:var(--bg2);padding:12px"><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:4px;letter-spacing:1px">${label}</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700">${val}</div></div>`;
-    html += cell('FLOAT', floatSh);
-    html += cell('OUTSTANDING', outSh);
-    html += cell('DATE', latest.date || '—');
-    html += cell('FREE FLOAT %', latest.freeFloat ? latest.freeFloat.toFixed(1)+'%' : '—');
-    html += `</div>`;
-    if (data.length > 1) {
-      html += `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);margin:14px 0 6px">HISTORY</div>`;
-      html += `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden">`;
-      data.slice(0,6).forEach(d => {
-        const pct = d.shortPercentFloat ? (d.shortPercentFloat * (d.shortPercentFloat < 1 ? 100 : 1)).toFixed(1) + '%' : '—';
-        html += `<div style="display:flex;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:10px">
-          <span style="color:var(--muted)">${d.date||'—'}</span>
-          <span style="font-weight:700">${pct}</span>
+
+    // Block days list
+    if (blockDays.length) {
+      html += `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:6px">BLOCK TRADE DNY (vol ≥ 2.5× průměr)</div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden">`;
+      blockDays.slice(-8).reverse().forEach(b => {
+        const ratio = (b.v / avgVol).toFixed(1);
+        const dateStr = b.date instanceof Date ? b.date.toISOString().slice(0,10) : String(b.date).slice(0,10);
+        html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:10px">
+          <span style="color:var(--muted)">${dateStr}</span>
+          <span style="color:#f59e0b;font-weight:700">${ratio}× avg</span>
+          <span style="color:var(--fg)">${fmt(b.v)}</span>
         </div>`;
       });
       html += `</div>`;
     }
+    html += `<div style="font-size:10px;color:#374151;text-align:center;margin-top:10px">Zdroj: FMP stable/shares-float · ${latest.date || ''}</div>`;
     html += '</div>';
     el.innerHTML = html;
   } catch(e) {
@@ -11657,6 +11792,213 @@ async function renderQuality() {
 
   } catch(e) {
     el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}</div>`;
+  }
+}
+
+// ─── EARNINGS QUALITY TAB ─────────────────────────────────────────────────────
+// Odhaluje "papírové" zisky: porovnává růst EPS vs revenue vs FCF, cash backing
+// (FCF/NI), accruals, marže a závislost na buybacku. Skóre 0-100.
+async function renderEarnQuality() {
+  const el = document.getElementById('earnq-content');
+  if (!el) return;
+  const sym = state.selected;
+  if (!sym) {
+    el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">SELECT A TICKER FIRST</div>';
+    return;
+  }
+  el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Načítám…</div>';
+  try {
+    // fmpRequest = cached + rate-limit-aware. income-statement sdílí cache s Quality/Buffett.
+    const [is, cf] = await Promise.all([
+      fmpRequest(`https://financialmodelingprep.com/stable/income-statement?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`),
+      fmpRequest(`https://financialmodelingprep.com/stable/cash-flow-statement?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`),
+    ]);
+    const isArr = Array.isArray(is) ? is : [];
+    const cfArr = Array.isArray(cf) ? cf : [];
+    if (isArr.length < 2) {
+      el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Fundamentální data nedostupná pro ${sym}.<br><span style="font-size:11px">ETF nebo FMP výpadek (zkus znovu za chvíli).</span></div>`;
+      return;
+    }
+    // index cash-flow podle roku (kalendářní rok z date) kvůli zarovnání s income
+    const cfByYear = {};
+    cfArr.forEach(c => { if (c.date) cfByYear[c.date.slice(0,4)] = c; });
+
+    // řádky newest-first
+    const rows = isArr.map(r => {
+      const yr = r.date ? r.date.slice(0,4) : '?';
+      const c = cfByYear[yr] || {};
+      const ocf = c.operatingCashFlow ?? c.netCashProvidedByOperatingActivities ?? null;
+      const fcf = c.freeCashFlow ?? (ocf != null && c.capitalExpenditure != null ? ocf + c.capitalExpenditure : null);
+      return {
+        year: yr,
+        revenue: r.revenue ?? null,
+        netIncome: r.netIncome ?? null,
+        eps: r.epsDiluted ?? r.eps ?? null,
+        shares: r.weightedAverageShsOutDil ?? r.weightedAverageShsOut ?? null,
+        ocf, fcf,
+        netMargin: (r.revenue && r.netIncome != null) ? (r.netIncome / r.revenue) * 100 : null,
+      };
+    });
+    const n = rows.length;
+    const newest = rows[0], oldest = rows[n-1];
+
+    // CAGR helper (newest-first arr)
+    function cagr(field) {
+      const a = newest[field], b = oldest[field];
+      if (a == null || b == null || b === 0) return null;
+      if ((a < 0) !== (b < 0) || b < 0) return null; // přeskoč záporné báze / sign-flip
+      const yrs = n - 1;
+      if (yrs < 1) return null;
+      return (Math.pow(a / b, 1 / yrs) - 1) * 100;
+    }
+    const revCagr = cagr('revenue');
+    const epsCagr = cagr('eps');
+    const niCagr  = cagr('netIncome');
+    const fcfCagr = cagr('fcf');
+
+    // sumy pro robustní poměry
+    const sum = (f) => rows.reduce((a,r)=> a + (r[f] != null && isFinite(r[f]) ? r[f] : 0), 0);
+    const sumNI = sum('netIncome'), sumFCF = sum('fcf'), sumOCF = sum('ocf');
+
+    const signals = [];
+    const clamp = (v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+
+    // A) Cash backing — FCF/NI (multi-year). >1 = zisky kryté hotovostí.
+    let cashBack = (sumNI > 0 && sumFCF != null) ? sumFCF / sumNI : null;
+    if (cashBack != null) {
+      const sc = clamp(cashBack / 1.0 * 100, 0, 100);
+      signals.push({ key:'cash', w:0.30, score:sc, label:'Cash backing (FCF/NI)',
+        val: cashBack.toFixed(2)+'×',
+        note: cashBack >= 0.9 ? '✓ Zisky jsou reálné — konvertují se na hotovost' : cashBack >= 0.6 ? '⚠ Jen část zisků se mění v cash — podívej se na capex' : '✗ Zisky nejsou hotovost — signál účetního engineeringu' });
+    }
+
+    // B) Accruals (Sloan) — (NI - OCF)/|NI|. Nízké/záporné = kvalitní.
+    // Accruals = bez čeho se NI liší od skutečného cash flow. Vysoké accruals = Red Flag!
+    let accr = (sumNI !== 0 && sumOCF != null) ? (sumNI - sumOCF) / Math.abs(sumNI) : null;
+    if (accr != null) {
+      const sc = clamp((0.35 - accr) / 0.55 * 100, 0, 100);
+      signals.push({ key:'accr', w:0.20, score:sc, label:'Accruals (NI vs OCF)',
+        val: (accr>=0?'+':'')+(accr*100).toFixed(0)+'%',
+        note: accr <= 0.1 ? '✓ Čisté účetnictví — co NI, to cash' : accr <= 0.3 ? '⚠ Mírné accruals — běžné, ale sleduj' : '✗ VYSOKÉ ACCRUALS — největší Red Flag! Zisk je z papíru, ne z peněz' });
+    }
+
+    // C) EPS růst krytý revenue růstem
+    // Pokud EPS roste 20% ale revenue jen 3% → růst je z ředění, marží, nebo buybacku, ne z tržeb!
+    if (epsCagr != null && revCagr != null && epsCagr > 0.5) {
+      const ratio = clamp(revCagr / epsCagr, 0, 1.2);
+      const sc = clamp(ratio / 1.0 * 100, 0, 100);
+      signals.push({ key:'rev', w:0.25, score:sc, label:'EPS krytý revenue',
+        val: `rev ${revCagr>=0?'+':''}${revCagr.toFixed(0)}% / eps ${epsCagr>=0?'+':''}${epsCagr.toFixed(0)}%`,
+        note: ratio >= 0.7 ? '✓ EPS roste s tržbami — organický růst' : ratio >= 0.4 ? '⚠ Část růstu z marží/buybacku — ověř zdaje udržitelné' : '✗ EPS hlavně z engineeringu mimo tržby' });
+    }
+
+    // D) FCF sleduje čistý zisk
+    // Pokud zisk roste ale FCF stagnuje → cash flow se zatěžuje (záväzky, capex, pracovní kapitál)
+    if (fcfCagr != null && niCagr != null && niCagr > 0.5) {
+      const ratio = clamp(fcfCagr / niCagr, 0, 1.2);
+      const sc = clamp(ratio / 1.0 * 100, 0, 100);
+      signals.push({ key:'fcfg', w:0.15, score:sc, label:'FCF vs čistý zisk',
+        val: `fcf ${fcfCagr>=0?'+':''}${fcfCagr.toFixed(0)}% / ni ${niCagr>=0?'+':''}${niCagr.toFixed(0)}%`,
+        note: ratio >= 0.7 ? '✓ Cash flow roste se ziskem — zdravo' : '⚠ Zisk roste, cash flow zaostává — sleduj capex a WC' });
+    }
+
+    // E) Buyback závislost / dilution
+    // Ředění = EPS padá jen proto, že nových akcií přibývá. Buyback = štucer na EPS, není to organický růst!
+    const shCagr = cagr('shares');
+    if (shCagr != null) {
+      let sc;
+      if (shCagr > 0) sc = clamp(80 - shCagr * 15, 0, 100);            // dilution
+      else sc = clamp(100 + shCagr * 5, 50, 100);                      // buyback (heavy → níž)
+      signals.push({ key:'sh', w:0.10, score:sc, label:'Akcie v oběhu',
+        val: (shCagr>=0?'+':'')+shCagr.toFixed(1)+'%/r',
+        note: shCagr > 1.5 ? '✗ ŘEDĚNÍ — nové akcie znehodnocují staré (dilutive)' : shCagr < -4 ? '⚠ Silný buyback — zvýšuje EPS uměle (sleduj FCF na buyback)' : '✓ Stabilní počet akcií — bez distorze' });
+    }
+
+    // vážené skóre (renormalizace přes dostupné signály)
+    const wSum = signals.reduce((a,s)=>a+s.w,0) || 1;
+    const score = signals.length ? Math.round(signals.reduce((a,s)=>a+s.score*s.w,0) / wSum) : null;
+
+    const verdict = score == null ? { t:'N/A', c:'#9ca3af', d:'Nedostatek dat.' }
+      : score >= 75 ? { t:'VYSOKÁ KVALITA', c:'#22c55e', d:'Zisky kryté hotovostí a tržbami.' }
+      : score >= 55 ? { t:'SOLIDNÍ', c:'#84cc16', d:'Kvalitní zisky s drobnými výhradami.' }
+      : score >= 40 ? { t:'SMÍŠENÁ', c:'#f59e0b', d:'Část zisků není podpořena cash flow.' }
+      : { t:'NÍZKÁ — POZOR', c:'#ef4444', d:'⚠ Riziko papírových zisků (accruals / engineering).' };
+
+    // ── render ──
+    const gaugeColor = verdict.c;
+    const dash = score == null ? 0 : (score/100) * 339.292;
+    let html = `
+      <div style="text-align:center;margin-bottom:6px">
+        <div style="font-size:13px;letter-spacing:1px;color:var(--muted)">EARNINGS QUALITY · ${sym}</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;margin:8px 0 4px">
+        <svg width="150" height="150" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="54" fill="none" stroke="var(--border)" stroke-width="10"/>
+          <circle cx="60" cy="60" r="54" fill="none" stroke="${gaugeColor}" stroke-width="10"
+            stroke-linecap="round" stroke-dasharray="${dash.toFixed(1)} 339.292"
+            transform="rotate(-90 60 60)"/>
+          <text x="60" y="58" text-anchor="middle" font-size="30" font-weight="700" fill="var(--text)">${score==null?'—':score}</text>
+          <text x="60" y="78" text-anchor="middle" font-size="11" fill="var(--muted)">/ 100</text>
+        </svg>
+      </div>
+      <div style="text-align:center;margin-bottom:14px">
+        <div style="font-size:15px;font-weight:700;color:${verdict.c}">${verdict.t}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${verdict.d}</div>
+      </div>
+      <!-- Help section -->
+      <div style="background:var(--border);border-left:3px solid var(--primary,#3b82f6);border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:var(--muted);line-height:1.6">
+        <div style="font-weight:600;color:var(--text);margin-bottom:4px">💡 Jak číst tuto analýzu:</div>
+        <div><strong>Vysoká kvalita (75+):</strong> Zisky jsou kryté hotovostí a rostou se tržbami — nízké accruals značí čisté účetnictví.</div>
+        <div><strong>Pozor (&lt;40):</strong> Vysoké accruals, EPS roste bez tržeb, slabý FCF. Riziko „papírových" zisků.</div>
+        <div><strong>Klíčový signál:</strong> Pokud EPS roste 20 % ale revenue jen 5 % → dochází k zvýšení marží (dobré) NEBO ke zvýšení počtu akcií (buyback = engineering, horší).</div>
+      </div>`;
+
+    // breakdown
+    html += `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">`;
+    signals.forEach(s => {
+      const sc = Math.round(s.score);
+      const c = sc >= 70 ? '#22c55e' : sc >= 45 ? '#f59e0b' : '#ef4444';
+      html += `
+        <div style="background:var(--card,#1a1d24);border:1px solid var(--border);border-radius:8px;padding:10px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font-size:13px;font-weight:600;color:var(--text)">${s.label}</span>
+            <span style="font-size:12px;color:var(--muted)">${s.val}</span>
+          </div>
+          <div style="height:6px;background:var(--border);border-radius:3px;margin:6px 0 4px;overflow:hidden">
+            <div style="height:100%;width:${sc}%;background:${c}"></div>
+          </div>
+          <div style="font-size:11px;color:var(--muted)">${s.note}</div>
+        </div>`;
+    });
+    html += `</div>`;
+
+    // tabulka let
+    const fmtB = (v)=> v==null?'—':(Math.abs(v)>=1e9?(v/1e9).toFixed(1)+'B':Math.abs(v)>=1e6?(v/1e6).toFixed(0)+'M':v.toFixed(0));
+    html += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead><tr style="color:var(--muted);text-align:right">
+        <th style="text-align:left;padding:4px">Rok</th><th style="padding:4px">Revenue</th><th style="padding:4px">Net Inc</th><th style="padding:4px">OCF</th><th style="padding:4px">FCF</th><th style="padding:4px">EPS</th><th style="padding:4px">Net %</th>
+      </tr></thead><tbody>`;
+    [...rows].reverse().forEach(r => {
+      html += `<tr style="text-align:right;border-top:1px solid var(--border)">
+        <td style="text-align:left;padding:4px;color:var(--text)">${r.year}</td>
+        <td style="padding:4px">${fmtB(r.revenue)}</td>
+        <td style="padding:4px">${fmtB(r.netIncome)}</td>
+        <td style="padding:4px">${fmtB(r.ocf)}</td>
+        <td style="padding:4px">${fmtB(r.fcf)}</td>
+        <td style="padding:4px">${r.eps==null?'—':r.eps.toFixed(2)}</td>
+        <td style="padding:4px">${r.netMargin==null?'—':r.netMargin.toFixed(1)}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:10px;line-height:1.5">
+        Skóre kombinuje: cash backing (FCF/NI), accruals (NI vs OCF), EPS růst krytý tržbami,
+        FCF vs zisk a vývoj počtu akcií. Vysoké accruals + EPS rostoucí rychleji než tržby a FCF =
+        riziko „papírových" zisků. Data: FMP annual, ${n} let.
+      </div>`;
+
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}<br><span style="font-size:11px">FMP výpadek nebo rate-limit — zkus za chvíli.</span></div>`;
   }
 }
 
@@ -14755,7 +15097,7 @@ async function checkEarningsReminders() {
       });
       if (upcoming) {
         state.upcomingEarnings[sym] = upcoming.date;
-        const daysUntil = Math.ceil((new Date(upcoming.date) - today) / (24*3600*1000));
+        const daysUntil = Math.round((new Date(upcoming.date) - today) / (24*3600*1000));
         const key = `_earnremind_${sym}_${upcoming.date}`;
         if (!sessionStorage.getItem(key)) {
           sessionStorage.setItem(key, '1');
@@ -14763,11 +15105,73 @@ async function checkEarningsReminders() {
           showToast(`📅 Earnings: ${sym} reportuje ${when} (${upcoming.date})`);
           await new Promise(res => setTimeout(res, 2000));
         }
+      } else {
+        delete state.upcomingEarnings[sym];
       }
     } catch(e) {}
   }
-  // Re-render watchlist so earnings badges appear
+  // Re-render watchlist + header so earnings badges are current
   renderWatchlist();
+  updateHeader();
+  // Schedule OS push notifications for portfolio positions (day before earnings)
+  scheduleEarningsNotifications().catch(() => {});
+}
+
+// Schedules a local OS notification for each portfolio position that has
+// earnings tomorrow — fires even when the app is closed.
+// Uses @capacitor/local-notifications (synced via `npx cap sync android`).
+async function scheduleEarningsNotifications() {
+  const LN = window.Capacitor?.Plugins?.LocalNotifications;
+  if (!LN) return; // not running in Capacitor native context
+
+  // Request permission on first call; bail if denied
+  const perm = await LN.requestPermissions().catch(() => ({ display: 'denied' }));
+  if (perm.display !== 'granted') return;
+
+  // Portfolio tickers (open positions only)
+  loadWfJournal();
+  const portfolioSyms = new Set(
+    (state.journal || [])
+      .filter(t => t.status === 'open' && t.shares > 0)
+      .map(t => t.sym)
+  );
+  if (!portfolioSyms.size) return;
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+  const toNotify = [];
+  for (const sym of portfolioSyms) {
+    const earnDate = state.upcomingEarnings?.[sym];
+    if (earnDate === tomorrowStr) toNotify.push(sym);
+  }
+  if (!toNotify.length) return;
+
+  // Cancel any previously scheduled earnings notifications to avoid duplicates
+  try {
+    const pending = await LN.getPending();
+    const earnIds = (pending.notifications || [])
+      .filter(n => n.extra?.isEarningsAlert)
+      .map(n => ({ id: n.id }));
+    if (earnIds.length) await LN.cancel({ notifications: earnIds });
+  } catch(e) {}
+
+  // Schedule one notification per ticker at 8:00 tomorrow morning
+  const fireAt = new Date(tomorrow);
+  fireAt.setHours(8, 0, 0, 0);
+
+  const notifications = toNotify.map((sym, i) => ({
+    id: 900000 + i, // high base ID to avoid colliding with alert notifications
+    title: `📅 Earnings zítra — ${sym}`,
+    body: `${sym} reportuje výsledky zítra (${tomorrowStr}). Zkontroluj pozici.`,
+    schedule: { at: fireAt, allowWhileIdle: true },
+    extra: { isEarningsAlert: true, sym },
+    smallIcon: 'ic_stat_icon_config_sample',
+    iconColor: '#D99441',
+  }));
+
+  await LN.schedule({ notifications }).catch(() => {});
 }
 
 // ─── PULL TO REFRESH ──────────────────────────────────────────────────────────
@@ -14916,6 +15320,14 @@ async function init() {
 
   // Pull-to-refresh on watchlist and chart
   initPullToRefresh();
+
+  // Register hardware back button handler after Capacitor bridge is ready.
+  // Needs to run here (inside init) not at parse time — Capacitor's Plugin
+  // registry isn't populated until the bridge finishes its async handshake.
+  try {
+    const _CapApp = window.Capacitor?.Plugins?.App;
+    if (_CapApp) _CapApp.addListener('backButton', handleHardwareBack);
+  } catch(e) { /* non-Capacitor environment, silently ignore */ }
 }
 
 // ─── EARN HISTORY ─────────────────────────────────────────────────────────────
@@ -15703,6 +16115,13 @@ function toggleScreenFilter(id) {
   if (state.screenFilters.has(id)) state.screenFilters.delete(id);
   else state.screenFilters.add(id);
   renderScreenFilters();
+}
+
+function runScanPreset(filterIds) {
+  state.screenFilters = new Set(filterIds);
+  renderScreenFilters();
+  haptic(20);
+  runScreener();
 }
 
 async function runScreener() {
@@ -17487,6 +17906,11 @@ function openHelp(query) {
 }
 
 // ── Portfolio Performance vs Benchmark (PERF tab) ──────────────────────────
+function refreshPortfolioPerf() {
+  delete state._perfCache;
+  renderPortfolioPerf();
+}
+
 async function renderPortfolioPerf() {
   const el = document.getElementById('journal-perf-view');
   if (!el) return;
@@ -17496,6 +17920,14 @@ async function renderPortfolioPerf() {
 
   if (!openTrades.length) {
     el.innerHTML = '<div style="color:#9ca3af;text-align:center;padding:40px;font-size:13px">Přidej pozice v záložce TRADES.</div>';
+    return;
+  }
+
+  // Return cached render if already fetched this session — avoids burning FMP
+  // quota every time the user switches to this tab.  Manual "Obnovit" clears it.
+  if (state._perfCache) {
+    el.innerHTML = state._perfCache;
+    renderPerfCharts();
     return;
   }
 
@@ -17613,10 +18045,13 @@ async function renderPortfolioPerf() {
     const alphaColor = portfolioAlpha === null ? '#9ca3af' : portfolioAlpha >= 0 ? '#22c55e' : '#ef4444';
     const alphaArrow = portfolioAlpha === null ? '' : portfolioAlpha >= 0 ? ' ▲' : ' ▼';
 
-    el.innerHTML = `
+    const _html = `
 <div style="padding:4px">
   <div style="background:#16213e;border-radius:10px;padding:16px;margin-bottom:14px;border:1px solid #1e3a5f">
-    <div style="font-size:10px;color:#9ca3af;letter-spacing:1px;font-weight:600;margin-bottom:12px">PŘEHLED PORTFOLIA VS BENCHMARK</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:10px;color:#9ca3af;letter-spacing:1px;font-weight:600">PŘEHLED PORTFOLIA VS BENCHMARK</div>
+      <button onclick="refreshPortfolioPerf()" style="font-size:10px;color:#6b7280;background:none;border:1px solid #374151;border-radius:6px;padding:3px 8px;cursor:pointer">🔄 Obnovit</button>
+    </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
       <span style="font-size:13px;color:#9ca3af">Celkový výnos portfolia</span>
       <span style="font-size:14px;font-weight:700;color:${wtdPortReturn>=0?'#22c55e':'#ef4444'}">${fmtPct(wtdPortReturn)}</span>
@@ -17659,58 +18094,62 @@ async function renderPortfolioPerf() {
   </div>
 </div>`;
 
-    requestAnimationFrame(() => {
-      const canvas = document.getElementById('perf-timeline-canvas');
-      if (!canvas) return;
-      const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = 180 * dpr;
-      const ctx = canvas.getContext('2d');
-      ctx.scale(dpr, dpr);
-      const W = rect.width, H = 180;
-      const PAD = { top:14, right:14, bottom:28, left:38 };
-      const cw = W - PAD.left - PAD.right, ch = H - PAD.top - PAD.bottom;
-
-      const allVals = timelineData.flatMap(d => [d.portVal, d.spyVal]).filter(v => v!==null);
-      if (!allVals.length) return;
-      const minV = Math.min(...allVals) * 0.97, maxV = Math.max(...allVals) * 1.03;
-      const xS = i => PAD.left + (i/(timelineData.length-1||1))*cw;
-      const yS = v => PAD.top + ch - ((v-minV)/(maxV-minV))*ch;
-
-      ctx.strokeStyle = '#1e3a5f'; ctx.lineWidth = 1;
-      for (let i=0; i<=4; i++) {
-        const y = PAD.top + (ch/4)*i;
-        ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(W-PAD.right, y); ctx.stroke();
-      }
-
-      [[  'spyVal','#22c55e'],[  'portVal','#4fc3f7']].forEach(([key,color]) => {
-        ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
-        let started = false;
-        timelineData.forEach((d,i) => {
-          if (d[key]===null) return;
-          const x=xS(i), y=yS(d[key]);
-          if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);
-        });
-        ctx.stroke();
-      });
-
-      ctx.fillStyle='#6b7280'; ctx.font=`${9*dpr/dpr}px sans-serif`; ctx.textAlign='center';
-      const step = Math.max(1, Math.floor(timelineData.length/5));
-      timelineData.forEach((d,i) => {
-        if (i%step===0 || i===timelineData.length-1) ctx.fillText(d.ym.slice(2), xS(i), H-6);
-      });
-      ctx.textAlign='right';
-      [0,0.5,1].forEach(f => {
-        const v = minV + (maxV-minV)*f;
-        ctx.fillText(v.toFixed(0), PAD.left-4, yS(v)+3);
-      });
-    });
+    state._perfCache = { html: _html, timelineData };
+    el.innerHTML = _html;
+    renderPerfCharts();
 
   } catch(err) {
     console.error('PERF tab error:', err);
     el.innerHTML = `<div style="color:#ef4444;text-align:center;padding:40px;font-size:13px">Chyba při načítání dat.<br><small style="color:#6b7280">${err.message}</small></div>`;
   }
+}
+
+function renderPerfCharts() {
+  const timelineData = state._perfCache?.timelineData;
+  if (!timelineData) return;
+  requestAnimationFrame(() => {
+    const canvas = document.getElementById('perf-timeline-canvas');
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = 180 * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    const W = rect.width, H = 180;
+    const PAD = { top:14, right:14, bottom:28, left:38 };
+    const cw = W - PAD.left - PAD.right, ch = H - PAD.top - PAD.bottom;
+    const allVals = timelineData.flatMap(d => [d.portVal, d.spyVal]).filter(v => v !== null);
+    if (!allVals.length) return;
+    const minV = Math.min(...allVals) * 0.97, maxV = Math.max(...allVals) * 1.03;
+    const xS = i => PAD.left + (i / (timelineData.length - 1 || 1)) * cw;
+    const yS = v => PAD.top + ch - ((v - minV) / (maxV - minV)) * ch;
+    ctx.strokeStyle = '#1e3a5f'; ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = PAD.top + (ch / 4) * i;
+      ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(W - PAD.right, y); ctx.stroke();
+    }
+    [['spyVal', '#22c55e'], ['portVal', '#4fc3f7']].forEach(([key, color]) => {
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+      let started = false;
+      timelineData.forEach((d, i) => {
+        if (d[key] === null) return;
+        const x = xS(i), y = yS(d[key]);
+        if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    });
+    ctx.fillStyle = '#6b7280'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+    const step = Math.max(1, Math.floor(timelineData.length / 5));
+    timelineData.forEach((d, i) => {
+      if (i % step === 0 || i === timelineData.length - 1) ctx.fillText(d.ym.slice(2), xS(i), H - 6);
+    });
+    ctx.textAlign = 'right';
+    [0, 0.5, 1].forEach(f => {
+      const v = minV + (maxV - minV) * f;
+      ctx.fillText(v.toFixed(0), PAD.left - 4, yS(v) + 3);
+    });
+  });
 }
 
 function closeHelp() {
@@ -18481,8 +18920,8 @@ async function renderRevDCF() {
     var FMP_STABLE_BASE = 'https://financialmodelingprep.com/stable';
     var responses = await Promise.all([
       fetch(FMP_STABLE_BASE + '/profile?symbol=' + sym + '&apikey=' + FMP_KEY).then(function(r){return r.json();}),
-      fetch(FMP_STABLE_BASE + '/income-statement?symbol=' + sym + '&period=annual&limit=6&apikey=' + FMP_KEY).then(function(r){return r.json();}),
-      fetch(FMP_STABLE_BASE + '/key-metrics?symbol=' + sym + '&period=annual&limit=6&apikey=' + FMP_KEY).then(function(r){return r.json();}),
+      fetch(FMP_STABLE_BASE + '/income-statement?symbol=' + sym + '&period=annual&limit=5&apikey=' + FMP_KEY).then(function(r){return r.json();}),
+      fetch(FMP_STABLE_BASE + '/key-metrics?symbol=' + sym + '&period=annual&limit=5&apikey=' + FMP_KEY).then(function(r){return r.json();}),
     ]);
     var prof   = Array.isArray(responses[0]) ? responses[0][0] : responses[0];
     var isList = Array.isArray(responses[1]) ? responses[1] : [];
