@@ -1605,6 +1605,7 @@ strong { font-weight: 600; }
         <button class="fund-subtab subtab" id="fst-divinc" onclick="switchFundSubtab('divinc')">DIV INC</button>
         <button class="fund-subtab subtab" id="fst-quality" onclick="switchFundSubtab('quality')">QUALITY</button>
         <button class="fund-subtab subtab" id="fst-earnq" onclick="switchFundSubtab('earnq')">EARN Q</button>
+        <button class="fund-subtab subtab" id="fst-debt" onclick="switchFundSubtab('debt')">DEBT</button>
         <button class="fund-subtab subtab" id="fst-earntrend" onclick="switchFundSubtab('earntrend')">EARN TREND</button>
         <button class="fund-subtab subtab" id="fst-valhist" onclick="switchFundSubtab('valhist')">VAL HIST</button>
         <button class="fund-subtab subtab" id="fst-moat" onclick="switchFundSubtab('moat')">MOAT</button>
@@ -1677,6 +1678,10 @@ strong { font-weight: 600; }
       <!-- Quality view -->
       <div id="fund-quality-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="quality-content"></div>
+      </div>
+      <!-- Debt Analysis view -->
+      <div id="fund-debt-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
+        <div id="debt-content"></div>
       </div>
       <!-- Earnings Quality view -->
       <div id="fund-earnq-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
@@ -8517,7 +8522,7 @@ let compareState = { sortKey: 'pe', sortDir: 'asc', activeMetrics: ['pe','fwdPe'
 function switchFundSubtab(sub) {
   document.querySelectorAll('.fund-subtab').forEach(b => b.classList.remove('active'));
   document.getElementById('fst-' + sub).classList.add('active');
-  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earnq','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval','pthist'].forEach(s => {
+  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earnq','debt','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval','pthist'].forEach(s => {
     const v = document.getElementById('fund-' + s + '-view');
     if (v) v.style.display = s === sub ? '' : 'none';
   });
@@ -8534,6 +8539,7 @@ function switchFundSubtab(sub) {
   if (sub === 'divinc') renderDivIncome();
   if (sub === 'quality') renderQuality();
   if (sub === 'earnq') renderEarnQuality();
+  if (sub === 'debt') renderDebt();
   if (sub === 'earntrend') renderEarnTrend();
   if (sub === 'valhist') renderValHist();
   if (sub === 'moat') renderMoat();
@@ -11797,6 +11803,235 @@ async function renderQuality() {
 
   } catch(e) {
     el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}</div>`;
+  }
+}
+
+// ─── DEBT ANALYSIS TAB ────────────────────────────────────────────────────────
+// Finanční zdraví: D/E, Interest Coverage, Net Debt/EBITDA, Current Ratio,
+// FCF/Debt (roky splácení), trend dluhu. Skóre 0-100.
+async function renderDebt() {
+  const el = document.getElementById('debt-content');
+  if (!el) return;
+  const sym = state.selected;
+  if (!sym) {
+    el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">SELECT A TICKER FIRST</div>';
+    return;
+  }
+  el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Načítám…</div>';
+  try {
+    // balance-sheet sdílí cache s Buffett/Quality přes fmpRequest
+    const [bs, is, cf] = await Promise.all([
+      fmpRequest(`https://financialmodelingprep.com/stable/balance-sheet-statement?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`),
+      fmpRequest(`https://financialmodelingprep.com/stable/income-statement?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`),
+      fmpRequest(`https://financialmodelingprep.com/stable/cash-flow-statement?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`),
+    ]);
+    const bsArr = Array.isArray(bs) ? bs : [];
+    const isArr = Array.isArray(is) ? is : [];
+    const cfArr = Array.isArray(cf) ? cf : [];
+
+    if (bsArr.length < 1) {
+      el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Data nedostupná pro ${sym}.<br><span style="font-size:11px">ETF nebo FMP výpadek.</span></div>`;
+      return;
+    }
+
+    const b0 = bsArr[0] || {}, i0 = isArr[0] || {}, c0 = cfArr[0] || {};
+
+    // klíčové hodnoty (nejnovější rok)
+    const totalDebt   = b0.totalDebt ?? (b0.longTermDebt ?? 0) + (b0.shortTermDebt ?? 0);
+    const equity      = b0.totalStockholdersEquity ?? b0.totalEquity ?? null;
+    const cash        = b0.cashAndCashEquivalents ?? b0.cashAndShortTermInvestments ?? 0;
+    const netDebt     = totalDebt - cash;
+    const curAssets   = b0.totalCurrentAssets ?? null;
+    const curLiab     = b0.totalCurrentLiabilities ?? null;
+    const currentRatio = (curAssets && curLiab) ? curAssets / curLiab : null;
+
+    const ebit        = i0.operatingIncome ?? i0.ebit ?? null;
+    const interest    = Math.abs(i0.interestExpense ?? i0.interestAndDebtExpense ?? 0);
+    const ebitda      = i0.ebitda ?? (ebit != null ? ebit + (i0.depreciationAndAmortization ?? 0) : null);
+    const fcf         = c0.freeCashFlow ?? null;
+
+    // ratia
+    const deRatio         = (equity && equity > 0 && totalDebt != null) ? totalDebt / equity : null;
+    const interestCover   = (ebit != null && interest > 0) ? ebit / interest : null;
+    const netDebtEbitda   = (ebitda && ebitda > 0 && netDebt != null) ? netDebt / ebitda : null;
+    const fcfToDebt       = (fcf != null && totalDebt > 0) ? fcf / totalDebt : null;  // % or yrs to payoff
+    const debtPayoffYears = (fcf && fcf > 0 && totalDebt > 0) ? totalDebt / fcf : null;
+
+    // trend dluhu (newest-first)
+    const debtTrend = bsArr.map(b => ({
+      year: b.date ? b.date.slice(0,4) : '?',
+      debt: b.totalDebt ?? (b.longTermDebt ?? 0) + (b.shortTermDebt ?? 0),
+      equity: b.totalStockholdersEquity ?? null,
+    }));
+    const debtOldest = debtTrend[debtTrend.length-1]?.debt;
+    const debtNewest = debtTrend[0]?.debt;
+    const debtGrowing = (debtOldest && debtNewest) ? debtNewest > debtOldest * 1.05 : null;
+
+    // ── skóre signály ─────────────────────────────────────────────────────
+    const clamp = (v,lo,hi) => Math.max(lo, Math.min(hi, v));
+    const signals = [];
+
+    // D/E ratio: <1 výborný, 1-2 OK, >3 rizikový
+    if (deRatio != null) {
+      const sc = clamp(deRatio <= 0 ? 100 : deRatio <= 1 ? 90 : deRatio <= 2 ? 65 : deRatio <= 3 ? 35 : 10, 0, 100);
+      const note = deRatio <= 0.5 ? '✓ Minimální dluh — silná rozvaha'
+        : deRatio <= 1 ? '✓ Zdravé D/E — dluh pod úrovní vlastního kapitálu'
+        : deRatio <= 2 ? '⚠ Vyšší dluh — sleduj schopnost splácení'
+        : '✗ VYSOKÝ D/E — firma silně závislá na cizím kapitálu';
+      signals.push({ key:'de', w:0.25, score:sc, label:'Debt / Equity',
+        val: deRatio.toFixed(2)+'×', note });
+    }
+
+    // Interest Coverage: >5 bezpečné, 2-5 OK, <2 nebezpečné
+    if (interestCover != null) {
+      const sc = clamp(interestCover <= 0 ? 0 : interestCover >= 8 ? 100 : interestCover >= 5 ? 80 : interestCover >= 3 ? 55 : interestCover >= 1.5 ? 30 : 5, 0, 100);
+      const note = interestCover >= 8 ? '✓ Výborné — zisky kryjí úroky 8×+'
+        : interestCover >= 5 ? '✓ Zdravé — bezpečná rezerva na splácení úroků'
+        : interestCover >= 3 ? '⚠ Mírný polštář — sleduj při poklesu zisků'
+        : interestCover >= 1.5 ? '⚠ Slabé — malá rezerva, riziko při recesi'
+        : '✗ NEBEZPEČNÉ — EBIT stěží pokrývá úrokové náklady';
+      signals.push({ key:'ic', w:0.30, score:sc, label:'Interest Coverage (EBIT/Interest)',
+        val: interestCover.toFixed(1)+'×', note });
+    }
+
+    // Net Debt/EBITDA: <2 bezpečné, 2-4 OK, >5 rizikové (záporné = net cash pozice)
+    if (netDebtEbitda != null) {
+      const sc = netDebtEbitda <= 0 ? 100 : clamp(netDebtEbitda <= 2 ? 90 : netDebtEbitda <= 3 ? 70 : netDebtEbitda <= 4 ? 45 : netDebtEbitda <= 6 ? 20 : 5, 0, 100);
+      const note = netDebtEbitda <= 0 ? '✓ Net Cash pozice — více hotovosti než dluhu'
+        : netDebtEbitda <= 2 ? '✓ Zdravé — dluh splacen ze zisku za <2 roky'
+        : netDebtEbitda <= 3.5 ? '⚠ Přijatelné (standard pro investiční stupeň)'
+        : netDebtEbitda <= 5 ? '⚠ Vysoké leverage — omezená flexibilita'
+        : '✗ VELMI VYSOKÉ — dluh nad 5× EBITDA, riziko sub-investment grade';
+      signals.push({ key:'ndeb', w:0.25, score:sc, label:'Net Debt / EBITDA',
+        val: netDebtEbitda.toFixed(1)+'×', note });
+    }
+
+    // Current Ratio: >2 silné, 1-2 OK, <1 rizikové
+    if (currentRatio != null) {
+      const sc = clamp(currentRatio >= 2 ? 95 : currentRatio >= 1.5 ? 80 : currentRatio >= 1 ? 55 : 20, 0, 100);
+      const note = currentRatio >= 2 ? '✓ Silná likvidita — pohodlné pokrytí kr. závazků'
+        : currentRatio >= 1.5 ? '✓ Dobrá likvidita'
+        : currentRatio >= 1 ? '⚠ Dostačující, ale bez velké rezervy'
+        : '✗ LIKVIDITNÍ RIZIKO — kr. závazky převyšují kr. aktiva';
+      signals.push({ key:'cr', w:0.10, score:sc, label:'Current Ratio',
+        val: currentRatio.toFixed(2)+'×', note });
+    }
+
+    // FCF / Total Debt (roky splácení)
+    if (debtPayoffYears != null) {
+      const sc = clamp(debtPayoffYears <= 2 ? 95 : debtPayoffYears <= 5 ? 75 : debtPayoffYears <= 10 ? 50 : debtPayoffYears <= 20 ? 25 : 5, 0, 100);
+      const note = debtPayoffYears <= 2 ? `✓ Dluh splatitelný z FCF za ${debtPayoffYears.toFixed(1)} roky — výborné`
+        : debtPayoffYears <= 5 ? `✓ FCF pokrývá dluh za ${debtPayoffYears.toFixed(1)} let — zdravé`
+        : debtPayoffYears <= 10 ? `⚠ ${debtPayoffYears.toFixed(1)} let z FCF — přijatelné`
+        : `✗ ${debtPayoffYears.toFixed(1)} let z FCF — dluh zatěžuje cash flow`;
+      signals.push({ key:'fcfd', w:0.10, score:sc, label:'Roky splácení z FCF',
+        val: fcfToDebt != null ? (fcfToDebt*100).toFixed(0)+'% FCF/dluh' : '—', note });
+    }
+
+    // vážené skóre
+    const wSum = signals.reduce((a,s)=>a+s.w,0) || 1;
+    const score = signals.length ? Math.round(signals.reduce((a,s)=>a+s.score*s.w,0)/wSum) : null;
+
+    const verdict = score == null ? { t:'N/A', c:'#9ca3af', d:'Nedostatek dat.' }
+      : score >= 75 ? { t:'SILNÁ ROZVAHA',    c:'#22c55e', d:'Nízký dluh, zdravá likvidita, bezpečné úrokové krytí.' }
+      : score >= 55 ? { t:'SOLIDNÍ',           c:'#84cc16', d:'Dluh pod kontrolou s drobnými výhradami.' }
+      : score >= 40 ? { t:'SMÍŠENÁ',           c:'#f59e0b', d:'Vyšší leverage — sleduj při recesi a růstu úroků.' }
+      :               { t:'RIZIKOVÁ ROZVAHA',  c:'#ef4444', d:'⚠ Vysoký dluh nebo slabé krytí — prověř refinancování.' };
+
+    const dash = score == null ? 0 : (score/100)*339.292;
+    const fmtB = v => v==null?'—': Math.abs(v)>=1e12?(v/1e12).toFixed(1)+'T': Math.abs(v)>=1e9?(v/1e9).toFixed(1)+'B': Math.abs(v)>=1e6?(v/1e6).toFixed(0)+'M': v.toFixed(0);
+
+    let html = `
+      <div style="text-align:center;margin-bottom:6px">
+        <div style="font-size:13px;letter-spacing:1px;color:var(--muted)">DEBT ANALYSIS · ${sym}</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;margin:8px 0 4px">
+        <svg width="150" height="150" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="54" fill="none" stroke="var(--border)" stroke-width="10"/>
+          <circle cx="60" cy="60" r="54" fill="none" stroke="${verdict.c}" stroke-width="10"
+            stroke-linecap="round" stroke-dasharray="${dash.toFixed(1)} 339.292"
+            transform="rotate(-90 60 60)"/>
+          <text x="60" y="58" text-anchor="middle" font-size="30" font-weight="700" fill="var(--text)">${score==null?'—':score}</text>
+          <text x="60" y="78" text-anchor="middle" font-size="11" fill="var(--muted)">/ 100</text>
+        </svg>
+      </div>
+      <div style="text-align:center;margin-bottom:14px">
+        <div style="font-size:15px;font-weight:700;color:${verdict.c}">${verdict.t}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${verdict.d}</div>
+      </div>
+      <!-- Help -->
+      <div style="background:var(--border);border-left:3px solid #3b82f6;border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:var(--muted);line-height:1.6">
+        <div style="font-weight:600;color:var(--text);margin-bottom:4px">💡 Jak číst dluhovou analýzu:</div>
+        <div><strong>Interest Coverage</strong> — klíčový signál: pokud zisky (EBIT) kryjí úroky méně než 3×, firma je zranitelná při poklesu. &lt;2× = red flag.</div>
+        <div><strong>Net Debt/EBITDA</strong> — průmyslový standard: &lt;3× = investiční stupeň, &gt;5× = spekulativní (junk) territory.</div>
+        <div><strong>D/E</strong> — liší se dle sektoru: utility a banky mívají >2×, tech firmy ideálně &lt;1×.</div>
+      </div>`;
+
+    // signály
+    html += `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">`;
+    signals.forEach(s => {
+      const sc = Math.round(s.score);
+      const c = sc >= 70 ? '#22c55e' : sc >= 45 ? '#f59e0b' : '#ef4444';
+      html += `
+        <div style="background:var(--card,#1a1d24);border:1px solid var(--border);border-radius:8px;padding:10px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font-size:13px;font-weight:600;color:var(--text)">${s.label}</span>
+            <span style="font-size:12px;color:var(--muted)">${s.val}</span>
+          </div>
+          <div style="height:6px;background:var(--border);border-radius:3px;margin:6px 0 4px;overflow:hidden">
+            <div style="height:100%;width:${sc}%;background:${c}"></div>
+          </div>
+          <div style="font-size:11px;color:var(--muted)">${s.note}</div>
+        </div>`;
+    });
+    html += `</div>`;
+
+    // rychlé metriky
+    html += `
+      <div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:1px;margin-bottom:8px">PŘEHLED ROZVAHY (${b0.date?.slice(0,4)||'?'})</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">`;
+    const metric = (label, val, sub) => `
+      <div style="background:var(--card,#1a1d24);border:1px solid var(--border);border-radius:8px;padding:10px">
+        <div style="font-size:10px;color:var(--muted)">${label}</div>
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin:2px 0">${val}</div>
+        ${sub?`<div style="font-size:10px;color:var(--muted)">${sub}</div>`:''}
+      </div>`;
+    html += metric('Total Debt', fmtB(totalDebt));
+    html += metric('Net Debt', fmtB(netDebt), netDebt < 0 ? '✓ Net Cash pozice' : '');
+    html += metric('Cash & Equiv.', fmtB(cash));
+    html += metric('Equity', fmtB(equity));
+    html += `</div>`;
+
+    // trend dluhu (mini bar chart)
+    if (debtTrend.length >= 2) {
+      const maxD = Math.max(...debtTrend.map(d=>d.debt||0), 1);
+      const rows = [...debtTrend].reverse();
+      html += `<div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:1px;margin-bottom:8px">TREND DLUHU</div>
+        <div style="display:flex;align-items:flex-end;gap:4px;height:60px;margin-bottom:4px">`;
+      rows.forEach((r,i) => {
+        const prev = i > 0 ? rows[i-1].debt : null;
+        const isUp = prev != null && r.debt > prev * 1.02;
+        const isDown = prev != null && r.debt < prev * 0.98;
+        const c = isUp ? '#ef4444' : isDown ? '#22c55e' : '#f59e0b';
+        const h = Math.max(4, Math.round((r.debt/maxD)*56));
+        html += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+          <div style="width:100%;height:${h}px;background:${c};border-radius:2px 2px 0 0"></div>
+          <div style="font-size:9px;color:var(--muted)">${r.year.slice(2)}</div>
+        </div>`;
+      });
+      const trendNote = debtGrowing === true ? '⚠ Dluh roste (červená = nárůst)'
+        : debtGrowing === false ? '✓ Dluh klesá nebo stagnuje' : '';
+      html += `</div><div style="font-size:10px;color:var(--muted);margin-bottom:14px">${trendNote}</div>`;
+    }
+
+    html += `<div style="font-size:10px;color:var(--muted);line-height:1.5">
+      Data: FMP annual balance sheet + income statement, ${bsArr.length} let.
+      Interest Coverage = EBIT / Interest Expense. Net Debt = Total Debt − Cash.
+    </div>`;
+
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}<br><span style="font-size:11px">FMP výpadek nebo rate-limit.</span></div>`;
   }
 }
 
