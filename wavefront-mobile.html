@@ -1519,6 +1519,7 @@ strong { font-weight: 600; }
         <button class="subtab" id="ast-rrg" onclick="switchWavesSubtab('rrg')">RRG</button>
         <button class="subtab" id="ast-wyckoff" onclick="switchWavesSubtab('wyckoff')">WYCKOFF</button>
         <button class="subtab" id="ast-squeeze" onclick="switchWavesSubtab('squeeze')">SQUEEZE</button>
+        <button class="subtab" id="ast-techsum" onclick="switchWavesSubtab('techsum')">TECH SUM</button>
       </div>
       <div id="waves-analysis-view" class="subtab-view" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="analysis-content">
@@ -1581,6 +1582,9 @@ strong { font-weight: 600; }
       </div>
       <div id="waves-wyckoff-view" class="subtab-view" style="display:none;padding:12px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;"></div>
       <div id="waves-squeeze-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;"></div>
+      <div id="waves-techsum-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
+        <div id="techsum-content"></div>
+      </div>
     </div>
 
     <!-- FUND TAB -->
@@ -8948,7 +8952,7 @@ function switchWatchSubtab(sub) {
 function switchWavesSubtab(sub) {
   document.querySelectorAll('#waves-subtab-bar .subtab').forEach(b => b.classList.remove('active'));
   document.getElementById('ast-' + sub).classList.add('active');
-  ['analysis','allwaves','forecast','signals','sector','patterns','backtest','earnhist','season','correl','options','candles','diverg','momentum','bench','recession','rotation','rrg','wyckoff','squeeze'].forEach(s => {
+  ['analysis','allwaves','forecast','signals','sector','patterns','backtest','earnhist','season','correl','options','candles','diverg','momentum','bench','recession','rotation','rrg','wyckoff','squeeze','techsum'].forEach(s => {
     const v = document.getElementById('waves-' + s + '-view');
     if (v) v.style.display = s === sub ? '' : 'none';
   });
@@ -8972,6 +8976,7 @@ function switchWavesSubtab(sub) {
   if (sub === 'rrg') renderRRG();
   if (sub === 'wyckoff') renderWyckoff(state.selected);
   if (sub === 'squeeze') renderSqueezeScore(state.selected);
+  if (sub === 'techsum') renderTechSummary();
 }
 
 function switchToMTFTab() {
@@ -14681,6 +14686,264 @@ function renderSqueezeScore(sym) {
       Short squeeze nastane kdy&#382; short sellers jsou nuceni zav&#345;&#237;t pozice p&#345;i rychl&#233;m r&#367;stu ceny &mdash; zp&#367;sobuje exponenci&#225;ln&#237; pohyb naho&#345;u.
     </div>
   </div>`;
+}
+
+// ─── TECHNICAL ANALYSIS SUMMARY ──────────────────────────────────────────────
+// Agregovaný přehled MA + Oscillators z lokálních barů — žádné API.
+// Každý indikátor dává BUY / NEUTRAL / SELL signál + celkové skóre 0-100.
+function renderTechSummary() {
+  const el = document.getElementById('techsum-content');
+  if (!el) return;
+  const sym = state.selected;
+  if (!sym) {
+    el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">SELECT A TICKER FIRST</div>';
+    return;
+  }
+  const bars = state.data[sym]?.bars;
+  if (!bars || bars.length < 30) {
+    el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Nedostatek dat (min 30 barů).<br>Zkus větší TF.</div>';
+    return;
+  }
+
+  const close = bars.map(b => b.c);
+  const high  = bars.map(b => b.h);
+  const low   = bars.map(b => b.l);
+  const n     = bars.length;
+  const last  = close[n-1];
+
+  // ── helpers ───────────────────────────────────────────────────────────────
+  function sma(arr, p) {
+    if (arr.length < p) return null;
+    return arr.slice(-p).reduce((a,v)=>a+v,0) / p;
+  }
+  function ema(arr, p) {
+    if (arr.length < p) return null;
+    const k = 2/(p+1);
+    let e = arr.slice(0,p).reduce((a,v)=>a+v,0)/p;
+    for (let i=p; i<arr.length; i++) e = arr[i]*k + e*(1-k);
+    return e;
+  }
+  function emaSeries(arr, p) {
+    if (arr.length < p) return [];
+    const k = 2/(p+1);
+    const out = [];
+    let e = arr.slice(0,p).reduce((a,v)=>a+v,0)/p;
+    out.push(e);
+    for (let i=p; i<arr.length; i++) { e = arr[i]*k + e*(1-k); out.push(e); }
+    return out;
+  }
+  // RSI — reuse existující funkci pokud existuje
+  function rsi14() {
+    if (typeof calcRSI === 'function') return calcRSI(bars, 14);
+    return null;
+  }
+  // Stochastic %K %D
+  function stoch(kPeriod=14, dPeriod=3) {
+    if (n < kPeriod) return null;
+    const kArr = [];
+    for (let i=kPeriod-1; i<n; i++) {
+      const slice_h = high.slice(i-kPeriod+1, i+1);
+      const slice_l = low.slice(i-kPeriod+1, i+1);
+      const hh = Math.max(...slice_h), ll = Math.min(...slice_l);
+      kArr.push(hh===ll ? 50 : (close[i]-ll)/(hh-ll)*100);
+    }
+    if (kArr.length < dPeriod) return null;
+    const k = kArr[kArr.length-1];
+    const d = kArr.slice(-dPeriod).reduce((a,v)=>a+v,0)/dPeriod;
+    return { k, d };
+  }
+  // MACD (12,26,9)
+  function macd() {
+    if (n < 35) return null;
+    const fast = emaSeries(close, 12);
+    const slow = emaSeries(close, 26);
+    if (!fast.length || !slow.length) return null;
+    // zarovnat délky (slow je kratší)
+    const diff = fast.length - slow.length;
+    const macdLine = slow.map((s,i) => fast[i+diff] - s);
+    if (macdLine.length < 9) return null;
+    const signal = emaSeries(macdLine, 9);
+    const lastMacd = macdLine[macdLine.length-1];
+    const lastSig  = signal[signal.length-1];
+    return { macd: lastMacd, signal: lastSig, hist: lastMacd - lastSig };
+  }
+  // Bollinger Bands (20,2)
+  function bollinger(p=20, stdMult=2) {
+    if (n < p) return null;
+    const slice = close.slice(-p);
+    const mid = slice.reduce((a,v)=>a+v,0)/p;
+    const std = Math.sqrt(slice.reduce((a,v)=>a+(v-mid)**2,0)/p);
+    return { upper: mid+stdMult*std, mid, lower: mid-stdMult*std, pct: (last-mid-stdMult*std<0&&std>0) ? (last-(mid-stdMult*std))/(2*stdMult*std)*100 : 50 };
+  }
+  // CCI (20)
+  function cci(p=20) {
+    if (n < p) return null;
+    const tp = bars.map(b=>(b.h+b.l+b.c)/3);
+    const slice = tp.slice(-p);
+    const avg = slice.reduce((a,v)=>a+v,0)/p;
+    const md  = slice.reduce((a,v)=>a+Math.abs(v-avg),0)/p;
+    return md === 0 ? 0 : (tp[tp.length-1]-avg)/(0.015*md);
+  }
+  // Williams %R (14)
+  function williamsR(p=14) {
+    if (n < p) return null;
+    const hh = Math.max(...high.slice(-p));
+    const ll = Math.min(...low.slice(-p));
+    return hh===ll ? -50 : (hh-last)/(hh-ll)*-100;
+  }
+  // ATR (14) — pro volatilitu
+  function atr(p=14) {
+    if (n < p+1) return null;
+    let a = 0;
+    for (let i=n-p; i<n; i++) {
+      const tr = Math.max(high[i]-low[i], Math.abs(high[i]-close[i-1]), Math.abs(low[i]-close[i-1]));
+      a += tr;
+    }
+    return a/p;
+  }
+
+  // ── výpočty ───────────────────────────────────────────────────────────────
+  const ma10   = sma(close,10),  ma20  = sma(close,20),  ma50  = sma(close,50);
+  const ma100  = sma(close,100), ma200 = sma(close,200);
+  const ema10  = ema(close,10),  ema20 = ema(close,20),  ema50 = ema(close,50);
+  const rsiVal = rsi14();
+  const stochV = stoch();
+  const macdV  = macd();
+  const bollV  = bollinger();
+  const cciVal = cci();
+  const wrVal  = williamsR();
+  const adxV   = (typeof calcADX==='function') ? calcADX(bars,14) : null;
+  const atrVal = atr();
+
+  // ── signál helper ─────────────────────────────────────────────────────────
+  // returns: { signal: 'BUY'|'SELL'|'NEUTRAL', score: 1|0|-1, val, note }
+  function sig(signal, val, note) {
+    return { signal, score: signal==='BUY'?1:signal==='SELL'?-1:0, val, note };
+  }
+
+  // ── MA signály ────────────────────────────────────────────────────────────
+  const maSigs = [];
+  const fmtPct = v => v!=null ? ((last-v)/v*100).toFixed(1)+'%' : '—';
+
+  if (ma10  != null) maSigs.push({ label:'MA(10)',  ...sig(last>ma10  ?'BUY':'SELL', `${last.toFixed(2)} vs ${ma10.toFixed(2)}`,  last>ma10  ?`Cena nad MA10 (+${fmtPct(ma10)})`:`Cena pod MA10 (${fmtPct(ma10)})`) });
+  if (ma20  != null) maSigs.push({ label:'MA(20)',  ...sig(last>ma20  ?'BUY':'SELL', `${last.toFixed(2)} vs ${ma20.toFixed(2)}`,  last>ma20  ?'Nad MA20 — krátkodobý uptrendový support':'Pod MA20') });
+  if (ma50  != null) maSigs.push({ label:'MA(50)',  ...sig(last>ma50  ?'BUY':'SELL', `${last.toFixed(2)} vs ${ma50.toFixed(2)}`,  last>ma50  ?'Nad MA50 — střednědobý bullish bias':'Pod MA50 — mid-term bearish') });
+  if (ma100 != null) maSigs.push({ label:'MA(100)', ...sig(last>ma100 ?'BUY':'SELL', `${last.toFixed(2)} vs ${ma100.toFixed(2)}`, last>ma100 ?'Nad MA100':'Pod MA100') });
+  if (ma200 != null) maSigs.push({ label:'MA(200)', ...sig(last>ma200 ?'BUY':'SELL', `${last.toFixed(2)} vs ${ma200.toFixed(2)}`, last>ma200 ?'Nad MA200 — dlouhodobý bull market':'Pod MA200 — bear market territory') });
+  if (ema10 != null) maSigs.push({ label:'EMA(10)', ...sig(last>ema10 ?'BUY':'SELL', `${last.toFixed(2)} vs ${ema10.toFixed(2)}`, last>ema10?'Nad EMA10':'Pod EMA10') });
+  if (ema20 != null) maSigs.push({ label:'EMA(20)', ...sig(last>ema20 ?'BUY':'SELL', `${last.toFixed(2)} vs ${ema20.toFixed(2)}`, last>ema20?'Nad EMA20':'Pod EMA20') });
+  if (ema50 != null) maSigs.push({ label:'EMA(50)', ...sig(last>ema50 ?'BUY':'SELL', `${last.toFixed(2)} vs ${ema50.toFixed(2)}`, last>ema50?'Nad EMA50':'Pod EMA50') });
+  // Golden/Death Cross (EMA50 vs EMA200)
+  if (ma50!=null && ma200!=null) {
+    const cross = ma50>ma200;
+    maSigs.push({ label:'Golden/Death X', ...sig(cross?'BUY':'SELL', cross?'Golden Cross':'Death Cross', cross?'MA50 > MA200 — bullish long-term':'MA50 < MA200 — bearish long-term') });
+  }
+
+  // ── Oscillator signály ────────────────────────────────────────────────────
+  const oscSigs = [];
+
+  if (rsiVal!=null) {
+    const rs = rsiVal<30?'BUY':rsiVal>70?'SELL':'NEUTRAL';
+    oscSigs.push({ label:'RSI(14)', ...sig(rs, rsiVal.toFixed(1), rsiVal<30?'Přeprodáno (<30) — potenciální bounce':rsiVal>70?'Překoupeno (>70) — riziko reverze':`Neutrální zóna (${rsiVal.toFixed(0)})`) });
+  }
+  if (stochV!=null) {
+    const ss = stochV.k<20?'BUY':stochV.k>80?'SELL':'NEUTRAL';
+    oscSigs.push({ label:'Stoch(14,3)', ...sig(ss, `K:${stochV.k.toFixed(0)} D:${stochV.d.toFixed(0)}`, stochV.k<20?'Přeprodáno':stochV.k>80?'Překoupeno':`${stochV.k<stochV.d?'K pod D — bearish':'K nad D — bullish'} crossover`) });
+  }
+  if (macdV!=null) {
+    const ms = macdV.hist>0?'BUY':macdV.hist<0?'SELL':'NEUTRAL';
+    oscSigs.push({ label:'MACD(12,26,9)', ...sig(ms, `${macdV.macd.toFixed(3)} / sig ${macdV.signal.toFixed(3)}`, macdV.hist>0?'MACD nad signal line — bullish momentum':'MACD pod signal line — bearish momentum') });
+  }
+  if (cciVal!=null) {
+    const cs = cciVal<-100?'BUY':cciVal>100?'SELL':'NEUTRAL';
+    oscSigs.push({ label:'CCI(20)', ...sig(cs, cciVal.toFixed(0), cciVal<-100?'CCI pod -100 — přeprodáno':cciVal>100?'CCI nad +100 — překoupeno':'CCI v neutrálním pásmu') });
+  }
+  if (wrVal!=null) {
+    const ws = wrVal<-80?'BUY':wrVal>-20?'SELL':'NEUTRAL';
+    oscSigs.push({ label:'Williams %R(14)', ...sig(ws, wrVal.toFixed(0)+'%', wrVal<-80?'%R pod -80 — přeprodáno':wrVal>-20?'%R nad -20 — překoupeno':'Neutrální') });
+  }
+  if (bollV!=null) {
+    const bpct = (last-bollV.lower)/(bollV.upper-bollV.lower)*100;
+    const bs = bpct<20?'BUY':bpct>80?'SELL':'NEUTRAL';
+    oscSigs.push({ label:'Bollinger(20,2)', ...sig(bs, `${bpct.toFixed(0)}% width`, bpct<20?'Cena u dolního pásma — přeprodáno / bounce zona':bpct>80?'Cena u horního pásma — překoupeno':'Cena uprostřed pásma') });
+  }
+  if (adxV!=null) {
+    // ADX: trend strength. DI+ vs DI- dává směr.
+    const trending = adxV.adx>25;
+    const adxSig = trending ? (adxV.diP>adxV.diM ? 'BUY' : 'SELL') : 'NEUTRAL';
+    oscSigs.push({ label:'ADX(14)', ...sig(adxSig, `ADX:${adxV.adx} DI+:${adxV.diP} DI-:${adxV.diM}`, trending?(adxV.diP>adxV.diM?`Silný uptrendí (ADX ${adxV.adx})`:`Silný downtrendí (ADX ${adxV.adx})`):adxV.adx<20?'Bočák — slabý trend (ADX<20)':'Mírný trend') });
+  }
+
+  // ── souhrnné skóre ────────────────────────────────────────────────────────
+  const allSigs = [...maSigs, ...oscSigs];
+  const buys   = allSigs.filter(s=>s.signal==='BUY').length;
+  const sells  = allSigs.filter(s=>s.signal==='SELL').length;
+  const neuts  = allSigs.filter(s=>s.signal==='NEUTRAL').length;
+  const total  = allSigs.length || 1;
+  // skóre 0-100: 50 = neutrál, >50 = bullish, <50 = bearish
+  const score  = Math.round(50 + (buys - sells) / total * 50);
+  const verdict = score >= 65 ? { t:'STRONG BUY',  c:'#22c55e' }
+                : score >= 55 ? { t:'BUY',          c:'#84cc16' }
+                : score >= 45 ? { t:'NEUTRAL',       c:'#f59e0b' }
+                : score >= 35 ? { t:'SELL',          c:'#f87171' }
+                :               { t:'STRONG SELL',   c:'#ef4444' };
+
+  // ── ATR info ──────────────────────────────────────────────────────────────
+  const atrPct = atrVal!=null ? (atrVal/last*100).toFixed(1) : null;
+
+  // ── render ────────────────────────────────────────────────────────────────
+  function sigColor(s) { return s==='BUY'?'#22c55e':s==='SELL'?'#ef4444':'#f59e0b'; }
+  function sigBg(s)    { return s==='BUY'?'#22c55e22':s==='SELL'?'#ef4444 22':'#f59e0b22'; }
+
+  function renderSigRows(sigs) {
+    return sigs.map(s=>`
+      <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="min-width:70px;font-size:10px;color:var(--muted);padding-top:2px">${s.label}</div>
+        <div style="flex:1">
+          <div style="font-size:11px;color:var(--text)">${s.val}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${s.note}</div>
+        </div>
+        <div style="min-width:52px;text-align:right;font-size:10px;font-weight:700;color:${sigColor(s.signal)};padding-top:2px">${s.signal}</div>
+      </div>`).join('');
+  }
+
+  const dash = (score/100)*339.292;
+  el.innerHTML = `
+    <div style="text-align:center;margin-bottom:6px">
+      <div style="font-size:13px;letter-spacing:1px;color:var(--muted)">TECHNICAL SUMMARY · ${sym}</div>
+    </div>
+    <!-- Gauge -->
+    <div style="display:flex;align-items:center;justify-content:center;margin:8px 0 4px">
+      <svg width="150" height="150" viewBox="0 0 120 120">
+        <circle cx="60" cy="60" r="54" fill="none" stroke="var(--border)" stroke-width="10"/>
+        <circle cx="60" cy="60" r="54" fill="none" stroke="${verdict.c}" stroke-width="10"
+          stroke-linecap="round" stroke-dasharray="${dash.toFixed(1)} 339.292"
+          transform="rotate(-90 60 60)"/>
+        <text x="60" y="56" text-anchor="middle" font-size="26" font-weight="700" fill="var(--text)">${score}</text>
+        <text x="60" y="72" text-anchor="middle" font-size="9" fill="var(--muted)">/ 100</text>
+      </svg>
+    </div>
+    <div style="text-align:center;margin-bottom:10px">
+      <div style="font-size:16px;font-weight:700;color:${verdict.c}">${verdict.t}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">
+        <span style="color:#22c55e">▲ ${buys} BUY</span> &nbsp;·&nbsp;
+        <span style="color:#f59e0b">● ${neuts} NEUTRAL</span> &nbsp;·&nbsp;
+        <span style="color:#ef4444">▼ ${sells} SELL</span>
+      </div>
+    </div>
+    ${atrPct!=null?`<div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:10px">Denní volatilita ATR(14): <strong style="color:var(--text)">${atrPct}%</strong> (${atrVal.toFixed(2)} USD)</div>`:''}
+    <!-- MA sekce -->
+    <div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:1px;margin-bottom:4px">MOVING AVERAGES</div>
+    <div style="margin-bottom:14px">${renderSigRows(maSigs)}</div>
+    <!-- Oscillator sekce -->
+    <div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:1px;margin-bottom:4px">OSCILLÁTORY</div>
+    <div style="margin-bottom:14px">${renderSigRows(oscSigs)}</div>
+    <!-- Legenda -->
+    <div style="font-size:10px;color:var(--muted);line-height:1.5;background:var(--border);padding:8px;border-radius:6px;margin-top:4px">
+      <strong>Jak číst:</strong> Skóre 0–100 — 50 = neutrál, nad 60 = bullish, pod 40 = bearish.
+      MA signály = cena nad/pod klouzavým průměrem. Oscillátory = přeprodáno/překoupeno.
+      Vždy kombinuj s Elliott Wave kontextem — TECH SUM je agregát, ne vstupní signál.
+    </div>`;
 }
 
 // ─── ELLIOTT WAVE BACKTEST ────────────────────────────────────────────────────
