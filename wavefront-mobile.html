@@ -1607,6 +1607,7 @@ strong { font-weight: 600; }
         <button class="fund-subtab subtab" id="fst-earnq" onclick="switchFundSubtab('earnq')">EARN Q</button>
         <button class="fund-subtab subtab" id="fst-debt" onclick="switchFundSubtab('debt')">DEBT</button>
         <button class="fund-subtab subtab" id="fst-aconsens" onclick="switchFundSubtab('aconsens')">ANALYSTS</button>
+        <button class="fund-subtab subtab" id="fst-mgmt" onclick="switchFundSubtab('mgmt')">MGMT</button>
         <button class="fund-subtab subtab" id="fst-earntrend" onclick="switchFundSubtab('earntrend')">EARN TREND</button>
         <button class="fund-subtab subtab" id="fst-valhist" onclick="switchFundSubtab('valhist')">VAL HIST</button>
         <button class="fund-subtab subtab" id="fst-moat" onclick="switchFundSubtab('moat')">MOAT</button>
@@ -1679,6 +1680,10 @@ strong { font-weight: 600; }
       <!-- Quality view -->
       <div id="fund-quality-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="quality-content"></div>
+      </div>
+      <!-- Management Quality view -->
+      <div id="fund-mgmt-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
+        <div id="mgmt-content"></div>
       </div>
       <!-- Analyst Consensus view -->
       <div id="fund-aconsens-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
@@ -8527,7 +8532,7 @@ let compareState = { sortKey: 'pe', sortDir: 'asc', activeMetrics: ['pe','fwdPe'
 function switchFundSubtab(sub) {
   document.querySelectorAll('.fund-subtab').forEach(b => b.classList.remove('active'));
   document.getElementById('fst-' + sub).classList.add('active');
-  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earnq','debt','aconsens','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval','pthist'].forEach(s => {
+  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earnq','debt','aconsens','mgmt','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval','pthist'].forEach(s => {
     const v = document.getElementById('fund-' + s + '-view');
     if (v) v.style.display = s === sub ? '' : 'none';
   });
@@ -8546,6 +8551,7 @@ function switchFundSubtab(sub) {
   if (sub === 'earnq') renderEarnQuality();
   if (sub === 'debt') renderDebt();
   if (sub === 'aconsens') renderAnalystConsensus();
+  if (sub === 'mgmt') renderMgmtQuality();
   if (sub === 'earntrend') renderEarnTrend();
   if (sub === 'valhist') renderValHist();
   if (sub === 'moat') renderMoat();
@@ -11809,6 +11815,242 @@ async function renderQuality() {
 
   } catch(e) {
     el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}</div>`;
+  }
+}
+
+// ─── MANAGEMENT QUALITY TAB ───────────────────────────────────────────────────
+// "Jedí co vaří?" — insider ownership, net buying/selling 90d/180d,
+// top insider aktivity, skóre 0-100.
+async function renderMgmtQuality() {
+  const el = document.getElementById('mgmt-content');
+  if (!el) return;
+  const sym = state.selected;
+  if (!sym) {
+    el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">SELECT A TICKER FIRST</div>';
+    return;
+  }
+  el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Načítám…</div>';
+  try {
+    // insider-trading: api/v4 (ne stable) — 50 posledních transakcí
+    // key-metrics: insider ownership % + ROE pro kontext (sdílí cache s Quality/Buffett)
+    const [insiderRes, km] = await Promise.all([
+      fetch(`https://financialmodelingprep.com/api/v4/insider-trading?symbol=${sym}&limit=50&apikey=${FMP_KEY}`).then(r => r.json()).catch(() => []),
+      fmpRequest(`https://financialmodelingprep.com/stable/key-metrics?symbol=${sym}&period=annual&limit=1&apikey=${FMP_KEY}`).catch(() => []),
+    ]);
+
+    const trades = Array.isArray(insiderRes) ? insiderRes : [];
+    const k0 = Array.isArray(km) ? (km[0] || {}) : {};
+
+    // insider ownership % z key-metrics
+    const insiderOwn = k0.insidersOwnership != null ? k0.insidersOwnership * 100 : null;
+
+    // cutoff datumy
+    const now = Date.now();
+    const cutoff90  = now - 90  * 24 * 3600 * 1000;
+    const cutoff180 = now - 180 * 24 * 3600 * 1000;
+
+    // kategorizace transakcí
+    function classify(t) {
+      const type = (t.transactionType || '').toLowerCase();
+      const isBuy  = type.includes('purchase') || type.includes('buy') || type === 'p';
+      const isSell = type.includes('sale') || type.includes('sell') || type === 's';
+      return { isBuy, isSell };
+    }
+
+    let netBuy90 = 0, netSell90 = 0;
+    let netBuy180 = 0, netSell180 = 0;
+    let buyCount90 = 0, sellCount90 = 0;
+
+    trades.forEach(t => {
+      const { isBuy, isSell } = classify(t);
+      if (!isBuy && !isSell) return;
+      const val = Math.abs(t.value || (t.securitiesTransacted || 0) * (t.price || 0));
+      const ts  = t.transactionDate ? new Date(t.transactionDate).getTime() : 0;
+      if (ts >= cutoff180) {
+        if (isBuy)  netBuy180  += val;
+        if (isSell) netSell180 += val;
+      }
+      if (ts >= cutoff90) {
+        if (isBuy)  { netBuy90  += val; buyCount90++; }
+        if (isSell) { netSell90 += val; sellCount90++; }
+      }
+    });
+
+    const netFlow90  = netBuy90  - netSell90;
+    const netFlow180 = netBuy180 - netSell180;
+    const total90Val = netBuy90 + netSell90;
+
+    // top insideři (unikátní osoby podle jména, seřazeni podle hodnoty)
+    const personMap = {};
+    trades.forEach(t => {
+      const name = (t.reportingName || '').trim();
+      if (!name) return;
+      const { isBuy, isSell } = classify(t);
+      if (!isBuy && !isSell) return;
+      const val = Math.abs(t.value || 0);
+      if (!personMap[name]) personMap[name] = { name, title: t.typeOfOwner || '', buyVal: 0, sellVal: 0, lastDate: '' };
+      if (isBuy)  personMap[name].buyVal  += val;
+      if (isSell) personMap[name].sellVal += val;
+      if (!personMap[name].lastDate || t.transactionDate > personMap[name].lastDate)
+        personMap[name].lastDate = t.transactionDate || '';
+    });
+    const topPersons = Object.values(personMap)
+      .sort((a,b) => (b.buyVal+b.sellVal) - (a.buyVal+a.sellVal))
+      .slice(0, 5);
+
+    // ── skóre signály ─────────────────────────────────────────────────────
+    const clamp = (v,lo,hi) => Math.max(lo, Math.min(hi, v));
+    const signals = [];
+
+    // A) Insider ownership % — čím víc, tím lépe (management "se sází na sebe")
+    if (insiderOwn != null) {
+      const sc = clamp(insiderOwn >= 20 ? 95 : insiderOwn >= 10 ? 80 : insiderOwn >= 5 ? 60 : insiderOwn >= 1 ? 40 : 20, 0, 100);
+      signals.push({ key:'own', w:0.35, score:sc,
+        label: 'Insider Ownership',
+        val: insiderOwn.toFixed(1) + '%',
+        note: insiderOwn >= 20 ? '✓ Management drží velký podíl — silná skin-in-the-game'
+          : insiderOwn >= 10 ? '✓ Solidní ownership — management motivován dlouhodobě'
+          : insiderOwn >= 5  ? '⚠ Průměrné — management jen zaměstnanec, ne spoluvlastník'
+          : '✗ Nízké — management nemá přímý zájem na ceně akcie' });
+    }
+
+    // B) Net flow 90 dní — čisté nákupy vs prodeje
+    if (total90Val > 0) {
+      const ratio = netFlow90 / total90Val; // -1 (čisté prodeje) až +1 (čisté nákupy)
+      const sc = clamp((ratio + 1) / 2 * 100, 0, 100);
+      const fmtV = v => Math.abs(v) >= 1e6 ? '$'+(Math.abs(v)/1e6).toFixed(1)+'M' : '$'+(Math.abs(v)/1e3).toFixed(0)+'K';
+      signals.push({ key:'flow90', w:0.35, score:sc,
+        label: 'Net insider flow (90 dní)',
+        val: (netFlow90 >= 0 ? '+' : '') + (netFlow90 >= 1e6 ? (netFlow90/1e6).toFixed(1)+'M' : (netFlow90/1e3).toFixed(0)+'K'),
+        note: netFlow90 > 0 && ratio > 0.3
+          ? `✓ Insideři čistě NAKUPUJÍ — nákupy ${fmtV(netBuy90)} vs prodeje ${fmtV(netSell90)}`
+          : netFlow90 < 0 && ratio < -0.3
+          ? `⚠ Insideři čistě PRODÁVAJÍ — nákupy ${fmtV(netBuy90)} vs prodeje ${fmtV(netSell90)}`
+          : `→ Smíšená aktivita — nákupy ${fmtV(netBuy90)} vs prodeje ${fmtV(netSell90)}` });
+    } else if (trades.length === 0) {
+      signals.push({ key:'flow90', w:0.35, score:50,
+        label: 'Net insider flow (90 dní)',
+        val: 'žádná data',
+        note: '— Žádné insider transakce v databázi' });
+    }
+
+    // C) 180d trend (širší kontext)
+    if (netBuy180 + netSell180 > 0) {
+      const ratio180 = netFlow180 / (netBuy180 + netSell180);
+      const sc = clamp((ratio180 + 1) / 2 * 100, 0, 100);
+      signals.push({ key:'flow180', w:0.30, score:sc,
+        label: 'Trend (180 dní)',
+        val: (netFlow180 >= 0 ? '+' : '') + (Math.abs(netFlow180) >= 1e6 ? (netFlow180/1e6).toFixed(1)+'M' : (netFlow180/1e3).toFixed(0)+'K'),
+        note: ratio180 > 0.2
+          ? '✓ Konzistentní nákupy za posledních 6 měsíců'
+          : ratio180 < -0.2
+          ? '⚠ Převažují prodeje za 6 měsíců (typické pro RSU/options exercise — ověř důvod)'
+          : '→ Vyrovnaná aktivita za 6 měsíců' });
+    }
+
+    const wSum = signals.reduce((a,s)=>a+s.w,0) || 1;
+    const score = signals.length ? Math.round(signals.reduce((a,s)=>a+s.score*s.w,0)/wSum) : null;
+
+    const verdict = score == null ? { t:'N/A', c:'#9ca3af', d:'Nedostatek dat.' }
+      : score >= 75 ? { t:'SILNÉ VEDENÍ',   c:'#22c55e', d:'Management investuje vedle akcí, skin-in-the-game.' }
+      : score >= 55 ? { t:'SOLIDNÍ',         c:'#84cc16', d:'Přijatelný ownership, aktivita neutrální až pozitivní.' }
+      : score >= 40 ? { t:'SMÍŠENÉ',         c:'#f59e0b', d:'Nízký ownership nebo prodeje převažují.' }
+      :               { t:'SLABÉ',           c:'#ef4444', d:'⚠ Management nepřesvědčivě angažovaný — ověř motivaci.' };
+
+    const dash = score == null ? 0 : (score/100)*339.292;
+    const fmtB = v => v==null?'—': Math.abs(v)>=1e9?(v/1e9).toFixed(1)+'B': Math.abs(v)>=1e6?(v/1e6).toFixed(1)+'M': Math.abs(v)>=1e3?(v/1e3).toFixed(0)+'K': v.toFixed(0);
+
+    let html = `
+      <div style="text-align:center;margin-bottom:6px">
+        <div style="font-size:13px;letter-spacing:1px;color:var(--muted)">MANAGEMENT QUALITY · ${sym}</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;margin:8px 0 4px">
+        <svg width="150" height="150" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="54" fill="none" stroke="var(--border)" stroke-width="10"/>
+          <circle cx="60" cy="60" r="54" fill="none" stroke="${verdict.c}" stroke-width="10"
+            stroke-linecap="round" stroke-dasharray="${dash.toFixed(1)} 339.292"
+            transform="rotate(-90 60 60)"/>
+          <text x="60" y="58" text-anchor="middle" font-size="30" font-weight="700" fill="var(--text)">${score==null?'—':score}</text>
+          <text x="60" y="78" text-anchor="middle" font-size="11" fill="var(--muted)">/ 100</text>
+        </svg>
+      </div>
+      <div style="text-align:center;margin-bottom:14px">
+        <div style="font-size:15px;font-weight:700;color:${verdict.c}">${verdict.t}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${verdict.d}</div>
+      </div>
+      <div style="background:var(--border);border-left:3px solid #3b82f6;border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:var(--muted);line-height:1.6">
+        <div style="font-weight:600;color:var(--text);margin-bottom:4px">💡 Jak číst management analýzu:</div>
+        <div><strong>Insider ownership</strong> — "jí co vaří?" Pokud CEO drží 15 % firmy, myslí jako vlastník. Pokud drží 0.02 %, je to zaměstnanec. Charlie Munger: "Show me the incentive..."</div>
+        <div><strong>Nákupy vs prodeje</strong> — jeden prodej nic neznamená (diversifikace, daně). Clustered buying od více insiderů najednou = silný signál. Selling = vždy ambiguos.</div>
+        <div><strong>RSU/options exercise</strong> — 90 % insider prodejů jsou plánované (předem zadané 10b5-1 plány), ne informované. Sleduj spíš dobrovolné nákupy za hotovost.</div>
+      </div>`;
+
+    // signály
+    html += `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">`;
+    signals.forEach(s => {
+      const sc = Math.round(s.score);
+      const c = sc >= 70 ? '#22c55e' : sc >= 45 ? '#f59e0b' : '#ef4444';
+      html += `
+        <div style="background:var(--card,#1a1d24);border:1px solid var(--border);border-radius:8px;padding:10px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font-size:13px;font-weight:600;color:var(--text)">${s.label}</span>
+            <span style="font-size:12px;color:var(--muted)">${s.val}</span>
+          </div>
+          <div style="height:6px;background:var(--border);border-radius:3px;margin:6px 0 4px;overflow:hidden">
+            <div style="height:100%;width:${sc}%;background:${c}"></div>
+          </div>
+          <div style="font-size:11px;color:var(--muted)">${s.note}</div>
+        </div>`;
+    });
+    html += `</div>`;
+
+    // souhrn 90d
+    if (total90Val > 0 || buyCount90 > 0 || sellCount90 > 0) {
+      html += `
+        <div style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text);margin-bottom:8px">SOUHRN (posl. 90 dní)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+          <div style="background:var(--card,#1a1d24);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:10px;color:var(--muted)">Nákupy</div>
+            <div style="font-size:18px;font-weight:700;color:#22c55e">${fmtB(netBuy90)}</div>
+            <div style="font-size:10px;color:var(--muted)">${buyCount90} transakcí</div>
+          </div>
+          <div style="background:var(--card,#1a1d24);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:10px;color:var(--muted)">Prodeje</div>
+            <div style="font-size:18px;font-weight:700;color:#ef4444">${fmtB(netSell90)}</div>
+            <div style="font-size:10px;color:var(--muted)">${sellCount90} transakcí</div>
+          </div>
+        </div>`;
+    }
+
+    // top insideři
+    if (topPersons.length > 0) {
+      html += `<div style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text);margin-bottom:8px">NEJAKTIVNĚJŠÍ INSIDEŘI</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">`;
+      topPersons.forEach(p => {
+        const netP = p.buyVal - p.sellVal;
+        const netC = netP > 0 ? '#22c55e' : netP < 0 ? '#ef4444' : '#9ca3af';
+        const netLabel = netP > 0 ? '▲ ' + fmtB(p.buyVal) : netP < 0 ? '▼ ' + fmtB(p.sellVal) : '→';
+        html += `
+          <div style="background:var(--card,#1a1d24);border:1px solid var(--border);border-radius:8px;padding:9px 12px;display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-size:12px;font-weight:600;color:var(--text)">${p.name}</div>
+              <div style="font-size:10px;color:var(--muted)">${p.title} · ${p.lastDate.slice(0,7)||'?'}</div>
+            </div>
+            <div style="font-size:12px;font-weight:700;color:${netC}">${netLabel}</div>
+          </div>`;
+      });
+      html += `</div>`;
+    }
+
+    if (trades.length === 0) {
+      html += `<div style="color:#9ca3af;padding:16px;text-align:center;font-size:12px">Žádné insider transakce v databázi pro ${sym}.</div>`;
+    } else {
+      html += `<div style="font-size:10px;color:var(--muted);line-height:1.5">Data: FMP insider-trading (${trades.length} transakcí), key-metrics. Prodeje zahrnují RSU vesting a options exercise — ty nejsou informované. Sleduj dobrovolné nákupy za hotovost.</div>`;
+    }
+
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}<br><span style="font-size:11px">FMP výpadek nebo rate-limit.</span></div>`;
   }
 }
 
