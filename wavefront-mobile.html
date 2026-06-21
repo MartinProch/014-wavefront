@@ -1606,6 +1606,7 @@ strong { font-weight: 600; }
         <button class="fund-subtab subtab" id="fst-quality" onclick="switchFundSubtab('quality')">QUALITY</button>
         <button class="fund-subtab subtab" id="fst-earnq" onclick="switchFundSubtab('earnq')">EARN Q</button>
         <button class="fund-subtab subtab" id="fst-debt" onclick="switchFundSubtab('debt')">DEBT</button>
+        <button class="fund-subtab subtab" id="fst-aconsens" onclick="switchFundSubtab('aconsens')">ANALYSTS</button>
         <button class="fund-subtab subtab" id="fst-earntrend" onclick="switchFundSubtab('earntrend')">EARN TREND</button>
         <button class="fund-subtab subtab" id="fst-valhist" onclick="switchFundSubtab('valhist')">VAL HIST</button>
         <button class="fund-subtab subtab" id="fst-moat" onclick="switchFundSubtab('moat')">MOAT</button>
@@ -1678,6 +1679,10 @@ strong { font-weight: 600; }
       <!-- Quality view -->
       <div id="fund-quality-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="quality-content"></div>
+      </div>
+      <!-- Analyst Consensus view -->
+      <div id="fund-aconsens-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
+        <div id="aconsens-content"></div>
       </div>
       <!-- Debt Analysis view -->
       <div id="fund-debt-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
@@ -8522,7 +8527,7 @@ let compareState = { sortKey: 'pe', sortDir: 'asc', activeMetrics: ['pe','fwdPe'
 function switchFundSubtab(sub) {
   document.querySelectorAll('.fund-subtab').forEach(b => b.classList.remove('active'));
   document.getElementById('fst-' + sub).classList.add('active');
-  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earnq','debt','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval','pthist'].forEach(s => {
+  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earnq','debt','aconsens','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval','pthist'].forEach(s => {
     const v = document.getElementById('fund-' + s + '-view');
     if (v) v.style.display = s === sub ? '' : 'none';
   });
@@ -8540,6 +8545,7 @@ function switchFundSubtab(sub) {
   if (sub === 'quality') renderQuality();
   if (sub === 'earnq') renderEarnQuality();
   if (sub === 'debt') renderDebt();
+  if (sub === 'aconsens') renderAnalystConsensus();
   if (sub === 'earntrend') renderEarnTrend();
   if (sub === 'valhist') renderValHist();
   if (sub === 'moat') renderMoat();
@@ -11803,6 +11809,207 @@ async function renderQuality() {
 
   } catch(e) {
     el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}</div>`;
+  }
+}
+
+// ─── ANALYST CONSENSUS TAB ────────────────────────────────────────────────────
+// Wall Street consensus: rating distribuce, price target vs. aktuální cena,
+// historické odhady EPS/Revenue, upside/downside.
+async function renderAnalystConsensus() {
+  const el = document.getElementById('aconsens-content');
+  if (!el) return;
+  const sym = state.selected;
+  if (!sym) {
+    el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">SELECT A TICKER FIRST</div>';
+    return;
+  }
+  el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Načítám…</div>';
+  try {
+    // analyst-estimates (period=annual) sdílí cache s Quality tabem
+    // price-target-summary: počty analytiků za 1M/Q/1Y + price-target-consensus: H/L/avg/median
+    const [est, pt, pts] = await Promise.all([
+      fmpRequest(`https://financialmodelingprep.com/stable/analyst-estimates?symbol=${sym}&period=annual&limit=3&apikey=${FMP_KEY}`),
+      fmpRequest(`https://financialmodelingprep.com/stable/price-target-consensus?symbol=${sym}&apikey=${FMP_KEY}`),
+      fmpRequest(`https://financialmodelingprep.com/stable/price-target-summary?symbol=${sym}&apikey=${FMP_KEY}`),
+    ]);
+
+    const estArr = Array.isArray(est) ? est : [];
+    const ptObj  = Array.isArray(pt)  ? (pt[0]  || {}) : (pt  || {});
+    const ptsObj = Array.isArray(pts) ? (pts[0] || {}) : (pts || {});
+
+    // aktuální cena z state (newest bar close je nejspolehlivější)
+    const curPrice = state.data[sym]?.bars?.[0]?.c ?? state.data[sym]?.lastPrice ?? state.fundamentals[sym]?.data?.currentPrice?.raw ?? null;
+
+    // ── Price Target ─────────────────────────────────────────────────────────
+    const targetMean   = ptObj.targetConsensus ?? null;
+    const targetHigh   = ptObj.targetHigh ?? null;
+    const targetLow    = ptObj.targetLow  ?? null;
+    const targetMedian = ptObj.targetMedian ?? null;
+    const upside = (curPrice && targetMean) ? ((targetMean - curPrice) / curPrice * 100) : null;
+
+    // ── Aktivita analytiků (z price-target-summary) ───────────────────────
+    const lastMonthCount   = ptsObj.lastMonthCount   ?? null;
+    const lastQuarterCount = ptsObj.lastQuarterCount ?? null;
+    const lastYearCount    = ptsObj.lastYearCount    ?? null;
+    const lastMonthAvg     = ptsObj.lastMonthAvgPriceTarget   ?? null;
+    const lastQuarterAvg   = ptsObj.lastQuarterAvgPriceTarget ?? null;
+
+    // konsensus: dedukce ze srovnání lastMonth avg vs consensus
+    const total = lastYearCount ?? 0;
+    // Trend: pokud lastMonth avg > consensus = analytici revidují nahoru
+    const revisionTrend = (lastMonthAvg && targetMean)
+      ? lastMonthAvg > targetMean * 1.02 ? 'up'
+        : lastMonthAvg < targetMean * 0.98 ? 'down' : 'flat'
+      : null;
+
+    // Konsensus label z upside (proxy — bez buy/hold/sell counts na free plánu)
+    const consensusLabel = upside == null ? 'N/A'
+      : upside >= 20 ? 'STRONG BUY'
+      : upside >= 10 ? 'BUY'
+      : upside >= -5 ? 'HOLD'
+      : 'SELL';
+    const consensusColor = upside == null ? '#9ca3af'
+      : upside >= 20 ? '#22c55e'
+      : upside >= 10 ? '#84cc16'
+      : upside >= -5 ? '#f59e0b'
+      : '#ef4444';
+
+    // ── Odhady EPS & Revenue (nejnovější rok forward) ────────────────────────
+    const fwd = estArr[0] || {};  // odhad pro nejbližší budoucí rok
+    const epsLow  = fwd.estimatedEpsAvg  ?? fwd.epsAvg  ?? null;
+    const epsHigh = fwd.estimatedEpsHigh ?? fwd.epsHigh ?? null;
+    const epsLowV = fwd.estimatedEpsLow  ?? fwd.epsLow  ?? null;
+    const revAvg  = fwd.estimatedRevenueAvg  ?? fwd.revenueAvg  ?? null;
+    const revHigh = fwd.estimatedRevenueHigh ?? fwd.revenueHigh ?? null;
+    const revLow  = fwd.estimatedRevenueLow  ?? fwd.revenueLow  ?? null;
+    const fwdYear = fwd.date ? fwd.date.slice(0,4) : null;
+
+    const fmtB = v => v==null?'—': Math.abs(v)>=1e12?(v/1e12).toFixed(1)+'T': Math.abs(v)>=1e9?(v/1e9).toFixed(1)+'B': Math.abs(v)>=1e6?(v/1e6).toFixed(0)+'M': v.toFixed(2);
+    const fmtP = v => v==null?'—': (v>=0?'+':'')+v.toFixed(1)+'%';
+
+    // ── render ───────────────────────────────────────────────────────────────
+    const upsideColor = upside == null ? '#9ca3af' : upside >= 15 ? '#22c55e' : upside >= 0 ? '#84cc16' : '#ef4444';
+
+    let html = `
+      <div style="text-align:center;margin-bottom:10px">
+        <div style="font-size:13px;letter-spacing:1px;color:var(--muted)">ANALYST CONSENSUS · ${sym}</div>
+      </div>`;
+
+    // Rating verdict card
+    const revisionIcon  = revisionTrend === 'up' ? '↑' : revisionTrend === 'down' ? '↓' : '→';
+    const revisionLabel = revisionTrend === 'up'
+      ? `<span style="color:#22c55e">↑ Analytici revidují cíle NAHORU</span>`
+      : revisionTrend === 'down'
+      ? `<span style="color:#ef4444">↓ Analytici revidují cíle DOLŮ</span>`
+      : revisionTrend === 'flat'
+      ? `<span style="color:#9ca3af">→ Cíle beze změny</span>`
+      : '';
+    html += `
+      <div style="background:var(--card,#1a1d24);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center;margin-bottom:12px">
+        <div style="font-size:26px;font-weight:800;color:${consensusColor};letter-spacing:1px">${consensusLabel}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">na základě price targetu ${lastYearCount != null ? '('+lastYearCount+' revizí za rok)' : ''}</div>
+        ${revisionLabel ? `<div style="font-size:11px;margin-top:8px">${revisionLabel}</div>` : ''}
+        ${lastMonthCount != null ? `
+        <div style="display:flex;justify-content:center;gap:16px;margin-top:10px;font-size:11px;color:var(--muted)">
+          <div><div style="font-size:16px;font-weight:700;color:var(--text)">${lastMonthCount}</div><div>za 1M</div></div>
+          <div style="width:1px;background:var(--border)"></div>
+          <div><div style="font-size:16px;font-weight:700;color:var(--text)">${lastQuarterCount??'—'}</div><div>za kvartál</div></div>
+          <div style="width:1px;background:var(--border)"></div>
+          <div><div style="font-size:16px;font-weight:700;color:var(--text)">${lastYearCount??'—'}</div><div>za rok</div></div>
+        </div>
+        ${lastMonthAvg != null && lastMonthAvg > 0 && lastQuarterAvg != null && lastQuarterAvg > 0 ? `<div style="font-size:10px;color:var(--muted);margin-top:6px">Avg target: 1M $${lastMonthAvg.toFixed(0)} · Q $${lastQuarterAvg.toFixed(0)}</div>` : ''}
+        ` : ''}
+      </div>`;
+
+    // Price Target card
+    if (targetMean || curPrice) {
+      html += `
+        <div style="background:var(--card,#1a1d24);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">
+          <div style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--muted);margin-bottom:10px">PRICE TARGET ANALYTIKŮ</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="text-align:center">
+              <div style="font-size:10px;color:var(--muted)">Aktuální</div>
+              <div style="font-size:20px;font-weight:700;color:var(--text)">${curPrice ? '$'+curPrice.toFixed(2) : '—'}</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:10px;color:var(--muted)">Target (avg)</div>
+              <div style="font-size:20px;font-weight:700;color:${upsideColor}">${targetMean ? '$'+targetMean.toFixed(2) : '—'}</div>
+              <div style="font-size:13px;font-weight:700;color:${upsideColor}">${fmtP(upside)}</div>
+            </div>
+          </div>`;
+
+      // target range bar (low → high)
+      if (targetLow != null && targetHigh != null && curPrice) {
+        const lo = Math.min(targetLow, curPrice) * 0.92;
+        const hi = Math.max(targetHigh, curPrice) * 1.05;
+        const range = hi - lo;
+        const pctCur    = ((curPrice  - lo) / range * 100).toFixed(1);
+        const pctLow    = ((targetLow - lo) / range * 100).toFixed(1);
+        const pctHigh   = ((targetHigh - lo) / range * 100).toFixed(1);
+        const pctMed    = targetMean ? (((targetMean) - lo) / range * 100).toFixed(1) : null;
+        html += `
+          <div style="position:relative;height:24px;margin:4px 0 8px">
+            <div style="position:absolute;top:8px;left:0;right:0;height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+              <div style="position:absolute;left:${pctLow}%;width:${pctHigh-pctLow}%;height:100%;background:linear-gradient(90deg,#f59e0b33,#22c55e33)"></div>
+            </div>
+            ${pctMed ? `<div style="position:absolute;top:3px;left:${pctMed}%;transform:translateX(-50%);width:3px;height:18px;background:${upsideColor};border-radius:2px"></div>` : ''}
+            <div style="position:absolute;top:3px;left:${pctCur}%;transform:translateX(-50%);width:3px;height:18px;background:#fff;border-radius:2px"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted)">
+            <span>Low $${targetLow.toFixed(0)}</span>
+            ${targetMedian ? `<span>Median $${targetMedian.toFixed(0)}</span>` : ''}
+            <span>High $${targetHigh.toFixed(0)}</span>
+          </div>`;
+      }
+      html += `</div>`;
+    }
+
+    // Help
+    html += `
+      <div style="background:var(--border);border-left:3px solid #3b82f6;border-radius:8px;padding:10px;margin-bottom:12px;font-size:11px;color:var(--muted);line-height:1.6">
+        <div style="font-weight:600;color:var(--text);margin-bottom:4px">💡 Jak číst konsensus:</div>
+        <div><strong>Upside &gt;15 %</strong> — analytici vidí výrazný prostor k růstu. Ale: analytici bývají systematicky optimisté, kalibrace je +15–20 % bias.</div>
+        <div><strong>Distribuce</strong> — Strong Buy heavy = velká shoda. Hold/Sell majority = trh pochybuje nebo je přeceněno.</div>
+        <div><strong>Srovnej s vlastním skóre</strong> — pokud EARN Q je nízké ale analytici říkají Buy, ptej se proč. Možná cyclical turnaround, možná missing something.</div>
+      </div>`;
+
+    // Odhady EPS & Revenue tabulka
+    if (estArr.length > 0) {
+      html += `
+        <div style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text);margin-bottom:8px">ODHADY ANALYTIKŮ (FORWARD)</div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="color:var(--muted);text-align:right">
+            <th style="text-align:left;padding:4px">Rok</th>
+            <th style="padding:4px">EPS (avg)</th>
+            <th style="padding:4px">EPS rozsah</th>
+            <th style="padding:4px">Revenue (avg)</th>
+          </tr></thead><tbody>`;
+      estArr.slice(0,3).forEach(e => {
+        const yr = e.date ? e.date.slice(0,4) : '?';
+        const ea = e.estimatedEpsAvg  ?? e.epsAvg  ?? null;
+        const eh = e.estimatedEpsHigh ?? e.epsHigh ?? null;
+        const el2 = e.estimatedEpsLow ?? e.epsLow  ?? null;
+        const ra = e.estimatedRevenueAvg  ?? e.revenueAvg  ?? null;
+        html += `<tr style="text-align:right;border-top:1px solid var(--border)">
+          <td style="text-align:left;padding:4px;color:var(--text)">${yr}</td>
+          <td style="padding:4px">${ea!=null?'$'+ea.toFixed(2):'—'}</td>
+          <td style="padding:4px;color:var(--muted);font-size:10px">${el2!=null&&eh!=null?'$'+el2.toFixed(2)+' – $'+eh.toFixed(2):'—'}</td>
+          <td style="padding:4px">${fmtB(ra)}</td>
+        </tr>`;
+      });
+      html += `</tbody></table></div>`;
+    }
+
+    if (!targetMean && !lastYearCount && estArr.length === 0) {
+      html += `<div style="color:#9ca3af;padding:20px;text-align:center;font-size:12px">
+        Žádná data analytiků pro ${sym}.<br>
+        <span style="font-size:11px">ETF, small-cap, nebo FMP rate-limit.</span>
+      </div>`;
+    }
+
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}<br><span style="font-size:11px">FMP výpadek nebo rate-limit.</span></div>`;
   }
 }
 
