@@ -1608,6 +1608,7 @@ strong { font-weight: 600; }
         <button class="fund-subtab subtab" id="fst-debt" onclick="switchFundSubtab('debt')">DEBT</button>
         <button class="fund-subtab subtab" id="fst-aconsens" onclick="switchFundSubtab('aconsens')">ANALYSTS</button>
         <button class="fund-subtab subtab" id="fst-mgmt" onclick="switchFundSubtab('mgmt')">MGMT</button>
+        <button class="fund-subtab subtab" id="fst-valsum" onclick="switchFundSubtab('valsum')">VAL SUM</button>
         <button class="fund-subtab subtab" id="fst-earntrend" onclick="switchFundSubtab('earntrend')">EARN TREND</button>
         <button class="fund-subtab subtab" id="fst-valhist" onclick="switchFundSubtab('valhist')">VAL HIST</button>
         <button class="fund-subtab subtab" id="fst-moat" onclick="switchFundSubtab('moat')">MOAT</button>
@@ -1680,6 +1681,10 @@ strong { font-weight: 600; }
       <!-- Quality view -->
       <div id="fund-quality-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="quality-content"></div>
+      </div>
+      <!-- Valuation Summary view -->
+      <div id="fund-valsum-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
+        <div id="valsum-content"></div>
       </div>
       <!-- Management Quality view -->
       <div id="fund-mgmt-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
@@ -8532,7 +8537,7 @@ let compareState = { sortKey: 'pe', sortDir: 'asc', activeMetrics: ['pe','fwdPe'
 function switchFundSubtab(sub) {
   document.querySelectorAll('.fund-subtab').forEach(b => b.classList.remove('active'));
   document.getElementById('fst-' + sub).classList.add('active');
-  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earnq','debt','aconsens','mgmt','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval','pthist'].forEach(s => {
+  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earnq','debt','aconsens','mgmt','valsum','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval','pthist'].forEach(s => {
     const v = document.getElementById('fund-' + s + '-view');
     if (v) v.style.display = s === sub ? '' : 'none';
   });
@@ -8552,6 +8557,7 @@ function switchFundSubtab(sub) {
   if (sub === 'debt') renderDebt();
   if (sub === 'aconsens') renderAnalystConsensus();
   if (sub === 'mgmt') renderMgmtQuality();
+  if (sub === 'valsum') renderValSum();
   if (sub === 'earntrend') renderEarnTrend();
   if (sub === 'valhist') renderValHist();
   if (sub === 'moat') renderMoat();
@@ -11815,6 +11821,202 @@ async function renderQuality() {
 
   } catch(e) {
     el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}</div>`;
+  }
+}
+
+// ─── VALUATION SUMMARY TAB ────────────────────────────────────────────────────
+// 5 valuačních pohledů najednou: P/E vs hist., Forward P/E, EV/EBITDA,
+// P/FCF, Graham number. Skóre 0-100 = levná/férová/drahá.
+async function renderValSum() {
+  const el = document.getElementById('valsum-content');
+  if (!el) return;
+  const sym = state.selected;
+  if (!sym) {
+    el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">SELECT A TICKER FIRST</div>';
+    return;
+  }
+  el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Načítám…</div>';
+  try {
+    // ratios + key-metrics: sdílí cache s Quality/Buffett/EARN Q
+    const [rt, km, is, ae] = await Promise.all([
+      fmpRequest(`https://financialmodelingprep.com/stable/ratios?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`),
+      fmpRequest(`https://financialmodelingprep.com/stable/key-metrics?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`),
+      fmpRequest(`https://financialmodelingprep.com/stable/income-statement?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`),
+      fmpRequest(`https://financialmodelingprep.com/stable/analyst-estimates?symbol=${sym}&period=annual&limit=1&apikey=${FMP_KEY}`).catch(()=>[]),
+    ]);
+    const rtArr = Array.isArray(rt) ? rt : [];
+    const kmArr = Array.isArray(km) ? km : [];
+    const isArr = Array.isArray(is) ? is : [];
+    const r0 = rtArr[0] || {}, k0 = kmArr[0] || {}, i0 = isArr[0] || {};
+
+    // aktuální cena
+    const curPrice = state.data[sym]?.bars?.[0]?.c ?? null;
+
+    // ── rawé hodnoty ──────────────────────────────────────────────────────────
+    const pe      = r0.priceToEarningsRatio ?? k0.peRatio ?? null;
+    const pb      = r0.priceToBookRatio     ?? k0.pbRatio ?? null;
+    const ps      = r0.priceToSalesRatio    ?? k0.psRatio ?? null;
+    const pfcf    = r0.priceToFreeCashFlowsRatio ?? k0.pfcfRatio ?? null;
+    const evEbita = k0.evToEbitda ?? k0.enterpriseValueMultiple ?? null;
+    const eps     = i0.epsDiluted ?? i0.eps ?? null;
+    const bvps    = k0.bookValuePerShare ?? null;
+
+    // Forward P/E z analyst estimates
+    const fwdEps  = Array.isArray(ae) && ae[0] ? (ae[0].epsAvg ?? null) : null;
+    const fwdPe   = (curPrice && fwdEps && fwdEps > 0) ? curPrice / fwdEps : null;
+
+    // 5Y průměrné P/E z history (pro porovnání "drahé vs vlastní historii")
+    const peHist = rtArr.map(r => r.priceToEarningsRatio).filter(v => v != null && v > 0 && v < 300);
+    const peAvg5y = peHist.length >= 2 ? peHist.reduce((a,b)=>a+b,0)/peHist.length : null;
+
+    // Graham number = √(22.5 × EPS × BVPS)
+    const graham = (eps != null && eps > 0 && bvps != null && bvps > 0)
+      ? Math.sqrt(22.5 * eps * bvps) : null;
+    const grahamUpside = (graham && curPrice) ? ((graham - curPrice) / curPrice * 100) : null;
+
+    // ── skóre signály ─────────────────────────────────────────────────────────
+    const clamp = (v,lo,hi) => Math.max(lo, Math.min(hi, v));
+    const signals = [];
+
+    // A) P/E vs 5Y průměr (jak drahé oproti vlastní historii)
+    if (pe != null && pe > 0) {
+      let sc, note;
+      if (peAvg5y != null && peAvg5y > 0) {
+        const pct = pe / peAvg5y;  // 1.0 = na průměru, <1 = pod průměrem = levnější
+        sc = clamp((2 - pct) / 1.5 * 100, 0, 100);
+        note = pct <= 0.85 ? `✓ P/E ${pe.toFixed(1)}× — pod 5Y průměrem (${peAvg5y.toFixed(1)}×), historicky levné`
+          : pct <= 1.15 ? `→ P/E ${pe.toFixed(1)}× — blízko 5Y průměru (${peAvg5y.toFixed(1)}×), férová cena`
+          : `⚠ P/E ${pe.toFixed(1)}× — nad 5Y průměrem (${peAvg5y.toFixed(1)}×), dražší než obvykle`;
+      } else {
+        // bez historie: absolutní škála (tech growth: 25× ok, value: 15× ok)
+        sc = clamp(pe <= 12 ? 90 : pe <= 18 ? 75 : pe <= 25 ? 55 : pe <= 35 ? 35 : 10, 0, 100);
+        note = pe <= 15 ? `✓ P/E ${pe.toFixed(1)}× — value territory`
+          : pe <= 25 ? `→ P/E ${pe.toFixed(1)}× — přiměřené pro growth firmu`
+          : `⚠ P/E ${pe.toFixed(1)}× — vysoké ocenění, zapotřebí rychlý růst`;
+      }
+      signals.push({ key:'pe', w:0.25, score:sc, label:'P/E (vs 5Y průměr)', val:`${pe.toFixed(1)}×`, note });
+    }
+
+    // B) Forward P/E (trh platí za budoucí zisky)
+    if (fwdPe != null && fwdPe > 0) {
+      const sc = clamp(fwdPe <= 12 ? 90 : fwdPe <= 18 ? 75 : fwdPe <= 25 ? 55 : fwdPe <= 35 ? 30 : 10, 0, 100);
+      const note = fwdPe <= 15 ? `✓ Fwd P/E ${fwdPe.toFixed(1)}× — levné vs. očekávaný zisk`
+        : fwdPe <= 22 ? `→ Fwd P/E ${fwdPe.toFixed(1)}× — přiměřené`
+        : `⚠ Fwd P/E ${fwdPe.toFixed(1)}× — trh očekává silný růst (${fwdEps?.toFixed(2)} EPS)`;
+      signals.push({ key:'fwdpe', w:0.20, score:sc, label:'Forward P/E', val:`${fwdPe.toFixed(1)}×`, note });
+    }
+
+    // C) EV/EBITDA (enterprise value — nezávislé na kapitálové struktuře)
+    if (evEbita != null && evEbita > 0) {
+      const sc = clamp(evEbita <= 8 ? 90 : evEbita <= 12 ? 75 : evEbita <= 18 ? 55 : evEbita <= 25 ? 30 : 10, 0, 100);
+      const note = evEbita <= 10 ? `✓ EV/EBITDA ${evEbita.toFixed(1)}× — pod 10×, historicky výhodné`
+        : evEbita <= 18 ? `→ EV/EBITDA ${evEbita.toFixed(1)}× — průměrné`
+        : `⚠ EV/EBITDA ${evEbita.toFixed(1)}× — vysoké (standard pro tech je 15-25×)`;
+      signals.push({ key:'eveb', w:0.20, score:sc, label:'EV/EBITDA', val:`${evEbita.toFixed(1)}×`, note });
+    }
+
+    // D) P/FCF (nejupřímnější valuace — platíš za skutečné peníze, ne účetní zisky)
+    if (pfcf != null && pfcf > 0 && pfcf < 500) {
+      const sc = clamp(pfcf <= 12 ? 90 : pfcf <= 20 ? 75 : pfcf <= 30 ? 55 : pfcf <= 45 ? 30 : 10, 0, 100);
+      const note = pfcf <= 15 ? `✓ P/FCF ${pfcf.toFixed(1)}× — výborné, platíš málo za každý dolar FCF`
+        : pfcf <= 25 ? `→ P/FCF ${pfcf.toFixed(1)}× — přiměřené`
+        : `⚠ P/FCF ${pfcf.toFixed(1)}× — vysoké; ověř jestli FCF není stlačený capexem`;
+      signals.push({ key:'pfcf', w:0.20, score:sc, label:'P/FCF (nejdůl. múltipel)', val:`${pfcf.toFixed(1)}×`, note });
+    }
+
+    // E) Graham number (bezpečnostní polštář dle B. Grahama)
+    if (graham != null && curPrice) {
+      const margin = grahamUpside ?? 0;
+      const sc = clamp(margin >= 30 ? 90 : margin >= 10 ? 70 : margin >= -10 ? 50 : margin >= -30 ? 30 : 10, 0, 100);
+      const note = margin >= 20 ? `✓ Cena $${curPrice.toFixed(0)} pod Graham number $${graham.toFixed(0)} (bezpečnostní polštář)`
+        : margin >= -10 ? `→ Cena blízko Graham number $${graham.toFixed(0)}`
+        : `⚠ Cena $${curPrice.toFixed(0)} nad Graham number $${graham.toFixed(0)} — bez margin of safety`;
+      signals.push({ key:'graham', w:0.15, score:sc, label:'Graham number', val:`$${graham.toFixed(0)}`, note });
+    }
+
+    if (signals.length === 0) {
+      el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Nedostatek dat pro ${sym}.<br><span style="font-size:11px">ETF nebo FMP rate-limit.</span></div>`;
+      return;
+    }
+
+    const wSum  = signals.reduce((a,s)=>a+s.w,0) || 1;
+    const score = Math.round(signals.reduce((a,s)=>a+s.score*s.w,0)/wSum);
+
+    const verdict = score >= 75 ? { t:'LEVNÁ',    c:'#22c55e', d:'Více valuačních metrik ukazuje na podocenění.' }
+      : score >= 58 ? { t:'FÉROVÁ',     c:'#84cc16', d:'Cena odpovídá fundamentům.' }
+      : score >= 42 ? { t:'MÍRNĚ DRAHÁ', c:'#f59e0b', d:'Prémium — ospravedlnitelné jen s rychlým růstem.' }
+      :               { t:'DRAHÁ',      c:'#ef4444', d:'⚠ Vysoké ocenění vyžaduje perfektní provedení.' };
+
+    const dash = (score/100)*339.292;
+
+    let html = `
+      <div style="text-align:center;margin-bottom:6px">
+        <div style="font-size:13px;letter-spacing:1px;color:var(--muted)">VALUATION SUMMARY · ${sym}</div>
+        ${curPrice ? `<div style="font-size:12px;color:var(--muted)">aktuální cena $${curPrice.toFixed(2)}</div>` : ''}
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;margin:8px 0 4px">
+        <svg width="150" height="150" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="54" fill="none" stroke="var(--border)" stroke-width="10"/>
+          <circle cx="60" cy="60" r="54" fill="none" stroke="${verdict.c}" stroke-width="10"
+            stroke-linecap="round" stroke-dasharray="${dash.toFixed(1)} 339.292"
+            transform="rotate(-90 60 60)"/>
+          <text x="60" y="58" text-anchor="middle" font-size="30" font-weight="700" fill="var(--text)">${score}</text>
+          <text x="60" y="78" text-anchor="middle" font-size="11" fill="var(--muted)">/ 100</text>
+        </svg>
+      </div>
+      <div style="text-align:center;margin-bottom:14px">
+        <div style="font-size:15px;font-weight:700;color:${verdict.c}">${verdict.t}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${verdict.d}</div>
+      </div>
+      <div style="background:var(--border);border-left:3px solid #3b82f6;border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:var(--muted);line-height:1.6">
+        <div style="font-weight:600;color:var(--text);margin-bottom:4px">💡 Jak číst valuační přehled:</div>
+        <div><strong>P/FCF je nejupřímnější</strong> — platíš za skutečné volné peníze, ne účetní zisky. Firma s P/E=20 ale P/FCF=50 = zisky nejsou cash (viz EARN Q).</div>
+        <div><strong>Graham number</strong> — konzervativní dolní hranice (EPS × Book Value). Většina tech firem je nad tím, ale pokud jsi pod = extra bezpečnostní polštář.</div>
+        <div><strong>Fwd P/E</strong> — trh platí za budoucnost. Pokud jsou odhady analytiků příliš optimistické, fwd P/E vypadá levně i když není.</div>
+      </div>`;
+
+    // signály
+    html += `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">`;
+    signals.forEach(s => {
+      const sc = Math.round(s.score);
+      const c  = sc >= 70 ? '#22c55e' : sc >= 45 ? '#f59e0b' : '#ef4444';
+      html += `
+        <div style="background:var(--card,#1a1d24);border:1px solid var(--border);border-radius:8px;padding:10px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font-size:13px;font-weight:600;color:var(--text)">${s.label}</span>
+            <span style="font-size:12px;color:var(--muted)">${s.val}</span>
+          </div>
+          <div style="height:6px;background:var(--border);border-radius:3px;margin:6px 0 4px;overflow:hidden">
+            <div style="height:100%;width:${sc}%;background:${c}"></div>
+          </div>
+          <div style="font-size:11px;color:var(--muted)">${s.note}</div>
+        </div>`;
+    });
+    html += `</div>`;
+
+    // rychlý přehled všech metrik
+    html += `<div style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text);margin-bottom:8px">PŘEHLED MÚLTIPLŮ</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px">`;
+    const tile = (label, val, sub) => `
+      <div style="background:var(--card,#1a1d24);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
+        <div style="font-size:9px;color:var(--muted);letter-spacing:0.5px">${label}</div>
+        <div style="font-size:15px;font-weight:700;color:var(--text);margin:2px 0">${val}</div>
+        ${sub?`<div style="font-size:9px;color:var(--muted)">${sub}</div>`:''}
+      </div>`;
+    const fmt1 = v => v != null ? v.toFixed(1)+'×' : '—';
+    const fmt2 = v => v != null ? v.toFixed(2)+'×' : '—';
+    html += tile('P/E', fmt1(pe), peAvg5y ? `5Y avg ${peAvg5y.toFixed(1)}×` : '');
+    html += tile('Fwd P/E', fmt1(fwdPe), fwdEps ? `EPS est. $${fwdEps.toFixed(2)}` : '');
+    html += tile('EV/EBITDA', fmt1(evEbita));
+    html += tile('P/FCF', fmt1(pfcf));
+    html += tile('P/B', fmt2(pb));
+    html += tile('P/S', fmt2(ps));
+    html += `</div>
+      <div style="font-size:10px;color:var(--muted);line-height:1.5">Data: FMP ratios + key-metrics (annual), analyst-estimates. Skóre 75+ = levná, 58–75 = férová, 42–58 = mírně drahá, &lt;42 = drahá.</div>`;
+
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}<br><span style="font-size:11px">FMP výpadek nebo rate-limit.</span></div>`;
   }
 }
 
