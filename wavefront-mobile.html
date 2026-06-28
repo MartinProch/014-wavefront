@@ -10471,6 +10471,12 @@ async function renderDCF() {
   } catch(e) {}
 
   el.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
+    ${fundHelpBox(`
+      <div><strong>DCF = Discounted Cash Flow</strong> — odhaduje vnitřní hodnotu firmy diskontováním budoucích zisků (EPS) na dnešní hodnotu. Výsledek závisí silně na předpokladech.</div>
+      <div><strong>Discount rate</strong> — tvá požadovaná výnosnost (typicky 8–12 %). Čím vyšší, tím konzervativnější (nižší) fair value. Warren Buffett používá bezrizikovou sazbu ~4–5 %.</div>
+      <div><strong>Citlivost</strong> — změna discount rate o 2 % nebo growth o 3 % změní fair value o 20–40 %. DCF je tedy orientační nástroj, ne přesná cena. Použij spíše jako "je akcie zhruba levná/drahá?"</div>
+      <div><strong>Terminal value</strong> — zachycuje hodnotu po projekčním období (Y11+). Obvykle tvoří 60–80 % celkové DCF hodnoty — proto je terminal growth rate kritický vstup.</div>
+    `)}
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div style="font-size:13px;font-weight:600;color:var(--text)">DCF — Discounted Cash Flow</div>
       <div style="font-size:10px;color:#3b82f6;background:#3b82f622;padding:2px 8px;border-radius:8px">AUTO</div>
@@ -10584,6 +10590,14 @@ function calcDCF() {
   </div>`;
 }
 
+// Sdílená helper funkce pro help boxy ve FUND tabulích
+function fundHelpBox(bodyHtml) {
+  return `<div style="background:var(--border,#1e293b);border-left:3px solid #3b82f6;border-radius:8px;padding:10px;margin:10px 12px 14px;font-size:11px;color:var(--muted,#9ca3af);line-height:1.6">
+    <div style="font-weight:600;color:var(--text,#f9fafb);margin-bottom:4px">💡 Jak číst tuto analýzu:</div>
+    ${bodyHtml}
+  </div>`;
+}
+
 // ─── BUFFETT METRIKY ──────────────────────────────────────────────────────────
 async function renderBuffett() {
   const el = document.getElementById('buffett-content');
@@ -10648,6 +10662,12 @@ async function renderBuffett() {
       </div>
       <div style="margin-top:12px;font-size:10px;color:#6b7280;text-align:center">Data: FMP API · ${new Date().toLocaleDateString('cs-CZ')}</div>
     </div>`;
+    html += fundHelpBox(`
+      <div><strong>Buffett Quality Score</strong> — hodnotí firmu podle 6 Buffettových kritérií (ROE, D/E ratio, čisté marže, FCF yield, current ratio, EPS trend). Skóre 0–100.</div>
+      <div><strong>ROE &gt;15 %</strong> — firma efektivně zhodnocuje vlastní kapitál. &lt;10 % = průměr, &gt;20 % = vynikající.</div>
+      <div><strong>D/E &lt;0.5×</strong> — dluh je pod polovinou vlastního kapitálu. Buffett preferuje firmy, které nepotřebují cizí kapitál.</div>
+      <div><strong>FCF Yield</strong> — kolik % tržní kapitalizace firma generuje jako volnou hotovost. &gt;5 % = atraktivní pro long-term investora.</div>
+    `);
     el.innerHTML = html;
   } catch(e) {
     el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}</div>`;
@@ -11596,6 +11616,12 @@ async function renderQuality() {
 
     html += `<div style="font-size:10px;color:#4b5563;text-align:center;padding-bottom:8px">Data: FMP API · ${new Date().toLocaleDateString('cs-CZ')}</div>`;
     html += `</div>`;
+    html += fundHelpBox(`
+      <div><strong>PEG ratio</strong> — P/E děleno růstem EPS. &lt;1 = levné vzhledem k růstu, &gt;2 = platíš prémium. Peter Lynch považoval &lt;1 za ideální.</div>
+      <div><strong>ROIC vs WACC</strong> — pokud firma vydělává více než jsou náklady kapitálu (ROIC &gt; WACC), vytváří hodnotu. Opak = ničí hodnotu i při kladném zisku.</div>
+      <div><strong>Buyback trend</strong> — klesající počet akcií = firma vrací kapitál. Rostoucí = ředění (dilution), sleduj proč (akvizice nebo kompenzace managementu).</div>
+      <div><strong>Marže</strong> — gross marže &gt;40 % typická pro firmy s moatem (pricing power). Op. marže &gt;15 % = efektivní byznys.</div>
+    `);
     el.innerHTML = html;
 
     // ── Draw ROIC bar chart ───────────────────────────────────────────────────
@@ -13489,7 +13515,11 @@ async function renderMarketContext() {
         </div>
       </div>
     </div>`;
-
+    html += fundHelpBox(`
+      <div><strong>EARN TREND</strong> — čtvrtletní vývoj EPS a Revenue vs. odhady analytiků. Fialové sloupce = forecasted (odhadované), zelené/červené = historické (beat/miss).</div>
+      <div><strong>Beat/Miss</strong> — firma pravidelně překonávající odhady = management umí řídit očekávání a exekuci. Systematické miss = problém s byznysem nebo přeceněnými odhady.</div>
+      <div><strong>Marže trend</strong> — roste gross marže s tržbami? Pokud tržby rostou ale marže klesají, škálovatelnost chybí nebo roste konkurence.</div>
+    `);
     el.innerHTML = html;
   } catch(e) {
     el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}</div>`;
@@ -14178,7 +14208,13 @@ async function renderSwan() {
           ${total >= 70 ? 'Firma vykazuje silne fundamenty vhodne pro dlouhodobe drzeni.' : total >= 40 ? 'Smisene fundamenty — sledujte slabe komponenty.' : 'Zvysene riziko — dukladne zvazujte pozici.'}
         </div>
         ${beta != null ? `<div style="font-size:10px;color:#475569;margin-top:6px;">Beta: ${beta.toFixed(2)} &middot; F-Score: ${fScore}/9 &middot; Ziskove roky: ${profitableYears}/5</div>` : ''}
-      </div>`;
+      </div>
+      ${fundHelpBox(`
+        <div><strong>SWAN = Sleep Well At Night</strong> — hodnotí firmu jako kandidáta pro klidné dlouhodobé držení. Zaměřuje se na stabilitu, ne na krátkodobý výkon.</div>
+        <div><strong>F-Score (Piotroski)</strong> — 9bodový systém hodnotící rentabilitu, likviditu a efektivitu. &gt;7 = silná firma, &lt;3 = varování.</div>
+        <div><strong>Beta</strong> — jak moc akcie kolísá vs. trh. Beta &lt;1 = klidnější než S&amp;P 500 (vhodné pro SWAN). Beta &gt;1.5 = vysoká volatilita.</div>
+        <div><strong>Slabé komponenty</strong> jsou klíčem — silná firma může mít jeden slabý bod který přehluší vše ostatní (např. vysoký dluh při jinak výborných metrikách).</div>
+      `)}`;
   } catch(e) {
     el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}</div>`;
   }
@@ -20239,6 +20275,12 @@ async function renderEPV() {
       <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#374151;text-align:center;padding:8px 0 4px;">
         EPV = NOPAT / WACC — Greenwald metodologie — není investiční doporučení
       </div>
+      ${fundHelpBox(`
+        <div><strong>EPV (Earnings Power Value)</strong> — Brucea Greenwalda metoda: kolik má firma hodnotu pokud nijak neroste, jen udržuje současné zisky. Konzervativní dolní hranice.</div>
+        <div><strong>EPV &gt; aktuální cena</strong> = firma je levná i bez předpokladu růstu — to je silný signál. Jakýkoli reálný růst je pak "bonus".</div>
+        <div><strong>EPV vs TBV</strong> — Tangible Book Value = likvidační hodnota aktiv. Pokud EPV &gt; TBV, firma přidává hodnotu svou operací (moat). Pokud EPV &lt; TBV, byznys ničí hodnotu.</div>
+        <div><strong>WACC</strong> — náklady kapitálu (Weighted Average Cost of Capital). Vyšší WACC = nižší EPV. Změna WACC o 1 % může valuaci posunout o 15–30 %.</div>
+      `)}
     `;
   } catch(e) {
     el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">CHYBA PŘI NAČÍTÁNÍ<br>${e.message}</div></div>`;
@@ -20451,7 +20493,13 @@ function _renderRevDCFHTML(el) {
     + '</div></div>';
 
   el.innerHTML = '<div style="display:flex;flex-direction:column;gap:12px;padding-bottom:20px;">'
-    + assum + s1 + s2 + s3 + '</div>';
+    + assum + s1 + s2 + s3
+    + fundHelpBox(`
+        <div><strong>Reverse DCF</strong> — otočená logika: místo "jaká je hodnota při X% růstu" ptáme se "jaký růst musí firma dosáhnout, aby ospravedlnila dnešní cenu?"</div>
+        <div><strong>Jak použít</strong> — pokud trh implicitně předpokládá 25% růst po 10 let, zeptej se: je to realistické? Apple při 25% tržbách za 10 let = firma 5× větší než je dnes. Možné?</div>
+        <div><strong>Discount rate</strong> — vyšší = konzervativnější (chceš větší bezpečnostní polštář). Typicky 8–12 %. Pod 8 % = optimismus, nad 15 % = přílišná opatrnost.</div>
+      `)
+    + '</div>';
 }
 // ─── POSITION SIZING WIZARD ───────────────────────────────────────────────────
 
