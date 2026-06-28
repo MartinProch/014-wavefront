@@ -1609,6 +1609,7 @@ strong { font-weight: 600; }
         <button class="fund-subtab subtab" id="fst-aconsens" onclick="switchFundSubtab('aconsens')">ANALYSTS</button>
         <button class="fund-subtab subtab" id="fst-mgmt" onclick="switchFundSubtab('mgmt')">MGMT</button>
         <button class="fund-subtab subtab" id="fst-valsum" onclick="switchFundSubtab('valsum')">VAL SUM</button>
+        <button class="fund-subtab subtab" id="fst-techsum" onclick="switchFundSubtab('techsum')">TECH SUM</button>
         <button class="fund-subtab subtab" id="fst-earntrend" onclick="switchFundSubtab('earntrend')">EARN TREND</button>
         <button class="fund-subtab subtab" id="fst-valhist" onclick="switchFundSubtab('valhist')">VAL HIST</button>
         <button class="fund-subtab subtab" id="fst-moat" onclick="switchFundSubtab('moat')">MOAT</button>
@@ -1681,6 +1682,10 @@ strong { font-weight: 600; }
       <!-- Quality view -->
       <div id="fund-quality-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="quality-content"></div>
+      </div>
+      <!-- Technical Summary view -->
+      <div id="fund-techsum-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
+        <div id="fund-techsum-content"></div>
       </div>
       <!-- Valuation Summary view -->
       <div id="fund-valsum-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
@@ -8537,7 +8542,7 @@ let compareState = { sortKey: 'pe', sortDir: 'asc', activeMetrics: ['pe','fwdPe'
 function switchFundSubtab(sub) {
   document.querySelectorAll('.fund-subtab').forEach(b => b.classList.remove('active'));
   document.getElementById('fst-' + sub).classList.add('active');
-  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earnq','debt','aconsens','mgmt','valsum','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval','pthist'].forEach(s => {
+  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earnq','debt','aconsens','mgmt','valsum','techsum','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval','pthist'].forEach(s => {
     const v = document.getElementById('fund-' + s + '-view');
     if (v) v.style.display = s === sub ? '' : 'none';
   });
@@ -8558,6 +8563,7 @@ function switchFundSubtab(sub) {
   if (sub === 'aconsens') renderAnalystConsensus();
   if (sub === 'mgmt') renderMgmtQuality();
   if (sub === 'valsum') renderValSum();
+  if (sub === 'techsum') renderTechSum();
   if (sub === 'earntrend') renderEarnTrend();
   if (sub === 'valhist') renderValHist();
   if (sub === 'moat') renderMoat();
@@ -11822,6 +11828,227 @@ async function renderQuality() {
   } catch(e) {
     el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}</div>`;
   }
+}
+
+// ─── TECHNICAL SUMMARY TAB ────────────────────────────────────────────────────
+// RSI, MACD, MA trend, Volume, Bollinger → skóre 0-100 BEARISH/BULLISH.
+// Vše z lokálních barů — žádné API volání.
+function renderTechSum() {
+  const el = document.getElementById('fund-techsum-content');
+  if (!el) return;
+  const sym = state.selected;
+  if (!sym) { el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">SELECT A TICKER FIRST</div>'; return; }
+  const bars = state.data[sym]?.bars;
+  if (!bars || bars.length < 30) {
+    el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Nedostatek dat pro ${sym}.<br><span style="font-size:11px">Načti ticker nejdřív v grafu (min 30 svíček).</span></div>`;
+    return;
+  }
+  // bars jsou oldest-first: bars[0] = nejstarší, bars[n-1] = nejnovější
+  const closes = bars.map(b => b.c);
+  const volumes = bars.map(b => b.v);
+  const n = closes.length;
+  const last = closes[n-1];
+
+  // EMA helper (oldest-first input)
+  function ema(arr, period) {
+    const k = 2 / (period + 1);
+    let val = arr.slice(0, period).reduce((a,b) => a+b, 0) / period;
+    const out = new Array(period - 1).fill(null);
+    out.push(val);
+    for (let i = period; i < arr.length; i++) { val = arr[i]*k + val*(1-k); out.push(val); }
+    return out;
+  }
+
+  // RSI (14) — Wilder smoothing
+  let rsi = null;
+  if (n >= 15) {
+    const gains = [], losses = [];
+    for (let i = 1; i < n; i++) { const d = closes[i]-closes[i-1]; gains.push(Math.max(d,0)); losses.push(Math.max(-d,0)); }
+    let ag = gains.slice(0,14).reduce((a,b)=>a+b,0)/14;
+    let al = losses.slice(0,14).reduce((a,b)=>a+b,0)/14;
+    for (let i = 14; i < gains.length; i++) { ag=(ag*13+gains[i])/14; al=(al*13+losses[i])/14; }
+    rsi = al === 0 ? 100 : 100 - 100/(1+ag/al);
+  }
+
+  // MACD (12,26,9)
+  let macdHist = null, macdCross = null;
+  if (n >= 35) {
+    const e12 = ema(closes, 12), e26 = ema(closes, 26);
+    const ml = e12.map((v,i) => v!=null&&e26[i]!=null ? v-e26[i] : null);
+    const valid = ml.filter(v=>v!=null);
+    if (valid.length >= 9) {
+      const sig = ema(valid, 9);
+      const mLast = valid[valid.length-1], sLast = sig[sig.length-1];
+      const mPrev = valid[valid.length-2], sPrev = sig[sig.length-2];
+      macdHist = mLast != null && sLast != null ? mLast - sLast : null;
+      const hPrev = mPrev != null && sPrev != null ? mPrev - sPrev : null;
+      if (macdHist != null && hPrev != null) {
+        if (hPrev <= 0 && macdHist > 0) macdCross = 'bullish';
+        else if (hPrev >= 0 && macdHist < 0) macdCross = 'bearish';
+      }
+    }
+  }
+
+  // MA 50 / MA 200
+  function smaLast(period) {
+    if (n < period) return null;
+    return closes.slice(n-period).reduce((a,b)=>a+b,0)/period;
+  }
+  function smaPrev(period) {
+    if (n < period+1) return null;
+    return closes.slice(n-period-1, n-1).reduce((a,b)=>a+b,0)/period;
+  }
+  const ma50  = smaLast(50),  ma200  = smaLast(200);
+  const pma50 = smaPrev(50),  pma200 = smaPrev(200);
+  let maCross = null;
+  if (ma50&&ma200&&pma50&&pma200) {
+    if (pma50<=pma200 && ma50>ma200) maCross='golden';
+    else if (pma50>=pma200 && ma50<ma200) maCross='death';
+  }
+
+  // Volume vs 20d avg
+  let volRatio = null;
+  if (n >= 21) {
+    const avg = volumes.slice(-21,-1).reduce((a,b)=>a+b,0)/20;
+    volRatio = avg > 0 ? volumes[n-1]/avg : null;
+  }
+  const lastChg = n >= 2 ? closes[n-1]-closes[n-2] : 0;
+
+  // Bollinger Bands (20,2)
+  let bbPct = null, bbSqueeze = false;
+  if (n >= 20) {
+    const sl = closes.slice(-20);
+    const basis = sl.reduce((a,b)=>a+b,0)/20;
+    const std = Math.sqrt(sl.reduce((a,b)=>a+(b-basis)**2,0)/20);
+    const upper = basis+2*std, lower = basis-2*std;
+    bbPct = upper!==lower ? (last-lower)/(upper-lower) : 0.5;
+    bbSqueeze = std/basis < 0.018;  // tight bands
+  }
+
+  // ── signály ──────────────────────────────────────────────────────────────────
+  const clamp = (v,lo,hi) => Math.max(lo,Math.min(hi,v));
+  const signals = [];
+
+  if (rsi != null) {
+    const sc = rsi>=80?10: rsi>=70?25: rsi>=60?55: rsi>=50?65: rsi>=40?55: rsi>=30?72: 85;
+    const note = rsi>=75 ? `⚠ RSI ${rsi.toFixed(0)} — overbought, pozor na korekci`
+      : rsi>=60 ? `→ RSI ${rsi.toFixed(0)} — silný trend, bez extrému`
+      : rsi<=25 ? `✓ RSI ${rsi.toFixed(0)} — oversold, hledej bounce`
+      : rsi<=40 ? `→ RSI ${rsi.toFixed(0)} — slabší, sleduj support`
+      : `→ RSI ${rsi.toFixed(0)} — neutrální`;
+    signals.push({ key:'rsi', w:0.25, score:sc, label:'RSI (14)', val:rsi.toFixed(1), note });
+  }
+
+  if (macdHist != null) {
+    const sc = macdCross==='bullish'?88: macdCross==='bearish'?12: macdHist>0?65: 35;
+    const note = macdCross==='bullish' ? `✓ BULLISH CROSS — MACD proťala signal zdola, momentum se otočilo`
+      : macdCross==='bearish' ? `⚠ BEARISH CROSS — MACD proťala signal shora, momentum klesá`
+      : macdHist>0 ? `→ MACD nad signal line — momentum pozitivní`
+      : `→ MACD pod signal line — momentum negativní`;
+    signals.push({ key:'macd', w:0.25, score:sc, label:'MACD (12,26,9)', val: macdHist>0?'▲ bullish':'▼ bearish', note });
+  }
+
+  if (ma50 != null) {
+    const abv50 = last>ma50, abv200 = ma200!=null ? last>ma200 : null;
+    let sc = abv50?65:35;
+    if (abv200===true) sc+=15; else if (abv200===false) sc-=15;
+    if (maCross==='golden') sc=90; else if (maCross==='death') sc=10;
+    const note = maCross==='golden' ? `✓ GOLDEN CROSS — MA50 proťala MA200 nahoru, long-term bull signál`
+      : maCross==='death' ? `⚠ DEATH CROSS — MA50 proťala MA200 dolů, long-term bear signál`
+      : abv50&&abv200 ? `✓ Nad MA50 ($${ma50.toFixed(0)}) i MA200 ($${ma200.toFixed(0)}) — uptrend`
+      : abv50&&abv200===false ? `⚠ Nad MA50 ale pod MA200 ($${ma200.toFixed(0)}) — recovery fáze`
+      : !abv50&&abv200 ? `⚠ Pod MA50 ($${ma50.toFixed(0)}) ale nad MA200 — krátkodobá slabost`
+      : `⚠ Pod MA50 ($${ma50.toFixed(0)})${ma200?` i MA200 ($${ma200.toFixed(0)})`:''}  — downtrend`;
+    signals.push({ key:'ma', w:0.25, score:clamp(sc,0,100), label:'Trend MA50/MA200', val:`$${last.toFixed(0)} vs $${ma50.toFixed(0)}`, note });
+  }
+
+  if (volRatio != null) {
+    const sc = volRatio>=1.5&&lastChg>0?80: volRatio>=1.5&&lastChg<0?20: volRatio<0.6?50: lastChg>0?60:40;
+    const note = volRatio>=1.5&&lastChg>0 ? `✓ Vysoký objem (${volRatio.toFixed(1)}×) na up svíčce — silné potvrzení`
+      : volRatio>=1.5&&lastChg<0 ? `⚠ Vysoký objem (${volRatio.toFixed(1)}×) na down svíčce — distribution`
+      : volRatio<0.7 ? `→ Nízký objem (${volRatio.toFixed(1)}×) — pohyb bez přesvědčení`
+      : `→ Normální objem (${volRatio.toFixed(1)}×)`;
+    signals.push({ key:'vol', w:0.15, score:sc, label:'Objem vs 20d průměr', val:`${volRatio.toFixed(1)}×`, note });
+  }
+
+  if (bbPct != null) {
+    const sc = bbSqueeze?55: bbPct>1.0?15: bbPct>0.8?35: bbPct>0.5?60: bbPct>0.2?68: bbPct>=0?78: 85;
+    const note = bbSqueeze ? `→ BB SQUEEZE — pásma stažená, breakout se blíží (směr nejistý)`
+      : bbPct>1.0 ? `⚠ Cena nad horním pásmem — extrémní overbought`
+      : bbPct>0.8 ? `⚠ Blízko horního pásma BB`
+      : bbPct<0.0 ? `✓ Pod dolním pásmem — extrémně přeprodáno`
+      : bbPct<0.2 ? `✓ Blízko dolního pásma — potenciální support`
+      : `→ Střed BB pásma — neutrální`;
+    signals.push({ key:'bb', w:0.10, score:sc, label:'Bollinger Bands (20,2)', val:`%B ${(bbPct*100).toFixed(0)}%`, note });
+  }
+
+  const wSum = signals.reduce((a,s)=>a+s.w,0)||1;
+  const score = Math.round(signals.reduce((a,s)=>a+s.score*s.w,0)/wSum);
+  const verdict = score>=68?{t:'BULLISH',c:'#22c55e',d:'Technické indikátory signalizují sílu.'}
+    : score>=55?{t:'MÍRNĚ BULLISH',c:'#84cc16',d:'Trend nakloněn nahoru s výhradami.'}
+    : score>=45?{t:'NEUTRÁLNÍ',c:'#f59e0b',d:'Smíšené signály — žádný jasný směr.'}
+    : score>=32?{t:'MÍRNĚ BEARISH',c:'#f97316',d:'Trend nakloněn dolů.'}
+    :           {t:'BEARISH',c:'#ef4444',d:'Technické indikátory signalizují slabost.'};
+  const dash = (score/100)*339.292;
+
+  let html = `
+    <div style="text-align:center;margin-bottom:6px">
+      <div style="font-size:13px;letter-spacing:1px;color:var(--muted)">TECH SUM · ${sym}</div>
+      <div style="font-size:12px;color:var(--muted)">${n} svíček · $${last.toFixed(2)}</div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:center;margin:8px 0 4px">
+      <svg width="150" height="150" viewBox="0 0 120 120">
+        <circle cx="60" cy="60" r="54" fill="none" stroke="var(--border)" stroke-width="10"/>
+        <circle cx="60" cy="60" r="54" fill="none" stroke="${verdict.c}" stroke-width="10"
+          stroke-linecap="round" stroke-dasharray="${dash.toFixed(1)} 339.292"
+          transform="rotate(-90 60 60)"/>
+        <text x="60" y="58" text-anchor="middle" font-size="30" font-weight="700" fill="var(--text)">${score}</text>
+        <text x="60" y="78" text-anchor="middle" font-size="11" fill="var(--muted)">/ 100</text>
+      </svg>
+    </div>
+    <div style="text-align:center;margin-bottom:14px">
+      <div style="font-size:15px;font-weight:700;color:${verdict.c}">${verdict.t}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px">${verdict.d}</div>
+    </div>
+    <div style="background:var(--border);border-left:3px solid #3b82f6;border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:var(--muted);line-height:1.6">
+      <div style="font-weight:600;color:var(--text);margin-bottom:4px">💡 Jak číst technický přehled:</div>
+      <div><strong>RSI</strong> — pod 30 = oversold (hledej bounce), nad 70 = overbought (pozor na korekci). 40–60 = trend bez extrému.</div>
+      <div><strong>MACD cross</strong> — nejsilnější signál: bullish cross (MACD proťala signal zdola) = momentum se otočilo nahoru. Jeden ze spolehlivějších signálů.</div>
+      <div><strong>Golden/Death cross</strong> — MA50 vs MA200. Long-term signál; golden = začátek bull trendu, death = varovný signál.</div>
+    </div>`;
+
+  html += `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">`;
+  signals.forEach(s => {
+    const sc = Math.round(s.score);
+    const c = sc>=65?'#22c55e': sc>=45?'#f59e0b': '#ef4444';
+    html += `<div style="background:var(--card,#1a1d24);border:1px solid var(--border);border-radius:8px;padding:10px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <span style="font-size:13px;font-weight:600;color:var(--text)">${s.label}</span>
+        <span style="font-size:11px;color:var(--muted)">${s.val}</span>
+      </div>
+      <div style="height:6px;background:var(--border);border-radius:3px;margin:6px 0 4px;overflow:hidden">
+        <div style="height:100%;width:${sc}%;background:${c}"></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted)">${s.note}</div>
+    </div>`;
+  });
+  html += `</div>`;
+
+  const tile = (l,v,c) => `<div style="background:var(--card,#1a1d24);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
+    <div style="font-size:9px;color:var(--muted)">${l}</div>
+    <div style="font-size:14px;font-weight:700;color:${c||'var(--text)'};margin-top:2px">${v}</div>
+  </div>`;
+  html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px">`;
+  html += tile('RSI', rsi!=null?rsi.toFixed(1):'—', rsi!=null?(rsi>=70?'#ef4444':rsi<=30?'#22c55e':'#f59e0b'):'#9ca3af');
+  html += tile('MACD hist', macdHist!=null?(macdHist>0?'▲':'')+macdHist.toFixed(2):'—', macdHist!=null?(macdHist>0?'#22c55e':'#ef4444'):'#9ca3af');
+  html += tile('MA50', ma50!=null?'$'+ma50.toFixed(0):'—', ma50!=null?(last>ma50?'#22c55e':'#ef4444'):'#9ca3af');
+  html += tile('MA200', ma200!=null?'$'+ma200.toFixed(0):'N/A', ma200!=null?(last>ma200?'#22c55e':'#ef4444'):'#9ca3af');
+  html += tile('Objem', volRatio!=null?volRatio.toFixed(1)+'×':'—', volRatio!=null?(volRatio>=1.5?'#4fc3f7':'#9ca3af'):'#9ca3af');
+  html += tile('%B', bbPct!=null?(bbPct*100).toFixed(0)+'%':'—', bbPct!=null?(bbPct>0.8?'#ef4444':bbPct<0.2?'#22c55e':'#f59e0b'):'#9ca3af');
+  html += `</div>
+  <div style="font-size:10px;color:var(--muted);line-height:1.5">Výpočet z ${n} denních svíček — žádné API. RSI(14) Wilder, MACD(12,26,9), SMA 50/200, BB(20,2).</div>`;
+
+  el.innerHTML = html;
 }
 
 // ─── VALUATION SUMMARY TAB ────────────────────────────────────────────────────
