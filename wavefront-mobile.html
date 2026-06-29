@@ -1610,6 +1610,7 @@ strong { font-weight: 600; }
         <button class="fund-subtab subtab" id="fst-mgmt" onclick="switchFundSubtab('mgmt')">MGMT</button>
         <button class="fund-subtab subtab" id="fst-valsum" onclick="switchFundSubtab('valsum')">VAL SUM</button>
         <button class="fund-subtab subtab" id="fst-techsum" onclick="switchFundSubtab('techsum')">TECH SUM</button>
+        <button class="fund-subtab subtab" id="fst-iscore" onclick="switchFundSubtab('iscore')">SCORE</button>
         <button class="fund-subtab subtab" id="fst-earntrend" onclick="switchFundSubtab('earntrend')">EARN TREND</button>
         <button class="fund-subtab subtab" id="fst-valhist" onclick="switchFundSubtab('valhist')">VAL HIST</button>
         <button class="fund-subtab subtab" id="fst-moat" onclick="switchFundSubtab('moat')">MOAT</button>
@@ -1682,6 +1683,10 @@ strong { font-weight: 600; }
       <!-- Quality view -->
       <div id="fund-quality-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <div id="quality-content"></div>
+      </div>
+      <!-- Investment Scorecard view -->
+      <div id="fund-iscore-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
+        <div id="fund-iscore-content"></div>
       </div>
       <!-- Technical Summary view -->
       <div id="fund-techsum-view" class="subtab-view" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px">
@@ -8542,7 +8547,7 @@ let compareState = { sortKey: 'pe', sortDir: 'asc', activeMetrics: ['pe','fwdPe'
 function switchFundSubtab(sub) {
   document.querySelectorAll('.fund-subtab').forEach(b => b.classList.remove('active'));
   document.getElementById('fst-' + sub).classList.add('active');
-  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earnq','debt','aconsens','mgmt','valsum','techsum','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval','pthist'].forEach(s => {
+  ['single','news','research','compare','insider','short','mktctx','dcf','buffett','divid','divcal','divinc','quality','earnq','debt','aconsens','mgmt','valsum','techsum','iscore','earntrend','valhist','moat','inst','swan','checklist','revdcf','epv','relval','pthist'].forEach(s => {
     const v = document.getElementById('fund-' + s + '-view');
     if (v) v.style.display = s === sub ? '' : 'none';
   });
@@ -8564,6 +8569,7 @@ function switchFundSubtab(sub) {
   if (sub === 'mgmt') renderMgmtQuality();
   if (sub === 'valsum') renderValSum();
   if (sub === 'techsum') renderTechSum();
+  if (sub === 'iscore') renderInvestScore();
   if (sub === 'earntrend') renderEarnTrend();
   if (sub === 'valhist') renderValHist();
   if (sub === 'moat') renderMoat();
@@ -11850,6 +11856,313 @@ async function renderQuality() {
         ctx.fillText(d.year, toX(i), H - 5);
       });
     })();
+
+  } catch(e) {
+    el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}</div>`;
+  }
+}
+
+// ─── INVESTMENT SCORECARD ─────────────────────────────────────────────────────
+// Agreguje 5 analytických dimenzí do jednoho skóre + radar chart.
+// Používá fmpRequest (cached) → při otevřených jiných tabech je instantní.
+async function computeAllScores(sym) {
+  const clamp = (v,lo,hi) => Math.max(lo,Math.min(hi,v));
+  const bars = state.data[sym]?.bars || [];
+  const n = bars.length;
+  const closes = bars.map(b=>b.c);
+
+  // Společná data (vše přes cache)
+  const [is, cf, bs, km, rt, ae] = await Promise.all([
+    fmpRequest(`https://financialmodelingprep.com/stable/income-statement?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`).catch(()=>[]),
+    fmpRequest(`https://financialmodelingprep.com/stable/cash-flow-statement?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`).catch(()=>[]),
+    fmpRequest(`https://financialmodelingprep.com/stable/balance-sheet-statement?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`).catch(()=>[]),
+    fmpRequest(`https://financialmodelingprep.com/stable/key-metrics?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`).catch(()=>[]),
+    fmpRequest(`https://financialmodelingprep.com/stable/ratios?symbol=${sym}&period=annual&limit=5&apikey=${FMP_KEY}`).catch(()=>[]),
+    fmpRequest(`https://financialmodelingprep.com/stable/analyst-estimates?symbol=${sym}&period=annual&limit=1&apikey=${FMP_KEY}`).catch(()=>[]),
+  ]);
+  const isArr=Array.isArray(is)?is:[], cfArr=Array.isArray(cf)?cf:[];
+  const bsArr=Array.isArray(bs)?bs:[], kmArr=Array.isArray(km)?km:[];
+  const rtArr=Array.isArray(rt)?rt:[], aeArr=Array.isArray(ae)?ae:[];
+  const i0=isArr[0]||{}, c0=cfArr[0]||{}, b0=bsArr[0]||{}, k0=kmArr[0]||{}, r0=rtArr[0]||{};
+
+  // ── 1. EARN Q ────────────────────────────────────────────────────────────────
+  let earnQ = null;
+  try {
+    const cfByYear = {}; cfArr.forEach(c=>{if(c.date)cfByYear[c.date.slice(0,4)]=c;});
+    const rows = isArr.map(r=>{
+      const yr=r.date?r.date.slice(0,4):'?', c=cfByYear[yr]||{};
+      const ocf=c.operatingCashFlow??c.netCashProvidedByOperatingActivities??null;
+      const fcf=c.freeCashFlow??(ocf!=null&&c.capitalExpenditure!=null?ocf+c.capitalExpenditure:null);
+      return {netIncome:r.netIncome??null,eps:r.epsDiluted??r.eps??null,revenue:r.revenue??null,shares:r.weightedAverageShsOutDil??null,ocf,fcf};
+    });
+    const sum=f=>rows.reduce((a,r)=>a+(r[f]!=null&&isFinite(r[f])?r[f]:0),0);
+    const [sNI,sFCF,sOCF]=[sum('netIncome'),sum('fcf'),sum('ocf')];
+    const sigs=[];
+    const cashBack=sNI>0&&sFCF!=null?sFCF/sNI:null;
+    if(cashBack!=null) sigs.push({w:0.30,sc:clamp(cashBack/1.0*100,0,100)});
+    const accr=sNI!==0&&sOCF!=null?(sNI-sOCF)/Math.abs(sNI):null;
+    if(accr!=null) sigs.push({w:0.20,sc:clamp((0.35-accr)/0.55*100,0,100)});
+    function cagr(f){const a=rows[0]?.[f],b=rows[rows.length-1]?.[f];if(a==null||b==null||b===0||(a<0)!==(b<0)||b<0)return null;return(Math.pow(a/b,1/(rows.length-1))-1)*100;}
+    const [eC,rC,nC,fC,shC]=[cagr('eps'),cagr('revenue'),cagr('netIncome'),cagr('fcf'),cagr('shares')];
+    if(eC!=null&&rC!=null&&eC>0.5) sigs.push({w:0.25,sc:clamp(rC/eC/1.0*100,0,100)});
+    if(fC!=null&&nC!=null&&nC>0.5) sigs.push({w:0.15,sc:clamp(fC/nC/1.0*100,0,100)});
+    if(shC!=null){let sc=shC>0?clamp(80-shC*15,0,100):clamp(100+shC*5,50,100);sigs.push({w:0.10,sc});}
+    if(sigs.length){const ws=sigs.reduce((a,s)=>a+s.w,0)||1;earnQ=Math.round(sigs.reduce((a,s)=>a+s.sc*s.w,0)/ws);}
+  } catch(e){}
+
+  // ── 2. DEBT ──────────────────────────────────────────────────────────────────
+  let debt = null;
+  try {
+    const totalDebt=(b0.totalDebt??((b0.longTermDebt??0)+(b0.shortTermDebt??0)));
+    const equity=b0.totalStockholdersEquity??b0.totalEquity??null;
+    const cash=b0.cashAndCashEquivalents??b0.cashAndShortTermInvestments??0;
+    const netDebt=totalDebt-cash;
+    const curA=b0.totalCurrentAssets??null, curL=b0.totalCurrentLiabilities??null;
+    const cr=(curA&&curL)?curA/curL:null;
+    const ebit=i0.operatingIncome??i0.ebit??null;
+    const interest=Math.abs(i0.interestExpense??i0.interestAndDebtExpense??0);
+    const ebitda=i0.ebitda??(ebit!=null?ebit+(i0.depreciationAndAmortization??0):null);
+    const fcf=c0.freeCashFlow??null;
+    const deR=equity&&equity>0?totalDebt/equity:null;
+    const ic=ebit!=null&&interest>0?ebit/interest:null;
+    const ndEb=ebitda&&ebitda>0?netDebt/ebitda:null;
+    const dpY=fcf&&fcf>0&&totalDebt>0?totalDebt/fcf:null;
+    const sigs=[];
+    if(deR!=null) sigs.push({w:0.25,sc:clamp(deR<=0?100:deR<=1?90:deR<=2?65:deR<=3?35:10,0,100)});
+    if(ic!=null) sigs.push({w:0.30,sc:clamp(ic<=0?0:ic>=8?100:ic>=5?80:ic>=3?55:ic>=1.5?30:5,0,100)});
+    if(ndEb!=null) sigs.push({w:0.25,sc:ndEb<=0?100:clamp(ndEb<=2?90:ndEb<=3?70:ndEb<=4?45:ndEb<=6?20:5,0,100)});
+    if(cr!=null) sigs.push({w:0.10,sc:clamp(cr>=2?95:cr>=1.5?80:cr>=1?55:20,0,100)});
+    if(dpY!=null) sigs.push({w:0.10,sc:clamp(dpY<=2?95:dpY<=5?75:dpY<=10?50:dpY<=20?25:5,0,100)});
+    if(sigs.length){const ws=sigs.reduce((a,s)=>a+s.w,0)||1;debt=Math.round(sigs.reduce((a,s)=>a+s.sc*s.w,0)/ws);}
+  } catch(e){}
+
+  // ── 3. MGMT (pouze insider ownership z key-metrics) ───────────────────────
+  let mgmt = null;
+  try {
+    const own=k0.insidersOwnership!=null?k0.insidersOwnership*100:null;
+    if(own!=null) mgmt=clamp(own>=20?90:own>=10?75:own>=5?55:own>=1?40:25,0,100);
+  } catch(e){}
+
+  // ── 4. VAL SUM ──────────────────────────────────────────────────────────────
+  let valSum = null;
+  try {
+    const curP=closes.length?closes[closes.length-1]:null;
+    const pe=r0.priceToEarningsRatio??k0.peRatio??null;
+    const peHist=rtArr.map(r=>r.priceToEarningsRatio).filter(v=>v!=null&&v>0&&v<300);
+    const peAvg=peHist.length>=2?peHist.reduce((a,b)=>a+b,0)/peHist.length:null;
+    const pfcf=r0.priceToFreeCashFlowsRatio??k0.pfcfRatio??null;
+    const evEb=k0.evToEbitda??k0.enterpriseValueMultiple??null;
+    const fwdEps=aeArr[0]?aeArr[0].epsAvg??null:null;
+    const fwdPe=curP&&fwdEps&&fwdEps>0?curP/fwdEps:null;
+    const eps=i0.epsDiluted??i0.eps??null;
+    const bvps=k0.bookValuePerShare??null;
+    const graham=eps&&eps>0&&bvps&&bvps>0?Math.sqrt(22.5*eps*bvps):null;
+    const gUp=graham&&curP?(graham-curP)/curP*100:null;
+    const sigs=[];
+    if(pe!=null&&pe>0){
+      let sc;if(peAvg!=null&&peAvg>0){const p=pe/peAvg;sc=clamp((2-p)/1.5*100,0,100);}
+      else sc=clamp(pe<=12?90:pe<=18?75:pe<=25?55:pe<=35?35:10,0,100);
+      sigs.push({w:0.25,sc});
+    }
+    if(fwdPe!=null&&fwdPe>0) sigs.push({w:0.20,sc:clamp(fwdPe<=12?90:fwdPe<=18?75:fwdPe<=25?55:fwdPe<=35?30:10,0,100)});
+    if(evEb!=null&&evEb>0) sigs.push({w:0.20,sc:clamp(evEb<=8?90:evEb<=12?75:evEb<=18?55:evEb<=25?30:10,0,100)});
+    if(pfcf!=null&&pfcf>0&&pfcf<500) sigs.push({w:0.20,sc:clamp(pfcf<=12?90:pfcf<=20?75:pfcf<=30?55:pfcf<=45?30:10,0,100)});
+    if(gUp!=null) sigs.push({w:0.15,sc:clamp(gUp>=30?90:gUp>=10?70:gUp>=-10?50:gUp>=-30?30:10,0,100)});
+    if(sigs.length){const ws=sigs.reduce((a,s)=>a+s.w,0)||1;valSum=Math.round(sigs.reduce((a,s)=>a+s.sc*s.w,0)/ws);}
+  } catch(e){}
+
+  // ── 5. TECH SUM (z lokálních barů) ──────────────────────────────────────────
+  let tech = null;
+  try {
+    if(n>=30){
+      function smaL(p){return n>=p?closes.slice(n-p).reduce((a,b)=>a+b,0)/p:null;}
+      // RSI(14)
+      let rsi=null;
+      if(n>=15){
+        const gains=[],losses=[];
+        for(let i=1;i<n;i++){const d=closes[i]-closes[i-1];gains.push(Math.max(d,0));losses.push(Math.max(-d,0));}
+        let ag=gains.slice(0,14).reduce((a,b)=>a+b,0)/14,al=losses.slice(0,14).reduce((a,b)=>a+b,0)/14;
+        for(let i=14;i<gains.length;i++){ag=(ag*13+gains[i])/14;al=(al*13+losses[i])/14;}
+        rsi=al===0?100:100-100/(1+ag/al);
+      }
+      // MACD
+      let macdHist=null;
+      if(n>=35){
+        const k=p=>{let v=closes.slice(0,p).reduce((a,b)=>a+b,0)/p,m=2/(p+1);const o=new Array(p-1).fill(null);o.push(v);for(let i=p;i<n;i++){v=closes[i]*m+v*(1-m);o.push(v);}return o;};
+        const e12=k(12),e26=k(26);const ml=e12.map((v,i)=>v!=null&&e26[i]!=null?v-e26[i]:null).filter(v=>v!=null);
+        if(ml.length>=9){const km2=2/10,sig=ml.slice(0,9).reduce((a,b)=>a+b,0)/9;let sv=sig;for(let i=9;i<ml.length;i++){sv=ml[i]*km2+sv*(1-km2);}macdHist=ml[ml.length-1]-sv;}
+      }
+      const ma50=smaL(50),ma200=smaL(200);
+      const last=closes[n-1],vols=bars.map(b=>b.v);
+      const avgV=n>=21?vols.slice(-21,-1).reduce((a,b)=>a+b,0)/20:null;
+      const vR=avgV&&avgV>0?vols[n-1]/avgV:null;
+      const lastC=n>=2?closes[n-1]-closes[n-2]:0;
+      let bbP=null;
+      if(n>=20){const sl=closes.slice(-20);const bas=sl.reduce((a,b)=>a+b,0)/20;const std=Math.sqrt(sl.reduce((a,b)=>a+(b-bas)**2,0)/20);const up=bas+2*std,lo=bas-2*std;bbP=up!==lo?(last-lo)/(up-lo):0.5;}
+      const sigs=[];
+      if(rsi!=null) sigs.push({w:0.25,sc:rsi>=80?10:rsi>=70?25:rsi>=60?55:rsi>=50?65:rsi>=40?55:rsi>=30?72:85});
+      if(macdHist!=null) sigs.push({w:0.25,sc:macdHist>0?65:35});
+      if(ma50!=null){let sc=last>ma50?65:35;if(ma200!=null){sc+=last>ma200?15:-15;}sigs.push({w:0.25,sc:clamp(sc,0,100)});}
+      if(vR!=null) sigs.push({w:0.15,sc:vR>=1.5&&lastC>0?80:vR>=1.5&&lastC<0?20:lastC>0?60:40});
+      if(bbP!=null) sigs.push({w:0.10,sc:bbP>1.0?15:bbP>0.8?35:bbP>0.5?60:bbP>0.2?68:78});
+      if(sigs.length){const ws=sigs.reduce((a,s)=>a+s.w,0)||1;tech=Math.round(sigs.reduce((a,s)=>a+s.sc*s.w,0)/ws);}
+    }
+  } catch(e){}
+
+  // overall — vážený průměr dostupných dimenzí
+  const dims=[
+    {label:'Earnings Q', key:'earnQ', val:earnQ, w:0.20, icon:'📊'},
+    {label:'Balance', key:'debt',   val:debt,   w:0.20, icon:'🏦'},
+    {label:'Mgmt',    key:'mgmt',   val:mgmt,   w:0.15, icon:'👔'},
+    {label:'Valuation',key:'valSum',val:valSum, w:0.25, icon:'💰'},
+    {label:'Technical',key:'tech',  val:tech,   w:0.20, icon:'📈'},
+  ];
+  const avail=dims.filter(d=>d.val!=null);
+  const ws=avail.reduce((a,d)=>a+d.w,0)||1;
+  const overall=avail.length?Math.round(avail.reduce((a,d)=>a+d.val*d.w,0)/ws):null;
+  return {dims, overall};
+}
+
+async function renderInvestScore() {
+  const el = document.getElementById('fund-iscore-content');
+  if (!el) return;
+  const sym = state.selected;
+  if (!sym) { el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">SELECT A TICKER FIRST</div>'; return; }
+  el.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Počítám skóre…</div>';
+  try {
+    const {dims, overall} = await computeAllScores(sym);
+    const curP = state.data[sym]?.bars?.slice(-1)[0]?.c;
+
+    const overallColor = overall==null?'#9ca3af':overall>=70?'#22c55e':overall>=55?'#84cc16':overall>=40?'#f59e0b':'#ef4444';
+    const overallLabel = overall==null?'N/A':overall>=70?'SILNÁ PŘÍLEŽITOST':overall>=55?'SOLIDNÍ':overall>=40?'SMÍŠENÁ':'SLABÁ / RIZIKOVÁ';
+    const overallDesc  = overall==null?'Nedostatek dat.':overall>=70?'Více dimenzí vykazuje sílu — kandidát pro hlubší výzkum.':overall>=55?'Solidní základ s drobnými výhradami.':overall>=40?'Smíšené signály — ověř slabé dimenze.':'⚠ Výrazné slabiny — přistupuj opatrně.';
+    const dash = overall!=null?(overall/100)*339.292:0;
+
+    let html = `
+      <div style="text-align:center;margin-bottom:6px">
+        <div style="font-size:13px;letter-spacing:1px;color:var(--muted)">INVESTMENT SCORE · ${sym}</div>
+        ${curP?`<div style="font-size:12px;color:var(--muted)">$${curP.toFixed(2)}</div>`:''}
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;margin:8px 0 4px">
+        <svg width="150" height="150" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="54" fill="none" stroke="var(--border)" stroke-width="10"/>
+          <circle cx="60" cy="60" r="54" fill="none" stroke="${overallColor}" stroke-width="10"
+            stroke-linecap="round" stroke-dasharray="${dash.toFixed(1)} 339.292"
+            transform="rotate(-90 60 60)"/>
+          <text x="60" y="56" text-anchor="middle" font-size="28" font-weight="700" fill="var(--text)">${overall??'—'}</text>
+          <text x="60" y="74" text-anchor="middle" font-size="10" fill="var(--muted)">/ 100</text>
+        </svg>
+      </div>
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:700;color:${overallColor}">${overallLabel}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${overallDesc}</div>
+      </div>`;
+
+    // Radar chart
+    html += `<div style="display:flex;justify-content:center;margin-bottom:14px">
+      <canvas id="iscore-radar" width="280" height="280" style="width:280px;height:280px"></canvas>
+    </div>`;
+
+    // Dimenze bars
+    html += `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">`;
+    dims.forEach(d => {
+      const v = d.val;
+      const c = v==null?'#9ca3af':v>=70?'#22c55e':v>=50?'#f59e0b':'#ef4444';
+      const label = v==null?'—':v>=70?'Silné':v>=55?'Solidní':v>=40?'Průměrné':'Slabé';
+      html += `<div style="background:var(--card,#1a1d24);border:1px solid var(--border);border-radius:8px;padding:9px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+          <span style="font-size:13px;font-weight:600;color:var(--text)">${d.icon} ${d.label}</span>
+          <span style="font-size:12px;font-weight:700;color:${c}">${v??'—'} <span style="font-size:10px;font-weight:400;color:var(--muted)">${label}</span></span>
+        </div>
+        <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${v??0}%;background:${c}"></div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+
+    // Help
+    html += fundHelpBox(`
+      <div><strong>Investment Score</strong> — vážený průměr 5 dimenzí: Earnings Quality (20 %), Rozvaha/Dluh (20 %), Management (15 %), Valuace (25 %), Technická analýza (20 %).</div>
+      <div><strong>Jak použít</strong> — skóre &gt;70 = kandidát pro hlubší výzkum, ne automatický nákup. Klikni na jednotlivé taby pro detaily. Vždy ověř kde je slabina.</div>
+      <div><strong>Valuace má největší váhu</strong> — skvělá firma za špatnou cenu není dobrá investice. High EARN Q + Low VAL = čekej na lepší entry.</div>
+    `);
+
+    html += `<div style="font-size:10px;color:var(--muted);line-height:1.5">Skóre Management používá pouze insider ownership (bez flow dat pro rychlost). Pro plnou analýzu každé dimenze otevři příslušný tab.</div>`;
+
+    el.innerHTML = html;
+
+    // Radar chart kreslení
+    requestAnimationFrame(() => {
+      const canvas = document.getElementById('iscore-radar');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const SIZE = 280;
+      canvas.width = SIZE * dpr; canvas.height = SIZE * dpr;
+      canvas.style.width = SIZE + 'px'; canvas.style.height = SIZE + 'px';
+      ctx.scale(dpr, dpr);
+      const cx = SIZE/2, cy = SIZE/2, R = 95;
+      const labels = dims.map(d=>d.label);
+      const vals = dims.map(d=>(d.val??0)/100);
+      const nDim = dims.length;
+
+      // grid
+      [0.25,0.5,0.75,1.0].forEach(f => {
+        ctx.beginPath();
+        for(let i=0;i<nDim;i++){
+          const a=Math.PI*2*i/nDim-Math.PI/2;
+          const x=cx+Math.cos(a)*R*f, y=cy+Math.sin(a)*R*f;
+          i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+        }
+        ctx.closePath();
+        ctx.strokeStyle=f===1.0?'rgba(255,255,255,0.15)':'rgba(255,255,255,0.07)';
+        ctx.lineWidth=1; ctx.stroke();
+      });
+
+      // axes
+      for(let i=0;i<nDim;i++){
+        const a=Math.PI*2*i/nDim-Math.PI/2;
+        ctx.beginPath();
+        ctx.moveTo(cx,cy);
+        ctx.lineTo(cx+Math.cos(a)*R, cy+Math.sin(a)*R);
+        ctx.strokeStyle='rgba(255,255,255,0.1)'; ctx.lineWidth=1; ctx.stroke();
+      }
+
+      // filled polygon
+      ctx.beginPath();
+      for(let i=0;i<nDim;i++){
+        const a=Math.PI*2*i/nDim-Math.PI/2, v=vals[i];
+        const x=cx+Math.cos(a)*R*v, y=cy+Math.sin(a)*R*v;
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+      }
+      ctx.closePath();
+      ctx.fillStyle='rgba(59,130,246,0.2)'; ctx.fill();
+      ctx.strokeStyle='#3b82f6'; ctx.lineWidth=2; ctx.stroke();
+
+      // dots
+      for(let i=0;i<nDim;i++){
+        const a=Math.PI*2*i/nDim-Math.PI/2, v=vals[i];
+        const d=dims[i], dc=d.val==null?'#9ca3af':d.val>=70?'#22c55e':d.val>=50?'#f59e0b':'#ef4444';
+        ctx.beginPath();
+        ctx.arc(cx+Math.cos(a)*R*v, cy+Math.sin(a)*R*v, 4, 0, Math.PI*2);
+        ctx.fillStyle=dc; ctx.fill();
+      }
+
+      // labels
+      ctx.font = `bold 11px sans-serif`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      for(let i=0;i<nDim;i++){
+        const a=Math.PI*2*i/nDim-Math.PI/2;
+        const lx=cx+Math.cos(a)*(R+16), ly=cy+Math.sin(a)*(R+16);
+        const d=dims[i], dc=d.val==null?'#9ca3af':d.val>=70?'#22c55e':d.val>=50?'#f59e0b':'#ef4444';
+        ctx.fillStyle=dc;
+        ctx.fillText(d.label, lx, ly-5);
+        ctx.font='10px sans-serif'; ctx.fillStyle='#9ca3af';
+        ctx.fillText(d.val!=null?String(d.val):'—', lx, ly+7);
+        ctx.font='bold 11px sans-serif';
+      }
+    });
 
   } catch(e) {
     el.innerHTML = `<div style="color:#9ca3af;padding:20px;text-align:center">Chyba: ${e.message}</div>`;
